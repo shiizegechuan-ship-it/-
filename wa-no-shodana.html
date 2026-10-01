@@ -35,6 +35,7 @@ canvas{display:block}
   border:1px solid var(--line);padding:9px 16px;border-radius:2px;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .bar button:hover{background:var(--panel-hover)}
 .bar button:focus-visible{outline:2px solid #e8c878;outline-offset:2px}
+.bar button[hidden]{display:none}
 .bar button.on{background:rgba(168,40,31,.78);border-color:#e0b96a}
 #loading{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);color:var(--muted);
   letter-spacing:.45em;font-size:14px;transition:opacity .9s;z-index:5}
@@ -49,6 +50,7 @@ canvas{display:block}
   <div class="bar">
     <button id="bDay" type="button" class="on">昼にする</button>
     <button id="bReset" type="button">位置をリセット</button>
+    <button id="bExit" type="button" hidden>部屋を出る</button>
   </div>
 </div>
 <div id="loading">読み込み中</div>
@@ -113,7 +115,11 @@ canvas{display:block}
    shelf aside and, the first time, buildInnerRoom() cuts a doorway with a fusuma into the back wall and
    buildInnerInterior() furnishes the room beyond it (8.4 x 6 m). That room lives in its own scene
    (`innerScene`) with its own lights, drawn after the main scene into the same depth buffer and only
-   while the fusuma is open; applyMode() forwards day/night to it via `innerMode`.
+   while the fusuma is open; applyMode() forwards day/night to it via `innerMode`. Tapping the fusuma
+   glides the camera in (roomRide) and then lets it look all the way round from one spot (roomView);
+   部屋を出る / 位置をリセット back it out again (enterInnerRoom()/exitInnerRoom()).
+   The stairwell under the trapdoor likewise has its own scene (`underScene`), lights and material
+   copies; decorateStairwell() fits out its side walls, ceiling and the wall around the locked door.
 
    Camera (search "camera rig"): goal.target can be panned with two fingers and zoomed with a pinch
    or the wheel toward the real point under the cursor/pinch midpoint (zoomToward()/panBy()), but any
@@ -557,6 +563,11 @@ alcove.position.set(0,ROOM_H/2,0.003); alcove.receiveShadow=true; scene.add(alco
 for(const s of [-1,1]){
   const w=new THREE.Mesh(new THREE.PlaneGeometry(ROOM_D,ROOM_H),matWallS);
   w.rotation.y=s<0?Math.PI/2:-Math.PI/2; w.position.set(s*ROOM_W/2,ROOM_H/2,ROOM_D/2); w.receiveShadow=true; scene.add(w);
+}
+{ // the room's near wall -- always behind the camera from the usual views (and back-face culled when the
+  // camera pulls out past it); it only shows when looking back out through the hidden room's doorway
+  const nw=new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W,ROOM_H),matWallS); nw.rotation.y=Math.PI; nw.position.set(0,ROOM_H/2,ROOM_D); nw.receiveShadow=true; scene.add(nw);
+  box(ROOM_W,0.12,0.06,matDark,0,2.42,ROOM_D-0.03,scene); box(ROOM_W,0.09,0.02,matDark,0,0.045,ROOM_D-0.01,scene);
 }
 const ceil=new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W,ROOM_D),std({map:tDark,roughness:0.7},0.3));
 ceil.rotation.x=Math.PI/2; ceil.position.set(0,ROOM_H,ROOM_D/2); scene.add(ceil);
@@ -1095,14 +1106,17 @@ const cDaySun=new THREE.Color(0xfff0dc), cNightSun=new THREE.Color(0x8aa0d8);
 const cWinDay=new THREE.Color(1,0.975,0.93), cWinNight=new THREE.Color(0.55,0.5,0.42);
 const cDayHS=new THREE.Color(0xffe9cf), cNightHS=new THREE.Color(0x5c6a94);
 let lampBase=0;
-let innerScene=null, innerMode=null, innerDoorMv=null;   // the furnished room behind the fusuma (built later by buildInnerRoom())
+let innerScene=null, innerMode=null, innerDoorMv=null;
+let roomView=false, roomRide=null, roomFov=60;   // looking around inside the hidden room / the scripted glide in or out of it
+let underScene=null, underMode=null;             // the decorated stairwell under the tatami (built later by openTrap())   // the furnished room behind the fusuma (built later by buildInnerRoom())
 function applyMode(m){
   sun.intensity=lerp(1.8,0.32,m); sun.color.copy(cDaySun).lerp(cNightSun,m);
   hemi.intensity=lerp(0.45,0.12,m); hemi.color.copy(cDayHS).lerp(cNightHS,m);
   fill.intensity=lerp(0.35,0.04,m);
   lampBase=lerp(0,1.9,m);
   lampShade.value=lerp(0.45,1,m);
-  if(innerMode) innerMode(m);   // by day the lamp is out, so its pool of light on the wall mostly fades away
+  if(innerMode) innerMode(m);
+  if(underMode) underMode(m);   // by day the lamp is out, so its pool of light on the wall mostly fades away
   inner.forEach(l=>{ l.intensity=lerp(0.4,1.4,m); });
   matPaper.emissiveIntensity=lerp(0.12,0.95,m);
   matLampPaper.emissiveIntensity=lerp(0.35,2.6,m);
@@ -1118,9 +1132,10 @@ const goal={theta:home.theta,phi:home.phi,r:home.r,target:home.target.clone()};
 const cur={theta:home.theta,phi:home.phi,r:home.r+1.4,target:home.target.clone()};
 let autoRotate=false;
 function fitRadius(){ const a=camera.aspect, t=Math.tan(THREE.MathUtils.degToRad(camera.fov/2)); return clamp(1.75/(t*a),4.0,6.6); }
+function baseFov(){ return camera.aspect<0.9?52:38; }
 function resize(){
   const w=host.clientWidth||window.innerWidth, h=host.clientHeight||window.innerHeight;
-  renderer.setSize(w,h); camera.aspect=w/h; camera.fov=camera.aspect<0.9?52:38; camera.updateProjectionMatrix();
+  renderer.setSize(w,h); camera.aspect=w/h; camera.fov=baseFov(); camera.updateProjectionMatrix();
   home.r=fitRadius();
 }
 window.addEventListener('resize',resize); resize(); goal.r=home.r; cur.r=home.r+1.4;
@@ -1139,6 +1154,7 @@ const TARGET_MIN=new THREE.Vector3(-2.1,0.25,-0.15), TARGET_MAX=new THREE.Vector
 // same direction no matter which way the gesture went. Below ground, the only hard limit is not
 // going past the door; everything else in the corridor is fair game.
 function clampTarget(){
+  if(roomView||roomRide) return;   // inside the hidden room the eye stays put; only the view direction turns
   if(typeof trap!=='undefined'&&trap&&trap.opened&&goal.target.y<0.15){
     const entranceX=TRAP_X_G+TRAP_W_G/2-0.14, doorWorldX=entranceX+STAIR_G.doorX;
     goal.target.x=clamp(goal.target.x,doorWorldX,entranceX+0.3);          // never past the door, nor back out above the opening
@@ -1198,7 +1214,13 @@ host.addEventListener('pointermove',e=>{
   const dx=e.clientX-p.x, dy=e.clientY-p.y; p.x=e.clientX; p.y=e.clientY;
   if(pointers.size===1){
     if(downInfo&&Math.hypot(e.clientX-downInfo.x,e.clientY-downInfo.y)>6) downInfo.moved=true;
-    if(downInfo&&downInfo.moved){
+    if(downInfo&&downInfo.moved&&roomRide){ /* the camera is gliding in or out of the hidden room */ }
+    else if(downInfo&&downInfo.moved&&roomView){
+      // inside the room the eye stays where it is and the drag turns the view all the way round --
+      // "grab" style, so the room follows the finger (the opposite sense to orbiting the shelf)
+      goal.theta+=dx*0.0045; goal.phi=clamp(goal.phi+dy*0.0035,0.45,2.6);
+    }
+    else if(downInfo&&downInfo.moved){
       const underground=typeof trap!=='undefined'&&trap&&trap.opened&&goal.target.y<0.15;
       const thetaMin=underground?Math.PI/2-1.05:-1.05, thetaMax=underground?Math.PI/2+1.05:1.05;
       goal.theta=clamp(goal.theta-dx*0.0055,thetaMin,thetaMax); goal.phi=clamp(goal.phi-dy*0.004,0.8,1.72); setAuto(false);
@@ -1207,7 +1229,8 @@ host.addEventListener('pointermove',e=>{
     // two fingers: pinch zooms toward the real-time midpoint between them, and dragging that
     // midpoint pans the view -- both at once, like a phone map.
     const [a,b]=[...pointers.values()], d=Math.hypot(a.x-b.x,a.y-b.y), mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
-    if(pinchPrev>0){
+    if(pinchPrev>0&&(roomView||roomRide)){ if(roomView) roomFov=clamp(roomFov*pinchPrev/d,28,85); }
+    else if(pinchPrev>0){
       zoomToward(mx,my,pinchPrev/d);
       if(pinchMid) panBy(mx-pinchMid.x,my-pinchMid.y);
       setAuto(false);
@@ -1220,6 +1243,7 @@ function endPointer(e){
   pointers.delete(e.pointerId); pinchPrev=0; pinchMid=null;
   if(wasSingle&&downInfo&&!downInfo.moved&&!downInfo.multi&&performance.now()-downInfo.t<600){
     if(SC.rig){ if(SC.goal>0) SC.goal=0; }
+    else if(roomView||roomRide){ /* inside the hidden room taps do nothing -- the 部屋を出る button leads back out */ }
     else{
       setNdc(e); const hit=raycaster.intersectObjects(pickables,true);
       if(hit.length){
@@ -1233,7 +1257,7 @@ function endPointer(e){
         else{
           const wa=findWa(obj);
           if(wa) openShowcase(wa);
-          else{ const mv=findMv(obj); if(mv){ if(mv.tag==='shoji') setShoji(!shojiMvs.some(m=>m.goal>0.5)); else mv.goal=mv.goal?0:1; } }
+          else{ const mv=findMv(obj); if(mv){ if(mv.tag==='shoji') setShoji(!shojiMvs.some(m=>m.goal>0.5)); else if(mv.tag==='inner-door') enterInnerRoom(); else mv.goal=mv.goal?0:1; } }
         }
       } else if(trap.opened&&hitStairsOpening(raycaster.ray)){
         // only reached when the tap hit nothing solid at all -- so a closed flap (a real pickable)
@@ -1246,8 +1270,9 @@ function endPointer(e){
 }
 host.addEventListener('pointerup',endPointer);
 host.addEventListener('pointercancel',e=>{ pointers.delete(e.pointerId); pinchPrev=0; pinchMid=null; if(!pointers.size) downInfo=null; });
-host.addEventListener('wheel',e=>{ e.preventDefault(); zoomToward(e.clientX,e.clientY,Math.exp(e.deltaY*0.0012)); },{passive:false});
+host.addEventListener('wheel',e=>{ e.preventDefault(); if(roomView){ roomFov=clamp(roomFov*Math.exp(e.deltaY*0.0012),28,85); return; } if(roomRide) return; zoomToward(e.clientX,e.clientY,Math.exp(e.deltaY*0.0012)); },{passive:false});
 host.addEventListener('dblclick',e=>{
+  if(roomView||roomRide) return;
   setNdc(e); const hit=raycaster.intersectObjects(scene.children,true).find(h=>h.object.isMesh&&h.object.visible);
   if(hit){
     goal.target.set(clamp(hit.point.x,-1.8,1.8),clamp(hit.point.y,0.35,2.3),clamp(hit.point.z,0,0.5));
@@ -1460,6 +1485,169 @@ catcherMat.transparent=true; catcherMat.opacity=0; catcherMat.depthWrite=false;
 const trapCatcher=new THREE.Mesh(new THREE.PlaneGeometry(3.4,1.9),catcherMat);
 trapCatcher.rotation.x=-Math.PI/2; trapCatcher.position.set(0,0.002,1.4);
 scene.add(trapCatcher); pickables.push(trapCatcher);
+// sumi-e print: a pale moon behind a pine bough, for the stairwell
+function drawSumiPine(g,w,h){
+  drawPaper(g,w,h,{base:'#ece3cc',fibers:700});
+  const gr=g.createRadialGradient(w*0.66,h*0.3,0,w*0.66,h*0.3,w*0.24);
+  gr.addColorStop(0,'rgba(200,190,165,.55)'); gr.addColorStop(0.85,'rgba(200,190,165,.35)'); gr.addColorStop(1,'rgba(200,190,165,0)');
+  g.fillStyle=gr; g.beginPath(); g.arc(w*0.66,h*0.3,w*0.24,0,6.283); g.fill();
+  g.strokeStyle='rgba(28,22,18,.85)'; g.lineCap='round';
+  const bough=[[w*0.02,h*0.62],[w*0.3,h*0.55],[w*0.55,h*0.63],[w*0.92,h*0.5]];
+  g.lineWidth=w*0.035; g.beginPath(); g.moveTo(...bough[0]); g.bezierCurveTo(...bough[1],...bough[2],...bough[3]); g.stroke();
+  g.lineWidth=w*0.015; g.beginPath(); g.moveTo(w*0.42,h*0.59); g.quadraticCurveTo(w*0.5,h*0.72,w*0.62,h*0.78); g.stroke();
+  for(const [cx,cy,s] of [[w*0.2,h*0.52,1],[w*0.45,h*0.52,1.2],[w*0.7,h*0.5,1],[w*0.88,h*0.44,0.8],[w*0.6,h*0.74,0.9],[w*0.32,h*0.6,0.7]]){
+    for(let i=0;i<34;i++){ const a=-Math.PI+i/33*Math.PI*1.0+R(-0.05,0.05), l=w*0.07*s*R(0.75,1.1);
+      g.lineWidth=R(1,2); g.strokeStyle=`rgba(24,30,22,${R(.55,.85)})`; g.beginPath(); g.moveTo(cx,cy); g.lineTo(cx+Math.cos(a)*l,cy+Math.sin(a)*l*0.8); g.stroke(); }
+  }
+  g.fillStyle='#a3291c'; g.fillRect(w*0.1,h*0.84,w*0.07,w*0.07);
+}
+// indigo woodblock-style print of breaking waves
+function drawWavePrint(g,w,h){
+  const sky=g.createLinearGradient(0,0,0,h); sky.addColorStop(0,'#e9dcc0'); sky.addColorStop(1,'#d8c8a6'); g.fillStyle=sky; g.fillRect(0,0,w,h);
+  const wave=(y0,amp,col,foam)=>{
+    g.fillStyle=col; g.beginPath(); g.moveTo(0,h);
+    for(let x=0;x<=w;x+=4) g.lineTo(x,y0+Math.sin(x/w*Math.PI*2.4+y0*0.05)*amp-Math.max(0,Math.sin(x/w*Math.PI*1.2))*amp*1.6);
+    g.lineTo(w,h); g.closePath(); g.fill();
+    if(foam) for(let x=0;x<w;x+=w/40){ const y=y0+Math.sin(x/w*Math.PI*2.4+y0*0.05)*amp-Math.max(0,Math.sin(x/w*Math.PI*1.2))*amp*1.6;
+      g.fillStyle='rgba(245,240,228,.95)'; g.beginPath(); g.arc(x,y-2,R(2.5,5),0,6.283); g.fill(); }
+  };
+  wave(h*0.5,h*0.07,'#2c4a70',true); wave(h*0.62,h*0.06,'#1f3657',true); wave(h*0.76,h*0.05,'#172943',true);
+  g.strokeStyle='rgba(235,230,215,.35)'; g.lineWidth=1.2;
+  for(let i=0;i<60;i++){ const x=rnd()*w, y=h*R(0.55,0.95); g.beginPath(); g.arc(x,y,R(6,16),Math.PI*1.1,Math.PI*1.9); g.stroke(); }
+  g.fillStyle='#a3291c'; g.fillRect(w*0.84,h*0.08,w*0.07,w*0.1);
+}
+// Walls, ceiling and fittings for the stairwell (stairs-local coords: the stairs descend toward -x,
+// the side walls stand at z=±halfW, the treads' nosing line is noseY(x)). Same idiom as the hidden
+// room: plaster over a wood wainscot that follows the pitch, a closed stringer, dado rail, a handrail
+// on brass brackets, paper bracket lamps (the only lights down here), framed prints and a wall shelf.
+function decorateStairwell(stairs,o){
+  const {rise,run,halfW,openX0,doorX,doorY,doorH,matDarkU}=o;
+  const slope=rise/run, ang=Math.atan(slope), xTop=0.15, xEnd=doorX-0.06, CEIL=-0.05;
+  const xLand=(doorY+0.0475)/slope;                                   // where the nosing line meets the landing
+  const noseY=x=>Math.max(-0.0475+slope*x,doorY);
+  stairs.updateMatrixWorld(true);
+  /* materials (the stairwell's own) */
+  const tPl=canvasTex(640,640,(g,w,h)=>drawPlaster(g,w,h,'#5e5042'));
+  const matPl=std({map:tPl,bumpMap:tPl,bumpScale:0.7,roughness:0.96},0.2);
+  const tWn=canvasTex(512,512,drawWainscot); tWn.repeat.set(1/0.9,1/0.9);
+  // little to reflect down here, so env reflections and clearcoat stay low (they washed the boards out at grazing angles)
+  const matWn=std({map:tWn,bumpMap:tWn,bumpScale:0.4,roughness:0.6,side:THREE.DoubleSide},0.15);
+  const tCl=canvasTex(512,512,drawCeilBoards);
+  const matCl=std({map:tCl,roughness:0.75},0.25);
+  const tWal=woodTex('#4a2c1a','20,10,5','138,90,54',60,0.8);
+  const matWal=std({map:tWal,bumpMap:tWal,bumpScale:0.3,roughness:0.45,clearcoat:0.3,clearcoatRoughness:0.3},0.3,true); matWal.userData.woodUV=0.8;
+  const matStr=std({map:tDark,color:C('#8a7a70'),roughness:0.5,side:THREE.DoubleSide},0.15);   // closed stringer: dark-stained wood
+  const matRail=std({color:C('#3a2316'),roughness:0.35,clearcoat:0.5,clearcoatRoughness:0.2},0.3,true);
+  const matBr=std({color:C('#a8833a'),metalness:1,roughness:0.3},1.3);
+  const matSh=std({map:tPaper,emissive:C('#ffbe78'),emissiveMap:tPaper,emissiveIntensity:1.3,roughness:0.9,side:THREE.DoubleSide},0.05);
+  const matCel=std({color:C('#8fb3a2'),roughness:0.18,clearcoat:0.6,clearcoatRoughness:0.1,side:THREE.DoubleSide},1.2,true);
+  const matBk=std({color:C('#2b1e16'),roughness:0.9},0.3);
+  const matLf=std({color:C('#34502a'),roughness:0.55,side:THREE.DoubleSide},0.4);
+  const matMat=std({color:C('#ddd5c4'),roughness:0.9},0.2);
+  const art=(fn,w,h)=>std({map:canvasTex(w,h,fn,{repeat:false}),roughness:0.8},0.15);
+  const matPine=art(drawSumiPine,384,480), matWave=art(drawWavePrint,480,384);
+  // a band between two curves of x, as a flat shape in the x-y plane (sampled finely, plus its kinks)
+  const xs=[]; for(let i=0;i<=120;i++) xs.push(xTop+(xEnd-xTop)*i/120);
+  xs.push(xLand); xs.sort((a,b)=>b-a);
+  const bandShape=(top,bot)=>{ const sh=new THREE.Shape(); sh.moveTo(xs[0],top(xs[0])); for(const x of xs) sh.lineTo(x,top(x)); for(let i=xs.length-1;i>=0;i--) sh.lineTo(xs[i],bot(xs[i])); sh.closePath(); return sh; };
+  const wainTop=x=>Math.min(noseY(x)+0.9,-0.03), wainBot=x=>noseY(x)-0.3;
+  const wainGeo=new THREE.ShapeGeometry(bandShape(wainTop,wainBot));
+  const strGeo=new THREE.ExtrudeGeometry(bandShape(x=>Math.min(noseY(x)+0.07,-0.01),x=>noseY(x)-0.28),{depth:halfW-o.w/2,bevelEnabled:false});
+  const pts=(fn,a,b)=>[new THREE.Vector3(a,fn(a),0),new THREE.Vector3(b,fn(b),0)];
+  const railAlong=(parent,yOff,x0,x1,mk,z)=>{   // a straight member following the pitch, then level along the landing
+    const segs=[[Math.min(x0,(-0.03-yOff+0.0475)/slope),Math.max(xLand,x1)],[xLand,x1]];
+    for(const [a,b] of segs){ if(a<=b) continue; const [p,q]=pts(x=>noseY(x)+yOff,a,b); const len=p.distanceTo(q);
+      const m=mk(len); m.position.copy(p).add(q).multiplyScalar(0.5); m.position.z=z||0; m.rotation.z=Math.atan2(q.y-p.y,q.x-p.x)+Math.PI; parent.add(m); }
+  };
+  const lights=[];
+  for(const sz of [-1,1]){
+    const side=new THREE.Group(); side.position.z=sz*halfW; stairs.add(side);   // local +z of `side` points into the corridor only after the flip below
+    const flip=sz>0?Math.PI:0;
+    // plaster wall, full height, up to just under the tatami
+    const wall=new THREE.Mesh(new THREE.PlaneGeometry(xTop-xEnd,-0.002-(doorY-0.1)),matPl);
+    wall.position.set((xTop+xEnd)/2,(-0.002+doorY-0.1)/2,0); wall.rotation.y=flip; wall.receiveShadow=true; side.add(wall);
+    stairs.updateMatrixWorld(true); worldUV(wall,0,2.2,2.2);
+    // wainscot following the pitch, then level along the landing
+    const wn=new THREE.Mesh(wainGeo,matWn); wn.position.z=-sz*0.004; wn.receiveShadow=true; side.add(wn);
+    // closed stringer, black lacquer, covering the treads' ends
+    const st=new THREE.Mesh(strGeo,matStr); st.position.z=sz>0?-(halfW-o.w/2):0; st.castShadow=st.receiveShadow=true; side.add(st);
+    // dado rail along the wainscot's top edge
+    railAlong(side,0.9,xTop,xEnd,len=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(len,0.035,0.028),matDarkU); m.castShadow=true; return m; },-sz*0.018);
+  }
+  // handrail on the right-hand side going down (+z): walnut rail on brass brackets, level along the landing
+  {
+    const side=new THREE.Group(); side.position.z=halfW; stairs.add(side);
+    const H=0.84, out=-0.075;
+    railAlong(side,H,-1.15,doorX+0.45,len=>{ const g=new THREE.Group(), m=cyl(0.022,0.022,len,matRail,16); m.rotation.z=Math.PI/2; g.add(m); return g; },out);   // wrapped: railAlong sets the group's own pitch
+    for(const x of [-1.35,-2.3,-3.25,-4.45,-5.35]){
+      const y=noseY(x)+H;
+      const arm=cyl(0.007,0.007,0.07,matBr,8); arm.rotation.x=Math.PI/2; arm.position.set(x,y-0.03,out/2-0.004); side.add(arm);
+      const rose=cyl(0.03,0.03,0.01,matBr,20); rose.rotation.x=Math.PI/2; rose.position.set(x,y-0.03,-0.005); side.add(rose);
+      const cup=cyl(0.012,0.012,0.03,matBr,10); cup.position.set(x,y-0.017,out); side.add(cup);
+    }
+    for(const x of [Math.min(-1.15,(-0.03-H+0.0475)/slope),doorX+0.45]){ const f=new THREE.Mesh(new THREE.SphereGeometry(0.027,16,12),matBr); f.position.set(x,noseY(x)+H,out); f.castShadow=true; side.add(f); }
+  }
+  // paper bracket lamps -- the stairwell's own light
+  const sconce=(x,sz)=>{
+    const y=noseY(x)+1.45;
+    const g=new THREE.Group(); g.position.set(x,y,sz*(halfW-0.004)); g.rotation.y=sz>0?Math.PI:0; stairs.add(g);
+    box(0.07,0.16,0.012,matBr,0,0,0.006,g);
+    const arm=cyl(0.008,0.008,0.1,matBr,8); arm.rotation.x=Math.PI/2; arm.position.set(0,-0.02,0.06); g.add(arm);
+    const sh=box(0.12,0.17,0.12,matSh,0,0,0.13,g); sh.castShadow=false;
+    for(const cx of [-1,1])for(const cz of [-1,1]){ const p=box(0.012,0.19,0.012,matDarkU,cx*0.062,0,0.13+cz*0.062,g); p.castShadow=false; }
+    box(0.14,0.012,0.14,matDarkU,0,0.095,0.13,g).castShadow=false; box(0.14,0.012,0.14,matDarkU,0,-0.095,0.13,g).castShadow=false;
+    const L=new THREE.PointLight(0xffb870,0.8,2.8,2); L.position.set(0,0,0.13); g.add(L); lights.push(L);
+  };
+  sconce(-2.3,-1); sconce(-3.55,1); sconce(-4.75,-1); sconce(-5.65,1);
+  // framed prints
+  const framed=(x,y,sz,w,h,mat)=>{
+    const g=new THREE.Group(); g.position.set(x,y,sz*(halfW-0.004)); g.rotation.y=sz>0?Math.PI:0; stairs.add(g);
+    const pic=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat); pic.position.z=0.012; pic.receiveShadow=true; g.add(pic);
+    box(w+0.1,h+0.1,0.008,matMat,0,0,0.006,g);
+    box(w+0.13,0.018,0.03,matDarkU,0,(h+0.11)/2,0.015,g); box(w+0.13,0.018,0.03,matDarkU,0,-(h+0.11)/2,0.015,g);
+    box(0.018,h+0.13,0.03,matDarkU,-(w+0.11)/2,0,0.015,g); box(0.018,h+0.13,0.03,matDarkU,(w+0.11)/2,0,0.015,g);
+  };
+  framed(-2.05,noseY(-2.05)+1.25,1,0.26,0.32,matPine);
+  framed(-3.3,noseY(-3.3)+1.3,-1,0.4,0.32,matWave);
+  framed(-5.25,doorY+1.55,-1,0.3,0.38,matPine);
+  // a floating walnut shelf on the landing, with a celadon vase and a camellia sprig
+  {
+    const g=new THREE.Group(); g.position.set(-4.85,doorY+1.18,halfW); g.rotation.y=Math.PI; stairs.add(g);
+    box(0.62,0.035,0.17,matWal,0,0,0.085,g);
+    for(const sx of [-1,1]) box(0.02,0.06,0.02,matBr,sx*0.24,-0.045,0.02,g);
+    const v=lathe(VASE,matCel,40); v.scale.setScalar(0.62); v.position.set(-0.12,0.0175,0.085); g.add(v);
+    const c=new THREE.CatmullRomCurve3([[-0.12,0.27,0.085],[-0.08,0.4,0.09],[0.02,0.5,0.1],[0.12,0.52,0.11]].map(p=>new THREE.Vector3(...p)));
+    const br=new THREE.Mesh(new THREE.TubeGeometry(c,16,0.004,6),matBk); br.castShadow=true; g.add(br);
+    const lg=new THREE.SphereGeometry(1,10,6);
+    for(let i=0;i<6;i++){ const l=new THREE.Mesh(lg,matLf); l.scale.set(0.04,0.005,0.019); l.position.copy(c.getPoint(0.25+i*0.13)); l.rotation.set(R(-0.6,0.6),i*1.9,R(-0.4,0.4)); l.castShadow=true; g.add(l); }
+    box(0.16,0.02,0.11,std({color:C('#3a2d24'),roughness:0.85},0.2),0.18,0.028,0.085,g);
+  }
+  // ceiling over the stairwell (beyond the opening), a header beam at the opening's edge, and the end walls
+  const cl=new THREE.Mesh(new THREE.PlaneGeometry(openX0-xEnd,halfW*2),matCl);
+  cl.rotation.x=Math.PI/2; cl.position.set((openX0+xEnd)/2,CEIL,0); cl.castShadow=cl.receiveShadow=true; stairs.add(cl);
+  stairs.updateMatrixWorld(true); worldUV(cl,0,1.8,1.8);
+  for(let x=openX0-0.4;x>xEnd;x-=0.45) box(0.03,0.03,halfW*2,matDarkU,x,CEIL-0.015,0,stairs);
+  box(0.1,0.14,halfW*2,matDarkU,openX0-0.05,CEIL-0.07,0,stairs);
+  const endWall=(x,ry,y0,y1,z0,z1)=>{ const m=new THREE.Mesh(new THREE.PlaneGeometry(z1-z0,y1-y0),matPl); m.position.set(x,(y0+y1)/2,(z0+z1)/2); m.rotation.y=ry; m.receiveShadow=true; stairs.add(m); stairs.updateMatrixWorld(true); worldUV(m,0,2.2,2.2); };
+  endWall(xTop,-Math.PI/2,doorY-0.1,-0.002,-halfW,halfW);                                // behind the top step
+  const dx=doorX-0.03, dTop=doorY+doorH, jw=o.w/2;
+  endWall(dx,Math.PI/2,dTop,CEIL,-halfW,halfW);                                         // over the door
+  endWall(dx,Math.PI/2,doorY,dTop,-halfW,-jw); endWall(dx,Math.PI/2,doorY,dTop,jw,halfW);   // either side of it
+  box(0.05,0.07,o.w+0.14,matDarkU,doorX+0.01,dTop+0.035,0,stairs);                      // door head and jambs
+  for(const s of [-1,1]) box(0.05,doorH,0.035,matDarkU,doorX+0.01,doorY+doorH/2,s*(jw+0.0175),stairs);
+  // lights: the bracket lamps, faint fill, and daylight/lamplight spilling down through the opening
+  const hemiU=new THREE.HemisphereLight(0xffe2c4,0x1e1610,0.15); underScene.add(hemiU);
+  const spill=new THREE.SpotLight(0xfff0dc,1.2,7,0.62,0.9,1.2); spill.position.set(-0.6,1.3,0); spill.target.position.set(-2.8,-2.6,0);
+  spill.castShadow=true; spill.shadow.mapSize.set(512,512); spill.shadow.bias=-0.002; spill.shadow.radius=4; stairs.add(spill,spill.target);
+  const cDay=new THREE.Color(0xfff0dc), cNight=new THREE.Color(0xffc488);
+  underMode=m=>{
+    hemiU.intensity=lerp(0.18,0.1,m);
+    spill.intensity=lerp(1.25,0.4,m); spill.color.copy(cDay).lerp(cNight,m);
+    for(const L of lights) L.intensity=lerp(0.55,0.95,m);
+    matSh.emissiveIntensity=lerp(0.9,1.5,m);
+  };
+  underMode(mode);
+}
 function openTrap(){
   try{
     // snap onto the real tatami grid (the row just in front of the shelf, the column nearest centre)
@@ -1478,34 +1666,19 @@ function openTrap(){
     const N=18, rise=0.19, run=0.24, w=TRAP_D-0.14;                                     // 18 steps: twice the original run
     // enters from a short edge of the opening (x, near TRAP_W/2) and descends along X, not along the
     // long edge the door hinges on -- width now spans the short (Z) dimension instead.
-    const stairs=new THREE.Group(); stairs.position.set(TRAP_X+TRAP_W/2-0.14,0,(z0+z1)/2); scene.add(stairs);
+    // The whole stairwell lives in its own scene (underScene) with its own lights, drawn after the main
+    // scene into the same depth buffer -- seen only through the opening in the tatami -- so the room's
+    // sun can't shine down through the floor into it and its lamps can't light the room above. Its
+    // materials are its own copies for the same reason (a material shared between the two scenes
+    // could pick up the other scene's lights).
+    underScene=new THREE.Scene();
+    const uMat=m=>{ const c=m.clone(); c.userData.envBase*=0.4; c.envMapIntensity=c.userData.envBase; allMats.push(c); return c; };
+    const matMidU=uMat(matMid), matDarkU=uMat(matDark), matGoldU=uMat(matGold);
+    const stairs=new THREE.Group(); stairs.position.set(TRAP_X+TRAP_W/2-0.14,0,(z0+z1)/2); underScene.add(stairs);
     for(let i=0;i<N;i++){
       const y=-0.07-rise*i, x=-run*i;
-      box(run+0.03,0.045,w,matMid,x,y,0,stairs);                                         // tread
-      box(0.04,rise+0.02,w,matMid,x+run/2,y-rise/2+0.03,0,stairs);                        // riser
-    }
-    // Decorative side walls flanking the whole run, styled after the cabinet itself (wood panel with
-    // dark cabinetry trim and a thin gold accent line) instead of the bare dark pit-wall colour.
-    const totalRun=run*N, totalDrop=rise*N, slopeAng=Math.atan2(-totalDrop,-totalRun);
-    for(const sz of [-1,1]){
-      const wall=new THREE.Group();
-      wall.position.set(-totalRun/2,-totalDrop/2,sz*(w/2+0.035)); wall.rotation.z=slopeAng; stairs.add(wall);
-      const wl=Math.hypot(totalRun,totalDrop);
-      // The panel's local +Y runs DOWNWARD once tilted to the slope (a quick check: rotating (0,1) by
-      // slopeAng gives a world-Y component of -totalRun/L, negative, i.e. down); local Y=0 sits right
-      // on the slope's own centreline, which itself passes through the tatami's surface exactly at the
-      // top of the stairs. So the panel is built spanning LOCAL Y 0..0.82 (never negative) -- entirely
-      // in the safe, downward direction -- instead of centred on 0, which used to push its other edge
-      // up through the tatami right at the entrance.
-      box(wl,0.82,0.03,matMid,0,0.41,0,wall);                                              // panel, z in [-0.015,+0.015]
-      // trim/mullions are mounted PROUD of the panel's own front face (z=+0.015), starting exactly
-      // there and extending further out -- never sharing the panel's own z-range, so there is no
-      // volume where the two could compete for the same pixels.
-      const tz=0.015+0.006;                                                                // trim/mullion centre z
-      box(wl,0.03,0.012,matDark,0,0.80,tz,wall); box(wl,0.03,0.012,matDark,0,0.02,tz,wall); // top/bottom trim
-      box(wl,0.012,0.013,matGold,0,0.71,tz,wall);                                           // gold accent line
-      const panels=Math.round(wl/0.5)||1;
-      for(let i=1;i<panels;i++) box(0.03,0.76,0.012,matDark,-wl/2+wl*i/panels,0.41,tz,wall); // vertical mullions, shelf-style
+      box(run+0.03,0.045,w,matMidU,x,y,0,stairs);                                         // tread
+      box(0.04,rise+0.02,w,matMidU,x+run/2,y-rise/2+0.03,0,stairs);                        // riser
     }
     // A locked door at the foot of the stairs. It opens once the shiori key (hidden behind the
     // cabinet) has been found -- see hasKey/tapDoor() below -- and stays shut until then. The room
@@ -1513,11 +1686,12 @@ function openTrap(){
     const doorH=1.29;                                                        // 1.5x the original 0.86 height
     const lastTreadFarX=-run*(N-1)-(run+0.03)/2;
     const landW=w+1.1, doorX=lastTreadFarX-landW, doorY=-0.07-rise*(N-1);   // landing lengthened so the door frames cleanly once the (unchanged) descend camera move settles
-    box(landW,0.05,w,matMid,(lastTreadFarX+doorX)/2,doorY-0.025,0,stairs);
+    box(landW,0.05,TRAP_D,matMidU,(lastTreadFarX+doorX)/2,doorY-0.025,0,stairs);            // landing runs right out to the side walls
     const doorHinge=new THREE.Group(); doorHinge.position.set(doorX,doorY,-w/2); stairs.add(doorHinge);
-    const doorPanel=box(0.05,doorH,w,matMid,0,doorH/2,w/2,doorHinge);
-    box(0.055,0.06,w+0.06,matDark,0,doorH,w/2,doorHinge); box(0.055,0.06,w+0.06,matDark,0,0,w/2,doorHinge);
-    box(0.03,0.05,0.05,matGold,0.03,doorH/2,w-0.05,doorHinge);                              // latch, at the free edge
+    const doorPanel=box(0.05,doorH,w,matMidU,0,doorH/2,w/2,doorHinge);
+    box(0.055,0.06,w+0.06,matDarkU,0,doorH,w/2,doorHinge); box(0.055,0.06,w+0.06,matDarkU,0,0,w/2,doorHinge);
+    box(0.03,0.05,0.05,matGoldU,0.03,doorH/2,w-0.05,doorHinge);                              // latch, at the free edge
+    decorateStairwell(stairs,{N,rise,run,w,halfW:TRAP_D/2,openX0:-(TRAP_W-0.14),lastTreadFarX,doorX,doorY,doorH,matDarkU});
     stairDoor={hinge:doorHinge,t:0,goal:0}; doorPanelRef=doorPanel;
     pickables.push(doorPanel);
     STAIR_G.lastTreadFarX=lastTreadFarX; STAIR_G.doorX=doorX; STAIR_G.doorY=doorY; STAIR_G.landW=landW; STAIR_G.doorH=doorH;
@@ -2129,6 +2303,51 @@ function buildInnerRoom(){
   }catch(err){ console.error('inner room: failed to build',err); }
 }
 
+/* ---------- walking into the hidden room, and looking all the way round inside it ---------- */
+// Tapping the fusuma opens it and glides the camera along the doorway's own axis, through the opening,
+// to an eye point inside the room (roomRide). Once there (roomView) the eye stays put and dragging turns
+// the view through a full 360 degrees -- r collapses to a few centimetres, so the orbit rig becomes a
+// look-around -- while pinch/wheel zoom by narrowing the field of view. 部屋を出る (or 位置をリセット)
+// backs the camera out the same way, facing into the room, and closes the fusuma behind it.
+const DOOR_CX=(doorX0+doorX1)/2;
+const ROOM_EYE=new THREE.Vector3(DOOR_CX,1.42,-1.75);
+const DOOR_FRONT=new THREE.Vector3(DOOR_CX,1.42,1.1);
+function camOffset(th,ph,r){ const sp=Math.sin(ph); return new THREE.Vector3(r*sp*Math.sin(th),r*Math.cos(ph),r*sp*Math.cos(th)); }
+// kf: [{u, th, ph}] view-direction keys at fractions u of the (eased) ride; path: a smooth curve for the eye
+function startRoomRide(points,kf,duration,done){
+  roomRide={t:0,duration,curve:new THREE.CatmullRomCurve3(points,false,'centripetal'),kf,done};
+  setAuto(false);
+}
+function updateRoomRide(dt){
+  const R_=roomRide; R_.t=Math.min(1,R_.t+dt/R_.duration);
+  const e=ease(R_.t), P=R_.curve.getPointAt(e), k=R_.kf;
+  let i=0; while(i<k.length-2&&e>k[i+1].u) i++;
+  const f=clamp((e-k[i].u)/(k[i+1].u-k[i].u),0,1), th=lerp(k[i].th,k[i+1].th,f), ph=lerp(k[i].ph,k[i+1].ph,f), r=0.05;
+  cur.theta=goal.theta=th; cur.phi=goal.phi=ph; cur.r=goal.r=r;
+  cur.target.copy(P).sub(camOffset(th,ph,r)); goal.target.copy(cur.target);
+  if(R_.t>=1){ roomRide=null; R_.done(); }
+}
+function enterInnerRoom(){
+  if(!innerDoorMv||roomRide||roomView) return;
+  innerDoorMv.goal=1;
+  const th0=cur.theta, th1=Math.round(th0/(Math.PI*2))*Math.PI*2;   // face straight into the room, turning the short way
+  startRoomRide([camera.position.clone(),DOOR_FRONT.clone(),ROOM_EYE.clone()],
+    [{u:0,th:th0,ph:cur.phi},{u:0.45,th:th1,ph:Math.PI/2},{u:1,th:th1,ph:1.6}],3.4,
+    ()=>{ roomView=true; $('bExit').hidden=false; });
+}
+function exitInnerRoom(){
+  if(!roomView||roomRide) return;
+  roomView=false; $('bExit').hidden=true;
+  const th0=cur.theta, k=Math.round(th0/(Math.PI*2))*Math.PI*2;
+  const homeCam=home.target.clone().add(camOffset(home.theta,home.phi,home.r));
+  startRoomRide([camera.position.clone(),DOOR_FRONT.clone(),homeCam],
+    [{u:0,th:th0,ph:cur.phi},{u:0.3,th:k,ph:Math.PI/2},{u:0.6,th:k,ph:Math.PI/2},{u:1,th:k+home.theta,ph:home.phi}],3.2,
+    ()=>{ innerDoorMv.goal=0;
+      cur.theta=goal.theta=home.theta; cur.phi=goal.phi=home.phi; cur.r=goal.r=home.r;
+      cur.target.copy(home.target); goal.target.copy(home.target); });
+}
+$('bExit').addEventListener('click',exitInnerRoom);
+
 /* ---------- buttons ---------- */
 $('bDay').addEventListener('click',()=>{
   modeGoal=modeGoal?0:1; $('bDay').textContent=modeGoal?'昼にする':'夜にする'; $('bDay').classList.toggle('on',!!modeGoal);
@@ -2138,6 +2357,7 @@ function setShoji(open){
   shojiMvs.forEach(m=>{ m.goal=open?1:0; });
 }
 $('bReset').addEventListener('click',()=>{
+  if(roomView||roomRide){ exitInnerRoom(); return; }
   goal.theta=home.theta; goal.phi=home.phi; goal.r=home.r; goal.target.copy(home.target); setAuto(false);
 });
 setTimeout(()=>{ $('hint').style.opacity='0'; },14000);
@@ -2167,7 +2387,9 @@ function tick(){
   if(scrollCurl&&Math.abs(scrollSwing.goal-scrollSwing.t)>0.0004){ scrollSwing.t+=(scrollSwing.goal-scrollSwing.t)*(1-Math.exp(-dt*3)); updateScrollCurl(scrollCurl.maxAngle*ease(clamp(scrollSwing.t,0,1))); }
   if(handleGroup&&Math.abs(handleSpin.target-handleSpin.angle)>0.001){ handleSpin.angle+=(handleSpin.target-handleSpin.angle)*(1-Math.exp(-dt*2.2)); handleGroup.rotation.z=handleSpin.angle; }
   if(Math.abs(shelfSlide.goal-shelfSlide.t)>0.0004){ shelfSlide.t+=(shelfSlide.goal-shelfSlide.t)*(1-Math.exp(-dt*2)); shelf.position.x=SHELF_SLIDE_DIST*ease(clamp(shelfSlide.t,0,1)); }
+  if(roomRide) updateRoomRide(dt);
   const k=1-Math.exp(-dt*6);
+  { const fw=roomView?roomFov:baseFov(); if(Math.abs(camera.fov-fw)>0.01){ camera.fov+=(fw-camera.fov)*(1-Math.exp(-dt*3)); camera.updateProjectionMatrix(); } }
   cur.theta+=(goal.theta-cur.theta)*k; cur.phi+=(goal.phi-cur.phi)*k; cur.r+=(goal.r-cur.r)*k; cur.target.lerp(goal.target,k);
   const sp=Math.sin(cur.phi);
   camera.position.set(cur.target.x+cur.r*sp*Math.sin(cur.theta),cur.target.y+cur.r*Math.cos(cur.phi),cur.target.z+cur.r*sp*Math.cos(cur.theta));
@@ -2178,6 +2400,8 @@ function tick(){
   renderer.render(scene,camera);
   // the room behind the fusuma, drawn over the same depth buffer -- only while the fusuma is open
   if(innerScene&&innerDoorMv&&innerDoorMv.t>0.002){ renderer.autoClear=false; renderer.render(innerScene,camera); renderer.autoClear=true; }
+  // likewise the stairwell under the tatami -- whenever the hatch is open or the camera is down there
+  if(underScene&&(trap.t>0.002||camera.position.y<0.05)){ renderer.autoClear=false; renderer.render(underScene,camera); renderer.autoClear=true; }
   if(first){ first=false; loadingEl.style.opacity='0'; setTimeout(()=>loadingEl.remove(),1000); }
 }
 tick();
