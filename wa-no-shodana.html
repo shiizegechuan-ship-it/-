@@ -509,8 +509,8 @@ function tapHandle(){ handleSpin.target+=Math.PI*2*3; if(!shelfSlide.goal) build
 // so there are no seams), and every point's arc-length from the top edge is preserved. The bottom rod
 // is repositioned each frame to sit at the curled position of the free edge, extended slightly along
 // its local tangent so it keeps its original small overhang.
-function updateScrollCurl(A){
-  const sc=scrollCurl; if(!sc) return;
+function updateScrollCurl(A,sc){
+  sc=sc||scrollCurl; if(!sc) return;
   const flat=A<1e-4;
   const R=flat?0:sc.panelH/A;
   const bend=(geo,base)=>{
@@ -1249,7 +1249,7 @@ function endPointer(e){
   pointers.delete(e.pointerId); pinchPrev=0; pinchMid=null;
   if(wasSingle&&downInfo&&!downInfo.moved&&!downInfo.multi&&performance.now()-downInfo.t<600){
     if(SC.rig){ if(SC.goal>0) SC.goal=0; }
-    else if(roomView){ setNdc(e); innerPick(raycaster); }   // inside the hidden room only its own things respond -- never the main room's books
+    else if(roomView){ setNdc(e); const r=innerPick(raycaster); if(r&&r.focus) focusInnerPoint(r.point,r.dist); }   // inside the hidden room only its own things respond -- never the main room's books
     else if(roomRide){ /* gliding in or out */ }
     else{
       setNdc(e); const hit=raycaster.intersectObjects(pickables,true);
@@ -2003,8 +2003,11 @@ function softBox(w,h,d,r,mat,bulge){
   const hx=w/2-r, hy=h/2-r, hz=d/2-r;
   for(let i=0;i<p.count;i++){
     v.fromBufferAttribute(p,i);
-    const x=Math.sign(v.x)*hx+v.x*r, z=Math.sign(v.z)*hz+v.z*r;
-    let y=Math.sign(v.y)*hy+v.y*r;
+    // near-zero components count as zero: sin(2*PI) is -2e-16, not 0, and Math.sign() of it used to fling the
+    // sphere's seam column to the opposite edge, tearing a triangular hole in the side of every cushion
+    const sg=a=>a>1e-6?1:a<-1e-6?-1:0;
+    const x=sg(v.x)*hx+v.x*r, z=sg(v.z)*hz+v.z*r;
+    let y=sg(v.y)*hy+v.y*r;
     if(bulge&&v.y>0) y+=bulge*Math.max(0,1-(2*x/w)**2)*Math.max(0,1-(2*z/d)**2);
     p.setXYZ(i,x,y,z);
     const ax=Math.abs(v.x), ay=Math.abs(v.y), az=Math.abs(v.z);
@@ -2076,18 +2079,20 @@ function buildInnerInterior(z0,z1){
   /* tappable things in this room (for puzzles). Each tagged object carries userData.innerAct; pick()
      raycasts against this room's own scene only, so nothing in the main room (the books, the shelf)
      can ever be triggered from in here. */
-  const acts=[];
+  const acts=[], customs=[];
   function movable(obj,prop,axis,delta,speed){
     const a={obj,prop,axis,base:obj[prop][axis],delta,t:0,goal:0,speed:speed||3};
     obj.userData.innerAct=()=>{ a.goal=a.goal?0:1; }; acts.push(a); return a;
   }
   function updateActs(dt){
     for(const a of acts) if(Math.abs(a.goal-a.t)>0.0004){ a.t+=(a.goal-a.t)*(1-Math.exp(-dt*a.speed)); a.obj[a.prop][a.axis]=a.base+a.delta*ease(clamp(a.t,0,1)); }
+    for(const f of customs) f(dt);
   }
-  const actOf=o=>{ while(o){ if(o.userData&&o.userData.innerAct) return o.userData.innerAct; o=o.parent; } return null; };
+  const actOwner=o=>{ while(o){ if(o.userData&&o.userData.innerAct) return o; o=o.parent; } return null; };
   const firstHit=rc=>rc.intersectObjects(S.children,true).find(h=>h.object.isMesh&&h.object.visible);
-  function pick(rc){ const h=firstHit(rc); const f=h&&actOf(h.object); if(f){ f(); return true; } return false; }
-  function hover(rc){ const h=firstHit(rc); return !!(h&&actOf(h.object)); }
+  // returns null, or {point, focus}: focus=false for switches (the lamps), which shouldn't pull the view over
+  function pick(rc){ const h=firstHit(rc), o=h&&actOwner(h.object); if(!o) return null; o.userData.innerAct(); return {point:(o.userData.focusAt||h.point).clone(),focus:!o.userData.noFocus,dist:o.userData.focusDist}; }
+  function hover(rc){ const h=firstHit(rc); return !!(h&&actOwner(h.object)); }
   const lampOn={pend:true,floor:true,table:true};
   const toggleLamp=k=>{ lampOn[k]=!lampOn[k]; applyInnerMode(mode); };
 
@@ -2142,13 +2147,24 @@ function buildInnerInterior(z0,z1){
     const pts=[]; for(let i=0;i<=24;i++){ const y=i/24*ROOM_H; pts.push([0.062+0.006*Math.sin(i*1.7)+0.004*Math.sin(i*4.3),y]); }
     const post=lathe([[0,0],...pts,[0,ROOM_H]],matPost,20); post.position.set(tx1+0.02,0,tz-0.02); S.add(post);
     // hanging scroll
-    // hanging scroll -- tap: it swings up and out on its top rod, revealing a small plaque behind it
-    const scX=cx-0.25, sg=new THREE.Group(); sg.position.set(scX,1.92,z1); S.add(sg);
-    const sc=new THREE.Mesh(new THREE.PlaneGeometry(0.56,1.4),matScroll); sc.position.set(0,-0.72,0.012); sc.castShadow=true; sg.add(sc);
-    const rod=cyl(0.011,0.011,0.62,matTrim,12); rod.rotation.z=Math.PI/2; put(rod,0,-1.42,0.02,sg);
-    const rodT=cyl(0.007,0.007,0.58,matTrim,12); rodT.rotation.z=Math.PI/2; put(rodT,0,-0.02,0.015,sg);
-    for(const s of [-1,1]) put(cyl(0.013,0.013,0.025,matIron,12),s*0.32,-1.42,0.02,sg).rotation.z=Math.PI/2;
-    movable(sg,'rotation','x',-1.05,2.2);
+    // hanging scroll -- tap: the sheet curls up off the wall exactly like the main room's scroll
+    // (updateScrollCurl(): a soft paper bend, not a rigid swing), revealing a small plaque behind it
+    const scX=cx-0.32, panelH=1.4, anchor=new THREE.Group(); anchor.position.set(scX,1.92,z1+0.012); S.add(anchor);
+    const fGeo=new THREE.PlaneGeometry(0.56,panelH,1,24); fGeo.translate(0,-panelH/2,0);
+    const bGeo=new THREE.PlaneGeometry(0.56,panelH,1,24); bGeo.translate(0,-panelH/2,0);
+    const tSB=canvasTex(228,712,drawScrollBack,{repeat:false});
+    const sFront=new THREE.Mesh(fGeo,matScroll), sBack=new THREE.Mesh(bGeo,mat2({map:tSB,roughness:0.85,side:THREE.BackSide},0.1));
+    sFront.castShadow=sBack.castShadow=true; sFront.receiveShadow=sBack.receiveShadow=true; anchor.add(sFront,sBack);
+    const rodT=cyl(0.007,0.007,0.58,matTrim,12); rodT.rotation.z=Math.PI/2; put(rodT,0,0.005,0.006,anchor);
+    const bRod=new THREE.Group(); anchor.add(bRod);
+    const rod=cyl(0.011,0.011,0.62,matTrim,12); rod.rotation.z=Math.PI/2; bRod.add(rod);
+    for(const s of [-1,1]) put(cyl(0.013,0.013,0.025,matIron,12),s*0.32,0,0,bRod).rotation.z=Math.PI/2;
+    const scCurl={frontGeo:fGeo,backGeo:bGeo,frontBase:fGeo.attributes.position.array.slice(),backBase:bGeo.attributes.position.array.slice(),panelH,maxAngle:Math.PI*0.92,bottomRod:bRod};
+    updateScrollCurl(0,scCurl);
+    const scSwing={t:0,goal:0};
+    anchor.userData.innerAct=()=>{ scSwing.goal=scSwing.goal?0:1; };
+    anchor.userData.focusAt=new THREE.Vector3(scX,1.25,z1); anchor.userData.focusDist=2.3;   // stand back far enough to watch the whole sheet curl
+    customs.push(dt=>{ if(Math.abs(scSwing.goal-scSwing.t)>0.0004){ scSwing.t+=(scSwing.goal-scSwing.t)*(1-Math.exp(-dt*3)); updateScrollCurl(scCurl.maxAngle*ease(clamp(scSwing.t,0,1)),scCurl); } });
     box(0.18,0.24,0.006,matKeyaki,scX,1.25,z1+0.004,S);
     // ikebana: a low black suiban with a camellia branch
     const suiban=lathe([[0,0],[0.17,0],[0.19,0.01],[0.2,0.05],[0.185,0.05],[0.175,0.015],[0,0.015]],matCeramic,48);
@@ -2276,7 +2292,7 @@ function buildInnerInterior(z0,z1){
   // Akari-style paper pendant lantern
   const lanternY=2.15;
   {
-    const g=new THREE.Group(); g.position.set(gx,lanternY,gz); S.add(g); g.userData.innerAct=()=>toggleLamp('pend');
+    const g=new THREE.Group(); g.position.set(gx,lanternY,gz); S.add(g); g.userData.innerAct=()=>toggleLamp('pend'); g.userData.noFocus=true;
     const prof=[]; for(let i=0;i<=20;i++){ const t=i/20; prof.push([0.012+0.25*Math.pow(Math.sin(Math.PI*t),0.75),-0.26+0.52*t]); }
     const shade=lathe(prof,matShade,48); shade.castShadow=false; g.add(shade);
     for(let i=1;i<20;i++){ const [r,y]=prof[i]; const rib=new THREE.Mesh(new THREE.TorusGeometry(r+0.002,0.0018,4,48),matRib); rib.rotation.x=Math.PI/2; rib.position.y=y; g.add(rib); }
@@ -2301,7 +2317,7 @@ function buildInnerInterior(z0,z1){
   }
   const floorLampZ=gz-1.55;
   {
-    const g=new THREE.Group(); g.position.set(-RW/2+0.42,0,floorLampZ); S.add(g); g.userData.innerAct=()=>toggleLamp('floor');
+    const g=new THREE.Group(); g.position.set(-RW/2+0.42,0,floorLampZ); S.add(g); g.userData.innerAct=()=>toggleLamp('floor'); g.userData.noFocus=true;
     put(lathe([[0,0],[0.15,0],[0.15,0.018],[0.03,0.03],[0,0.03]],matIron,40),0,0,0,g);
     put(cyl(0.011,0.011,1.38,matBrass2,12),0,0.72,0,g);
     const sh=cyl(0.2,0.22,0.32,matShadeF,40,true); sh.castShadow=false; put(sh,0,1.48,0,g);
@@ -2338,7 +2354,7 @@ function buildInnerInterior(z0,z1){
     box(0.22,0.07,0.15,matKeyaki,0,0.195,0,g); box(0.226,0.012,0.156,matLacq,0,0.235,0,g);   // a small lidded wooden box
     for(let i=0;i<2;i++) box(0.2,0.028,0.15,matMatte(['#3b2e2a','#1f2630'][i]),0.62,0.42+i*0.028,0,g);
     // table lamp: dark ceramic body, linen drum shade (tap to switch)
-    const tl=new THREE.Group(); g.add(tl); tl.userData.innerAct=()=>toggleLamp('table');
+    const tl=new THREE.Group(); g.add(tl); tl.userData.innerAct=()=>toggleLamp('table'); tl.userData.noFocus=true;
     put(lathe([[0,0],[0.07,0],[0.1,0.08],[0.095,0.2],[0.05,0.27],[0.02,0.3],[0,0.3]],matCeramic,40),-0.6,0.675,0,tl);
     const sh=cyl(0.15,0.17,0.2,matShadeT,40,true); sh.castShadow=false; put(sh,-0.6,1.06,0,tl);
     put(cyl(0.006,0.006,0.12,matBrass2,8),-0.6,0.98,0,tl);
@@ -2362,6 +2378,10 @@ function buildInnerInterior(z0,z1){
   const hemi2=new THREE.HemisphereLight(0xfff1e0,0x3a2c20,0.3); S.add(hemi2);
   const pend=new THREE.PointLight(0xffb978,1.4,7.5,1.6); pend.position.set(gx,lanternY,gz);
   S.add(pend);   // no shadow: a point light's shadow re-renders the room six times a frame
+  // ...instead the lantern's downward light is shared with one spot that does cast shadows, aimed only at
+  // what you see straight ahead on coming in (table, chairs, tokonoma): one shadow pass, not six
+  const pendSpot=new THREE.SpotLight(0xffb978,1,7.5,1.0,1.0,1.6); pendSpot.position.set(gx,lanternY-0.29,gz); pendSpot.target.position.set(gx,0,gz-1.6);
+  pendSpot.castShadow=true; pendSpot.shadow.mapSize.set(1024,1024); pendSpot.shadow.bias=-0.002; pendSpot.shadow.radius=4; pendSpot.shadow.camera.near=0.2; S.add(pendSpot,pendSpot.target);
   const toko=new THREE.SpotLight(0xffd6a0,2.0,4,0.62,0.75,1.4); toko.position.set(cx,1.98,z1+0.6); toko.target.position.set(cx,0.8,z1+0.05);
   toko.castShadow=true; toko.shadow.mapSize.set(512,512); toko.shadow.bias=-0.002; toko.shadow.radius=4; S.add(toko,toko.target);
   const win=new THREE.SpotLight(0xfff3e2,1.5,12,0.8,1.0,1); win.position.set(winX,2.4,z1-1.6); win.target.position.set(winX-1.2,0,zc);
@@ -2374,7 +2394,7 @@ function buildInnerInterior(z0,z1){
     hemi2.intensity=lerp(0.36,0.12,m);
     win.intensity=lerp(1.6,0.35,m); win.color.copy(cSunD).lerp(cMoon,m);
     matWinPaper.color.copy(cWinD).lerp(cWinN,m);
-    pend.intensity=lerp(0.55,1.5,m)*(lampOn.pend?1:0); toko.intensity=lerp(1.2,2.1,m);
+    const pI=lerp(0.55,1.5,m)*(lampOn.pend?1:0); pend.intensity=pI*0.6; pendSpot.intensity=pI*0.7; toko.intensity=lerp(1.2,2.1,m);
     flamp.intensity=lerp(0.15,0.8,m)*(lampOn.floor?1:0); tlamp.intensity=lerp(0.12,0.6,m)*(lampOn.table?1:0);
     const e=lerp(0.4,1.25,m);
     matShade.emissiveIntensity=lampOn.pend?e:0; matShadeF.emissiveIntensity=lampOn.floor?e:0; matShadeT.emissiveIntensity=lampOn.table?e:0;
@@ -2435,6 +2455,7 @@ function buildInnerRoom(){
 const DOOR_CX=(doorX0+doorX1)/2;
 const ROOM_EYE=new THREE.Vector3(DOOR_CX,1.42,-1.75);
 const DOOR_FRONT=new THREE.Vector3(DOOR_CX,1.42,1.1);
+const INNER_Z0=-WALL_T, INNER_Z1=-WALL_T-6.0;   // the hidden room's front and far walls (see buildInnerRoom)
 function camOffset(th,ph,r){ const sp=Math.sin(ph); return new THREE.Vector3(r*sp*Math.sin(th),r*Math.cos(ph),r*sp*Math.cos(th)); }
 // kf: [{u, th, ph}] view-direction keys at fractions u of the (eased) ride; path: a smooth curve for the eye
 function startRoomRide(points,kf,duration,done){
@@ -2450,6 +2471,24 @@ function updateRoomRide(dt){
   cur.target.copy(P).sub(camOffset(th,ph,r)); goal.target.copy(cur.target);
   if(R_.t>=1){ roomRide=null; R_.done(); }
 }
+// glide the eye to E while turning to look at P (inside the room)
+function lookRide(E,P,dur,done){
+  const d=P.clone().sub(E).normalize();
+  let th=Math.atan2(-d.x,-d.z); const ph=Math.acos(clamp(-d.y,-1,1));
+  th+=Math.round((cur.theta-th)/(Math.PI*2))*Math.PI*2;   // turn the short way round
+  const from=camera.position.clone(); if(from.distanceTo(E)<0.02) E=E.clone().add(new THREE.Vector3(0,0.02,0));
+  startRoomRide([from,E],[{u:0,th:cur.theta,ph:cur.phi},{u:1,th,ph}],dur,done||(()=>{}));
+}
+// after tapping something that moves: step over to it -- about a metre away, a little above it, looking at it
+function focusInnerPoint(P,dist){
+  if(roomRide) return;
+  const dh=new THREE.Vector3(camera.position.x-P.x,0,camera.position.z-P.z);
+  if(dh.lengthSq()<1e-6) dh.set(0,0,1); dh.normalize();
+  const E=P.clone().addScaledVector(dh,dist||1.15);
+  E.y=clamp(P.y+(dist?0.15:0.45),1.0,1.6); E.x=clamp(E.x,-3.7,3.7); E.z=clamp(E.z,INNER_Z1+0.9,INNER_Z0-0.5);
+  lookRide(E,P,1.6);
+}
+function backToRoomCentre(){ if(!roomRide) lookRide(ROOM_EYE.clone(),ROOM_EYE.clone().add(new THREE.Vector3(0,-0.05,-1)),1.6); }
 function enterInnerRoom(){
   if(!innerDoorMv||roomRide||roomView) return;
   innerDoorMv.goal=1;
@@ -2463,8 +2502,10 @@ function exitInnerRoom(){
   roomView=false; $('bExit').hidden=true;
   const th0=cur.theta, k=Math.round(th0/(Math.PI*2))*Math.PI*2;
   const homeCam=home.target.clone().add(camOffset(home.theta,home.phi,home.r));
-  startRoomRide([camera.position.clone(),DOOR_FRONT.clone(),homeCam],
-    [{u:0,th:th0,ph:cur.phi},{u:0.3,th:k,ph:Math.PI/2},{u:0.6,th:k,ph:Math.PI/2},{u:1,th:k+home.theta,ph:home.phi}],3.2,
+  const pts=[camera.position.clone()]; if(camera.position.distanceTo(ROOM_EYE)>0.1) pts.push(ROOM_EYE.clone());
+  pts.push(DOOR_FRONT.clone(),homeCam);
+  startRoomRide(pts,
+    [{u:0,th:th0,ph:cur.phi},{u:0.3,th:k,ph:Math.PI/2},{u:0.6,th:k,ph:Math.PI/2},{u:1,th:k+home.theta,ph:home.phi}],pts.length>3?4.0:3.2,
     ()=>{ innerDoorMv.goal=0;
       cur.theta=goal.theta=home.theta; cur.phi=goal.phi=home.phi; cur.r=goal.r=home.r;
       cur.target.copy(home.target); goal.target.copy(home.target); });
@@ -2480,7 +2521,8 @@ function setShoji(open){
   shojiMvs.forEach(m=>{ m.goal=open?1:0; });
 }
 $('bReset').addEventListener('click',()=>{
-  if(roomView||roomRide){ exitInnerRoom(); return; }
+  if(roomRide) return;
+  if(roomView){ backToRoomCentre(); return; }
   goal.theta=home.theta; goal.phi=home.phi; goal.r=home.r; goal.target.copy(home.target); setAuto(false);
 });
 setTimeout(()=>{ $('hint').style.opacity='0'; },14000);
