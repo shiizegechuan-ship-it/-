@@ -28,10 +28,11 @@ canvas{display:block}
 .bar button:focus-visible{outline:2px solid #e8c878;outline-offset:2px}
 .bar button[hidden]{display:none}
 /* item box (top centre) and lightbox */
-#items{position:absolute;top:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;pointer-events:auto;z-index:7;
+#items{position:absolute;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;gap:6px;pointer-events:auto;z-index:7;
+  max-width:calc(100vw - 20px);box-sizing:border-box;overflow-x:auto;overscroll-behavior:contain;scrollbar-width:thin;touch-action:pan-x;
   padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:3px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 #items[hidden]{display:none}
-#items button{width:52px;height:52px;padding:0;border:1px solid rgba(214,176,98,.35);border-radius:2px;background:rgba(0,0,0,.35);cursor:pointer}
+#items button{flex:0 0 auto;width:52px;height:52px;padding:0;border:1px solid rgba(214,176,98,.35);border-radius:2px;background:rgba(0,0,0,.35);cursor:pointer}
 #items button.empty{cursor:default;opacity:.45}
 #items button.sel{border-color:#e8c878;box-shadow:0 0 0 2px rgba(232,200,120,.5),0 0 12px rgba(232,200,120,.45)}
 #items canvas{width:100%;height:100%;display:block}
@@ -46,6 +47,7 @@ canvas{display:block}
 #toast{position:absolute;top:84px;left:50%;transform:translateX(-50%);max-width:min(90vw,560px);white-space:normal;text-align:center;line-height:1.7;padding:7px 16px;background:var(--panel);border:1px solid var(--line);
   font-size:13px;letter-spacing:.12em;opacity:0;transition:opacity .5s}
 #toast.on{opacity:1}
+@media (max-width:520px){ #items button{width:42px;height:42px} #toast{top:70px} }
 #loading{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);color:var(--muted);
   letter-spacing:.45em;font-size:14px;transition:opacity .9s;z-index:5}
 @media (prefers-reduced-motion: reduce){ #loading,.hint{transition:none} }
@@ -1053,7 +1055,7 @@ const inner=[
 inner[0].position.set(-0.88,1.5,0.2); inner[1].position.set(0,1.5,0.18); inner[2].position.set(0.9,1.5,0.22);
 inner.forEach(l=>shelf.add(l));   // move with the shelf
 let innerScene=null, innerDoorMv=null, innerRoom=null;   // the furnished room behind the fusuma (see buildInnerInterior)
-let roomView=false, roomRide=null, roomFov=60;   // looking around inside it / the scripted glide in or out
+let roomView=false, roomRide=null, roomFov=60, innerVisited=false;   // innerVisited: main-room items can be taken only after   // looking around inside it / the scripted glide in or out
 let underScene=null;   // the stairwell under the tatami (built by openTrap)
 
 /* ---------- camera / interaction ---------- */
@@ -1158,23 +1160,22 @@ function endPointer(e){
   pointers.delete(e.pointerId); pinchPrev=0; pinchMid=null;
   if(wasSingle&&downInfo&&!downInfo.moved&&!downInfo.multi&&performance.now()-downInfo.t<600){
     if(SC.rig){ if(SC.goal>0) SC.goal=0; }
-    else if(roomView){ setNdc(e); const r=innerRoom.pick(raycaster); if(r&&r.focus) focusInnerPoint(r.point,r.dist); }   // only the hidden room's own props respond in there
+    else if(roomView){ setNdc(e); const r=innerRoom.pick(raycaster); if(r&&r.focus) focusInnerPoint(r.point,r.dist,r.dir,r.elev); }   // only the hidden room's own props respond in there
     else if(roomRide){ /* gliding in or out */ }
     else{
       setNdc(e); const hit=raycaster.intersectObjects(pickables,true);
       if(hit.length){
         const obj=hit[0].object, it=findUp(obj,x=>x.userData.item);
-        if(it) pickUp(it);
+        if(it&&innerVisited) pickUp(it);
         else if(obj===trapCatcher) tapTrap();
         else if(isDescendant(obj,trapHinge)) toggleFlap();
         else if(stairDoor&&isDescendant(obj,stairDoor.hinge)) tapDoor();
-        else if(isDescendant(obj,shiori)) collectShiori();
         else if(scrollGroup&&isDescendant(obj,scrollGroup)) toggleScroll();
         else if(handleGroup&&(isDescendant(obj,handleGroup)||handleExtra.includes(obj))) tapHandle();
         else{
           const wa=findWa(obj);
           if(wa) openShowcase(wa);
-          else{ const mv=findMv(obj); if(mv){ if(mv.tag==='shoji') setShoji(!shojiMvs.some(m=>m.goal>0.5)); else if(mv.tag==='inner-door') enterInnerRoom(); else mv.goal=mv.goal?0:1; } }
+          else{ const mv=findMv(obj); if(mv){ if(mv.tag==='shoji') setShoji(!shojiMvs.some(m=>m.goal>0.5)); else if(mv.tag==='inner-door') enterInnerRoom(); else { mv.goal=mv.goal?0:1; if(mv.goal) viewIntoDrawer(mv); } } }
         }
       } else if(trap.opened&&hitStairsOpening(raycaster.ray)){
         descendStairs();
@@ -1612,6 +1613,12 @@ function openTrap(){
   }catch(err){ console.error('hidden puzzle: failed to open',err); }
 }
 function toggleFlap(){ trap.opened=!trap.opened; trap.goal=trap.opened?1:0; }
+// opening a main-room drawer with an item in it: look down into it from above (not too close)
+function viewIntoDrawer(mv){
+  const it=mv.obj.children.find(c=>c.userData.item); if(!it) return;
+  const P=it.getWorldPosition(new Vector3()); P[mv.axis]+=mv.delta*(1-mv.t);   // where it will be once open
+  goal.target.copy(P); goal.phi=0.62; goal.r=1.25;
+}
 // the cellar door opens only for the cellar key; then it swings open and the page moves on to NEXT_PAGE
 function tapDoor(){
   if(!stairDoor) return;
@@ -1640,25 +1647,8 @@ function tapTrap(){
   if(trap.taps>=5){ trap.revealed=true; openTrap(); }
 }
 
-/* ---------- hidden compartment: the centre back panel hides the shiori key ---------- */
-// the shiori key, tucked behind the centre back panel (which slides forward)
-let shiori=null;
+/* ---------- the centre back panel behind the shoji slides forward (an empty hidden compartment) ---------- */
 makeMovable(centerBackPanel,'z',0.05,'secret-panel');
-{
-  const shioriMat=std({color:C('#7a2f3a'),roughness:0.7},0.3);
-  shiori=group(shelf,0,1.55,0.008);
-  box(0.03,0.16,0.004,shioriMat,0,0,0,shiori);
-  box(0.03,0.01,0.004,matGold,0,0.075,0.002,shiori);
-  const tassel=new Mesh(new THREE.ConeGeometry(0.012,0.03,8),matGold);
-  tassel.castShadow=true; tassel.position.set(0,-0.095,0); shiori.add(tassel);
-  pickables.push(shiori);
-}
-function collectShiori(){
-  if(!shiori.visible) return;
-  shiori.visible=false;
-  const idx=pickables.indexOf(shiori); if(idx>=0) pickables.splice(idx,1);
-  giveItem('shiori');
-}
 
 /* ---------- hidden doorway + second room, behind where the shelf slides away from ---------- */
 // The doorway is cut the first time the handle slides the shelf open (buildInnerRoom).
@@ -1916,7 +1906,15 @@ function buildInnerInterior(z0,z1){
   const actOwner=o=>findUp(o,x=>x.userData.innerAct);
   const firstHit=rc=>rc.intersectObjects(S.children,true).find(h=>h.object.isMesh&&h.object.visible);
   // pick(): fires the tapped prop; returns {point, focus, dist} for the camera (focus=false for lamp switches)
-  function pick(rc){ const h=firstHit(rc), o=h&&actOwner(h.object); if(!o) return null; o.userData.innerAct(); return {point:(o.userData.focusAt||h.point).clone(),focus:!o.userData.noFocus,dist:o.userData.focusDist}; }
+  function pick(rc){
+    const h=firstHit(rc), o=h&&actOwner(h.object); if(!o) return null; o.userData.innerAct();
+    const v=o.userData.view;
+    if(v){ v.frame.updateMatrixWorld(true);   // a set view: look at v.p (in v.frame) from v.dist away along the frame's +z, v.elev up
+      return {point:v.frame.localToWorld(v.p.clone()),focus:true,dist:v.dist,elev:v.elev,dir:new Vector3(0,0,1).transformDirection(v.frame.matrixWorld)}; }
+    return {point:(o.userData.focusAt||h.point).clone(),focus:!o.userData.noFocus,dist:o.userData.focusDist};
+  }
+  // where the camera goes when obj is tapped: point p (local to frame), seen from the frame's front
+  function setView(obj,frame,p,dist,elev){ obj.userData.view={frame,p:new Vector3(...p),dist,elev}; return obj; }
   function hover(rc){ const h=firstHit(rc); return !!(h&&actOwner(h.object)); }
   const lampOn={pend:false,floor:true,table:true};   // the pendant lantern is unlit until the lit candle is put in it
   const toggleLamp=k=>{ lampOn[k]=!lampOn[k]; applyLamps(); };
@@ -1992,6 +1990,7 @@ function buildInnerInterior(z0,z1){
       g.font=`500 ${w*0.6}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle='rgba(12,9,7,.92)'; g.fillText('月',w/2,h/2); },{repeat:false});
       plaque.geometry.dispose(); plaque.geometry=new THREE.BoxGeometry(0.18,0.24,0.006);   // plain 0..1 UVs for the written face
       plaque.material.color.set(0xffffff); plaque.material.needsUpdate=true; });
+    setView(plaque,S,[scX,1.25,z1],1.45,-0.15);
     // ikebana: a low black suiban with a camellia branch
     const suiban=lathe([[0,0],[0.17,0],[0.19,0.01],[0.2,0.05],[0.185,0.05],[0.175,0.015],[0,0.015]],matCeramic,48);
     put(suiban,cx+0.48,0.15,z1+0.36,S);
@@ -2020,11 +2019,12 @@ function buildInnerInterior(z0,z1){
     // plinth with a drawer (tap: it slides out)
     box(w-0.08,0.012,d-0.02,matLacq,0,0.074,0,g); box(w-0.08,0.01,d-0.02,matLacq,0,0.005,0,g); box(w-0.08,0.07,0.01,matLacq,0,0.04,-(d/2-0.015),g);
     const dg=new Group(); g.add(dg);
-    box(w-0.1,0.062,0.02,matLacq,0,0.04,d/2-0.01,dg); box(0.16,0.01,0.012,matBrass2,0,0.045,d/2+0.006,dg);
+    box(w-0.1,0.062,0.02,matLacq,0,0.04,d/2-0.01,dg); box(0.16,0.01,0.012,matBrass2,0,0.025,d/2+0.006,dg);
+    box(0.09,0.03,0.004,matBrass2,0,0.055,d/2+0.002,dg); box(0.05,0.003,0.006,matIron,0,0.058,d/2+0.003,dg);   // brass plate with a thin slit
     box(w-0.14,0.006,d-0.07,matWal,0,0.013,-0.01,dg); box(w-0.14,0.05,0.008,matWal,0,0.04,-(d/2-0.04),dg);
     for(const sx of [-1,1]) box(0.008,0.05,d-0.07,matWal,sx*(w/2-0.075),0.04,-0.01,dg);
     itemProp('keyBow',itemMesh('keyBow'),true,0.25,0.016,0,dg);
-    movable(dg,'position','z',0.26); lockable(dg,'shelfDrawer');
+    movable(dg,'position','z',0.26); lockable(dg,'shelfDrawer'); setView(dg,g,[0.12,0.05,0.22],0.9,0.65);
     const ys=[0.08,0.55,1.05,1.55];
     for(const y of ys.slice(1)) box(w-0.08,0.028,d,matWal,0,y,0,g);
     const vase=lathe(VASE,matCeladon2,48); vase.scale.setScalar(0.9); put(vase,-0.35,ys[3]+0.014,0,g);
@@ -2057,8 +2057,8 @@ function buildInnerInterior(z0,z1){
       box(pw,0.03,0.026,matTrim,0,winH/2-0.015,0,pg); box(pw,0.05,0.026,matTrim,0,-winH/2+0.025,0,pg);
       for(let k=1;k<3;k++) box(0.009,winH-0.06,0.014,matTrim,-pw/2+pw*k/3,0,0,pg);
       for(let k=1;k<7;k++) box(pw-0.04,0.009,0.014,matTrim,0,-winH/2+0.05+(winH-0.08)*k/7,0,pg);
-      if(i===0) movable(pg,'position','x',pw*0.98);   // the two outer panels slide over their neighbours
-      if(i===3) movable(pg,'position','x',-pw*0.98);
+      if(i===0) setView(movable(pg,'position','x',pw*0.98).obj,g,[0,0,0],2.4,0.05);   // the two outer panels slide over their neighbours
+      if(i===3) setView(movable(pg,'position','x',-pw*0.98).obj,g,[0,0,0],2.4,0.05);
     }
     // bench
     const b=group(S,winX,0,z1+0.36);
@@ -2098,6 +2098,7 @@ function buildInnerInterior(z0,z1){
     const handle=new Mesh(new THREE.TorusGeometry(0.07,0.005,8,24,PI),matIron); handle.castShadow=true; put(handle,-0.26,0.53,0.04,g);
     for(const [x,z] of [[-0.08,0.1],[-0.1,-0.03]]) put(lathe([[0,0],[0.022,0],[0.03,0.01],[0.034,0.05],[0.031,0.05],[0.027,0.012],[0,0.012]],matCeladon2,32),x,0.419,z,g);
     for(let i=0;i<2;i++) box(0.24-i*0.02,0.03,0.17-i*0.01,matMatte(['#1f2630','#7a6a52'][i]),0.32,0.422+i*0.03,-0.08,g).rotation.y=0.15-i*0.3;
+    itemProp('shiori',itemMesh('shiori'),true,0.32,0.452,-0.08,g).rotation.y=-0.15;   // tucked into the top book, tassel hanging out
   }
   const chair=(x,ry)=>{
     const g=group(S,x,0,gz,ry);
@@ -2173,14 +2174,16 @@ function buildInnerInterior(z0,z1){
     // doors (tap each): outer two swing open on their outer edges, the middle one drops forward
     const door=(hx,hy,px,py,delta,axis,pull)=>{ const h=group(g,hx,hy,0.23);
       box(0.625,0.46,0.02,matLacq,px,py,0,h); if(pull) box(...pull,h); movable(h,'rotation',axis,delta,2.6); return h; };
-    door(-0.95,0.39,0.3125,0,-1.75,'y',[0.012,0.14,0.012,matBrass2,0.58,0,0.016]);
+    setView(door(-0.95,0.39,0.3125,0,-1.75,'y',[0.012,0.14,0.012,matBrass2,0.58,0,0.016]),g,[-0.6,0.42,0.05],1.15,0.55);   // left: the matches
     door(0.95,0.39,-0.3125,0,1.75,'y',[0.012,0.14,0.012,matBrass2,-0.58,0,0.016]);
-    const mid=door(0,0.16,0,0.23,1.4,'x',null); lockable(mid,'sideboard');   // no pull: a brass ring-hole instead
-    const hole=new Mesh(new THREE.TorusGeometry(0.012,0.003,8,20),matBrass2); hole.position.set(0,0.41,0.012); mid.add(hole);
+    const mid=door(0,0.16,0,0.23,1.4,'x',null); lockable(mid,'sideboard'); setView(mid,g,[0.1,0.2,0.05],1.15,0.5);   // locked: a keyhole, no pull
+    const esc=cyl(0.022,0.022,0.006,matBrass2,24); esc.rotation.x=PI/2; esc.position.set(0,0.4,0.013); mid.add(esc);
+    box(0.006,0.016,0.004,std({color:0x050403,roughness:0.9},0),0,0.396,0.017,mid); const kh=cyl(0.005,0.005,0.004,std({color:0x050403,roughness:0.9},0),12); kh.rotation.x=PI/2; kh.position.set(0,0.406,0.017); mid.add(kh);
     // what's inside
     put(lathe(BOWL,matRaku2,40),-0.64,0.16,0.02,g).scale.setScalar(1.4);
     box(0.22,0.07,0.15,matKeyaki,0,0.195,0,g); box(0.226,0.012,0.156,matLacq,0,0.235,0,g);   // a small lidded wooden box
     itemProp('keyShaft',itemMesh('keyShaft'),true,0.19,0.16,0.08,g);
+    itemProp('matches',itemMesh('matches'),true,-0.55,0.4075,0.05,g).rotation.y=0.3;   // on the left compartment's shelf
     for(let i=0;i<2;i++) box(0.2,0.028,0.15,matMatte(['#3b2e2a','#1f2630'][i]),0.62,0.42+i*0.028,0,g);
     // table lamp: dark ceramic body, linen drum shade (tap to switch)
     const tl=new Group(); g.add(tl); tl.userData.innerAct=()=>toggleLamp('table'); tl.userData.noFocus=true;
@@ -2191,18 +2194,19 @@ function buildInnerInterior(z0,z1){
     for(let i=0;i<3;i++) box(0.26-i*0.02,0.03,0.2-i*0.015,matMatte(['#2a2a2a','#5a4632','#1e2a3a'][i]),0.05,0.69+i*0.03,0.02,g).rotation.y=i*0.12;
     // framed art
     // framed art -- tap: it swings out on its left edge, showing a small safe set into the wall
-    const ah=group(g,-0.67,1.62,-0.165);
+    const AY=1.72;   // painting/safe height: the painting's lower edge must clear the lamp and vase as it swings
+    const ah=group(g,-0.67,AY,-0.165);
     const af=group(ah,0.67,0,0);
     const artA=movable(ah,'rotation','y',-1.25,2.4);
-    box(0.44,0.34,0.006,std({color:C('#5a2a22'),roughness:0.9},0.2),0,1.62,-0.245,g);   // safe: lined back, sides, top, bottom
-    for(const sx of [-1,1]) box(0.012,0.34,0.05,matIron,sx*0.214,1.62,-0.222,g);
-    for(const sy of [-1,1]) box(0.44,0.012,0.05,matIron,0,1.62+sy*0.164,-0.222,g);
-    { const k=itemProp('kumihimo',itemMesh('kumihimo'),true,0.02,1.6,-0.236,g); k.rotation.x=-PI/2; k.scale.setScalar(1.6); }   // hung upright on the back
-    const sd=group(g,-0.22,1.62,-0.197);                                                 // its door, hinged on the left
+    box(0.44,0.34,0.006,std({color:C('#5a2a22'),roughness:0.9},0.2),0,AY,-0.245,g);   // safe: lined back, sides, top, bottom
+    for(const sx of [-1,1]) box(0.012,0.34,0.05,matIron,sx*0.214,AY,-0.222,g);
+    for(const sy of [-1,1]) box(0.44,0.012,0.05,matIron,0,AY+sy*0.164,-0.222,g);
+    { const k=itemProp('smallKey',itemMesh('smallKey'),true,0.02,AY-0.02,-0.236,g); k.rotation.x=-PI/2; k.scale.setScalar(1.8); }   // hung upright on the back
+    const sd=group(g,-0.22,AY,-0.197);                                                 // its door, hinged on the left
     box(0.44,0.34,0.012,matIron,0.22,0,0.006,sd);
     const dial=cyl(0.045,0.045,0.02,matBrass2,32); dial.rotation.x=PI/2; put(dial,0.28,0.02,0.02,sd);
     box(0.014,0.09,0.02,matBrass2,0.09,0,0.02,sd);
-    const safeA=movable(sd,'rotation','y',-1.6,2.4); lockable(sd,'safe');
+    const safeA=movable(sd,'rotation','y',-1.6,2.4); lockable(sd,'safe'); setView(sd,g,[0,AY-0.05,-0.2],1.75,0.05);
     ah.userData.innerAct=()=>{ artA.goal=artA.goal?0:1; if(!artA.goal) safeA.goal=0; };   // closing the painting shuts the safe too
     const art=new Mesh(new PlaneGeometry(1.2,0.8),matArt); art.position.z=0.012; art.receiveShadow=true; af.add(art);
     box(1.3,0.9,0.012,matMatte('#d9d2c2'),0,0,0.004,af);
@@ -2276,7 +2280,7 @@ const ITEMS={
     g.save(); g.translate(66,30); g.rotate(-0.6); g.fillStyle='#d9c8a0'; g.fillRect(0,-2,28,4); g.fillStyle='#7a1e18'; g.beginPath(); g.arc(0,0,4,0,7); g.fill(); g.restore(); }},
   candle:{name:'和蝋燭',desc:'朱塗りの和蝋燭。芯はまだ新しい。',icon(g){ candleIcon(g,false); }},
   litCandle:{name:'灯した和蝋燭',desc:'静かに揺れる炎。何かに灯を入れられそうだ。',icon(g){ candleIcon(g,true); }},
-  letter:{name:'文',desc:'「灯を吊るせば墨を得る。墨は筆に、筆は札に月を記す。金の月の裏に紐、紐は戸を引き、栞は隙を抜く。二つを合わせて、下へ。」',icon(g){
+  letter:{name:'文',desc:'「灯を吊るせば墨を得る。墨は筆に、筆は札に月を記す。金の月の裏に鍵、鍵は戸を開け、本の栞は隙を抜く。二つを合わせて、下へ。」',icon(g){
     g.save(); g.translate(50,52); g.rotate(-0.12); g.fillStyle='#efe6d0'; g.fillRect(-26,-34,52,68); g.fillStyle='#ded2b6'; g.fillRect(-26,-34,52,8);
     g.fillStyle='#1d1a17'; for(const x of [14,2,-10]) g.fillRect(x,-20,3,40-(x+10)); g.fillStyle='#b8322a'; g.fillRect(-20,22,7,7); g.restore(); }},
   sumi:{name:'墨',desc:'艶のある古墨。金で小さく「月」の字。',icon(g){
@@ -2284,11 +2288,12 @@ const ITEMS={
     g.fillStyle='#c9a24a'; g.fillRect(-5,-18,10,16); g.restore(); }},
   fude:{name:'筆',desc:'竹軸の筆。穂先は乾いている。',icon(g){ brushIcon(g,false); }},
   fudeSumi:{name:'墨を含ませた筆',desc:'たっぷり墨を含んだ筆。何かに字が書けそうだ。',icon(g){ brushIcon(g,true); }},
-  kumihimo:{name:'組紐',desc:'朱と金で組まれた丈夫な紐。房が付いている。',icon(g){
-    g.strokeStyle='#b8322a'; g.lineWidth=7; for(const r of [22,13]){ g.beginPath(); g.arc(46,44,r,0.3,PI*2-0.3); g.stroke(); }
-    g.strokeStyle='#c9a24a'; g.lineWidth=2; g.setLineDash([3,4]); g.beginPath(); g.arc(46,44,22,0.3,PI*2-0.3); g.stroke(); g.setLineDash([]);
-    g.fillStyle='#c9a24a'; g.fillRect(64,52,7,8); g.beginPath(); g.moveTo(63,60); g.lineTo(72,60); g.lineTo(76,86); g.lineTo(59,86); g.fill(); }},
-  shiori:{name:'栞',desc:'臙脂色の薄い栞。金の房が付いている。細い隙間にも差し込めそうだ。',icon(g){
+  smallKey:{name:'小さな鍵',desc:'朱の紐が結ばれた、小ぶりな黒鉄の鍵。家具の鍵穴に合いそうだ。',icon(g){
+    g.strokeStyle=g.fillStyle='#2b2724'; g.lineWidth=6; g.beginPath(); g.arc(34,40,11,0,7); g.stroke();
+    g.fillRect(44,37,34,6); g.fillRect(68,43,5,10); g.fillRect(76,43,4,7);
+    g.strokeStyle='#b8322a'; g.lineWidth=3; g.beginPath(); g.moveTo(26,48); g.quadraticCurveTo(20,64,30,76); g.stroke();
+    g.fillStyle='#b8322a'; g.beginPath(); g.moveTo(26,74); g.lineTo(34,74); g.lineTo(37,90); g.lineTo(23,90); g.fill(); }},
+  shiori:{name:'栞',desc:'本に挟まっていた、臙脂色の薄い栞。細い隙間にも差し込めそうだ。',icon(g){
     g.translate(50,50); g.rotate(-0.5); g.fillStyle='#7a2f3a'; g.fillRect(-9,-36,18,64); g.fillStyle='#c9a24a'; g.fillRect(-9,-36,18,5);
     g.beginPath(); g.moveTo(0,28); g.lineTo(-6,44); g.lineTo(6,44); g.fill(); }},
   keyBow:{name:'鍵の持ち手',desc:'真鍮の輪。先が折れている。何かと繋がりそうだ。',icon(g){ keyIcon(g,true,false,false); }},
@@ -2300,14 +2305,14 @@ const RECIPES=[['matches','candle','litCandle'],['sumi','fude','fudeSumi'],['key
 // Places that react to an item. Select the item, then tap the place (held:true -- just carrying it is enough).
 //   consume: the item is used up   give: an item received   unlock: another USES entry this opens
 //   hint: shown while locked   msg: shown when it works   done: shown on later taps (if nothing else happens)
-// The chain: 燐寸+和蝋燭 -> 灯した和蝋燭 -> 吊り行灯 -> 墨; 墨+筆 -> 木札に「月」 -> 金庫 -> 組紐 -> サイドボード -> 鍵の軸;
-//            栞 -> 飾り棚の引き出し -> 鍵の持ち手; 持ち手+軸 -> 地下の鍵 -> 地下の扉 -> NEXT_PAGE
+// The chain: 燐寸+和蝋燭 -> 灯した和蝋燭 -> 吊り行灯 -> 墨; 墨+筆 -> 木札に「月」 -> 金庫 -> 小さな鍵 -> サイドボード -> 鍵の軸;
+//            栞（座卓の本） -> 飾り棚の引き出し -> 鍵の持ち手; 持ち手+軸 -> 地下の鍵 -> 地下の扉 -> NEXT_PAGE
 const USES={
   lantern:    {item:'litCandle',consume:true,give:'sumi',hint:'吊り行灯には灯が入っていない。',msg:'行灯に蝋燭を入れると、部屋が明るくなった。座卓の上に墨が見える……'},
   plaque:     {item:'fudeSumi',consume:true,unlock:'safe',hint:'掛け軸の裏の木札。何も書かれていない。',msg:'木札に「月」と書いた。どこかで、かちりと音がした。',done:'木札に「月」と書かれている。'},
   safe:       {hint:'金の絵の裏の小さな金庫。固く閉じている。'},
-  sideboard:  {item:'kumihimo',consume:true,hint:'取っ手のない扉だ。金具に小さな穴が開いている。',msg:'穴に組紐を通して引くと、扉が開いた。'},
-  shelfDrawer:{item:'shiori',consume:true,hint:'引き出しが開かない。上に細い隙間がある。',msg:'栞を隙間に差し込むと、からくりが外れた。'},
+  sideboard:  {item:'smallKey',consume:true,hint:'取っ手のない扉に、小さな鍵穴がある。',msg:'小さな鍵を差し込んで回すと、扉が開いた。'},
+  shelfDrawer:{item:'shiori',consume:true,hint:'飾り棚の引き出しが開かない。金具に薄い隙間がある。何か薄いものを差し込めそうだ。',msg:'栞を隙間に差し込むと、からくりが外れた。'},
   cellarDoor: {item:'cellarKey',held:true,hint:'重い扉には鍵がかかっている。',msg:'鍵が回り、扉が開いた……'},
 };
 const NEXT_PAGE='wa-no-chikashitsu.html';   // the space beyond the cellar door (a separate file)
@@ -2337,8 +2342,12 @@ function itemMesh(id){
   if(id==='candle'){ put(cyl(0.015,0.011,0.09,std({color:C('#b8322a'),roughness:0.5},0.3),16),0,0.045,0,g); put(cyl(0.0015,0.0015,0.012,mat('#222'),6),0,0.096,0,g); }
   if(id==='fude'){ const s=cyl(0.005,0.005,0.17,mat('#c8a46a'),10); s.rotation.z=PI/2; put(s,0,0.005,0,g);
     const t=new Mesh(new THREE.ConeGeometry(0.006,0.03,10),mat('#e9dfc8')); t.rotation.z=PI/2; t.position.set(-0.1,0.005,0); g.add(t); }
-  if(id==='kumihimo'){ for(const r of [0.022,0.014]){ const t=new Mesh(new THREE.TorusGeometry(r,0.003,6,28),mat('#b8322a')); t.rotation.x=PI/2; t.position.y=0.003; g.add(t); }
-    box(0.008,0.004,0.03,gold,0.03,0.003,0.01,g); }
+  if(id==='smallKey'){ const iron=std({color:C('#2b2724'),metalness:0.7,roughness:0.45},0.6);
+    const r=new Mesh(new THREE.TorusGeometry(0.011,0.003,8,18),iron); r.rotation.x=PI/2; r.position.y=0.003; g.add(r);
+    box(0.034,0.005,0.005,iron,0.027,0.003,0,g); box(0.004,0.005,0.008,iron,0.04,0.003,0.006,g);
+    box(0.003,0.003,0.03,mat('#b8322a'),-0.006,0.003,0.022,g); }
+  if(id==='shiori'){ box(0.026,0.003,0.2,mat('#b8322a'),0,0.0015,0.06,g); box(0.004,0.004,0.04,gold,0,0.002,0.18,g);   // sticks well out of the book
+    const t=new Mesh(new THREE.ConeGeometry(0.01,0.03,8),gold); t.rotation.x=PI/2; t.position.set(0,0.002,0.215); g.add(t); }
   if(id==='keyBow'){ const r=new Mesh(new THREE.TorusGeometry(0.014,0.0035,8,20),gold); r.rotation.x=PI/2; r.position.y=0.004; r.castShadow=true; g.add(r); box(0.012,0.006,0.008,gold,0.018,0.004,0,g); }
   if(id==='keyShaft'){ box(0.055,0.006,0.007,gold,0,0.003,0,g); box(0.006,0.006,0.012,gold,0.016,0.003,0.008,g); box(0.005,0.006,0.009,gold,0.024,0.003,0.006,g); }
   if(id==='letter'){ box(0.09,0.006,0.13,mat('#efe6d0'),0,0.003,0,g); box(0.09,0.002,0.02,mat('#ded2b6'),0,0.007,-0.05,g); }
@@ -2372,9 +2381,15 @@ function leaveTo(url){
 function itemProp(id,obj,inner,x,y,z,parent){
   if(parent) put(obj,x,y,z,parent);
   obj.userData.item=id;
+  // a larger invisible hit box around it (2.5cm margin), so it's easy to tap
+  const bb=new THREE.Box3(); obj.updateMatrixWorld(true);
+  obj.traverse(o=>{ if(o.isMesh){ o.geometry.computeBoundingBox(); bb.union(o.geometry.boundingBox.clone().applyMatrix4(new THREE.Matrix4().copy(obj.matrixWorld).invert().multiply(o.matrixWorld))); } });
+  const sz=bb.getSize(new Vector3()).addScalar(0.05), hit=new Mesh(new THREE.BoxGeometry(sz.x,sz.y,sz.z),HIT_MAT);
+  bb.getCenter(hit.position); obj.add(hit);
   if(inner){ obj.userData.innerAct=()=>pickUp(obj); obj.userData.noFocus=true; } else pickables.push(obj);
   return obj;
 }
+const HIT_MAT=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false,colorWrite:false});
 const inv=[];               // ids held, in pick-up order
 let selItem=null, lbItem=null;
 function pickUp(obj){
@@ -2415,7 +2430,6 @@ window.addEventListener('keydown',e=>{ if(e.key==='Escape') closeLb(); });
 let toastT=0;
 function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('on'),1600+t.length*90); }
 // main-room pick-up: a box of matches in the bottom drawer
-itemProp('matches',itemMesh('matches'),false,0.18,-0.083,-0.21,drawerMvs[0].obj);
 itemProp('letter',itemMesh('letter'),false,-0.15,-0.083,-0.2,drawerMvs[1].obj).rotation.y=0.3;
 
 /* ---------- walking into the hidden room, and looking all the way round inside it ---------- */
@@ -2448,12 +2462,16 @@ function lookRide(E,P,dur,done){
   startRoomRide([from,E],[{u:0,th:cur.theta,ph:cur.phi},{u:1,th,ph}],dur,done||(()=>{}));
 }
 // after tapping something that moves: step over to it -- about a metre away, a little above it, looking at it
-function focusInnerPoint(P,dist){
+// dir/elev given (a set view): from that side, elev radians above level; otherwise from where we stand
+function focusInnerPoint(P,dist,dir,elev){
   if(roomRide) return;
-  const dh=new Vector3(camera.position.x-P.x,0,camera.position.z-P.z);
-  if(dh.lengthSq()<1e-6) dh.set(0,0,1); dh.normalize();
-  const E=P.clone().addScaledVector(dh,dist||1.15);
-  E.y=clamp(P.y+(dist?0.15:0.45),1.0,1.6); E.x=clamp(E.x,-3.7,3.7); E.z=clamp(E.z,INNER_Z1+0.9,INNER_Z0-0.5);
+  let E;
+  if(dir){ const d=new Vector3(dir.x,0,dir.z).normalize();
+    E=P.clone().addScaledVector(d,dist*Math.cos(elev)); E.y+=dist*Math.sin(elev); E.y=clamp(E.y,0.4,2.5); }
+  else{ const dh=new Vector3(camera.position.x-P.x,0,camera.position.z-P.z);
+    if(dh.lengthSq()<1e-6) dh.set(0,0,1); dh.normalize();
+    E=P.clone().addScaledVector(dh,dist||1.15); E.y=clamp(P.y+(dist?0.15:0.45),1.0,1.6); }
+  E.x=clamp(E.x,-3.9,3.9); E.z=clamp(E.z,INNER_Z1+0.35,INNER_Z0-0.35);
   lookRide(E,P,1.6);
 }
 // two-finger drag inside the room: sideways drag steps sideways, up/down drag walks forward/back
@@ -2470,7 +2488,7 @@ function enterInnerRoom(){
   const th0=cur.theta, th1=Math.round(th0/(PI*2))*PI*2;   // face straight into the room, turning the short way
   startRoomRide([camera.position.clone(),DOOR_FRONT.clone(),ROOM_EYE.clone()],
     [{u:0,th:th0,ph:cur.phi},{u:0.45,th:th1,ph:PI/2},{u:1,th:th1,ph:1.6}],3.4,
-    ()=>{ roomView=true; $('bExit').hidden=false; $('items').hidden=false; renderItems(); });
+    ()=>{ roomView=true; innerVisited=true; $('bExit').hidden=false; $('items').hidden=false; renderItems(); });
 }
 function exitInnerRoom(){
   if(!roomView||roomRide) return;
