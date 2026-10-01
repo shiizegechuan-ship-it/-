@@ -1,0 +1,1665 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>和の書棚 ― 書院造の書斎 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@500;700&display=swap">
+<style>
+:root{
+  --bg:#120e0b; --panel:rgba(22,15,10,.66); --panel-hover:rgba(64,42,22,.82);
+  --line:rgba(214,176,98,.55); --ink:#f1e6cf; --muted:#cdbd93; --seal:#a8281f;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#0d0a08; --panel:rgba(18,12,8,.7); }
+}
+:root[data-theme="dark"]{ --bg:#0d0a08; --panel:rgba(18,12,8,.7); }
+html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;color:var(--ink);
+  font-family:"Noto Serif JP","Hiragino Mincho ProN","Yu Mincho","MS PMincho",serif;}
+#app{position:fixed;inset:0;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none}
+#app:active{cursor:grabbing}
+canvas{display:block}
+.hud{position:fixed;inset:0;pointer-events:none}
+.title{position:absolute;left:20px;top:18px;display:flex;gap:12px;align-items:center;text-shadow:0 1px 6px rgba(0,0,0,.7)}
+.seal{width:38px;height:38px;background:var(--seal);color:#f6e9d0;display:grid;place-items:center;
+  font-weight:700;font-size:21px;border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 0 1.5px rgba(246,233,208,.35)}
+.title b{display:block;font-size:19px;letter-spacing:.3em;font-weight:700}
+.title small{display:block;margin-top:3px;font-size:11px;letter-spacing:.16em;color:var(--muted)}
+.hint{position:absolute;left:20px;top:70px;max-width:min(80vw,440px);font-size:12px;line-height:1.9;letter-spacing:.1em;
+  color:var(--muted);text-shadow:0 1px 4px #000;transition:opacity 1.6s}
+.bar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));
+  display:flex;gap:8px;flex-wrap:wrap;justify-content:center;pointer-events:auto;padding:0 12px;width:max-content;max-width:100%;box-sizing:border-box}
+.bar button{font:inherit;font-size:13px;letter-spacing:.14em;color:var(--ink);background:var(--panel);
+  border:1px solid var(--line);padding:9px 16px;border-radius:2px;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.bar button:hover{background:var(--panel-hover)}
+.bar button:focus-visible{outline:2px solid #e8c878;outline-offset:2px}
+.bar button.on{background:rgba(168,40,31,.78);border-color:#e0b96a}
+#loading{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);color:var(--muted);
+  letter-spacing:.45em;font-size:14px;transition:opacity .9s;z-index:5}
+@media (prefers-reduced-motion: reduce){ #loading,.hint{transition:none} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="hud">
+  <div class="title"><div class="seal">書</div><div><b>和の書棚</b><small>書院造 ― 違い棚と障子の書斎</small></div></div>
+  <div class="hint" id="hint">ドラッグで見回す ／ ホイール・ピンチで寄る<br>障子・戸・引き出しをクリックで開閉 ／ 障子を開くと、中の和綴じの本をクリックで取り出せます<br>ダブルクリックでその場所へ</div>
+  <div class="bar">
+    <button id="bDay" type="button" class="on">昼にする</button>
+    <button id="bReset" type="button">位置をリセット</button>
+  </div>
+</div>
+<div id="loading">読み込み中</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(async function(){
+'use strict';
+/* =====================================================================================
+   ARCHITECTURE MAP — read this first before editing.
+   One IIFE, top-to-bottom in this order:
+     1. utils            small helpers: seeded rnd(), pick/clamp/lerp, C() (sRGB color)
+     2. renderer / env   THREE.WebGLRenderer, camera, scene, buildEnv() reflection probe
+     3. textures         canvasTex() draws a <canvas> and wraps it as a THREE texture;
+                          each drawX(ctx,w,h,...) function procedurally paints one surface
+                          (wood/paper/plaster/tatami/fusuma/makie/spines/scroll)
+     4. materials        std() = MeshStandardMaterial/PhysicalMaterial + shared envMap;
+                          matDark/matMid/matLight = wood, matLacquer/matGold = trim,
+                          matPaper/matWashi = shoji & panel paper
+     5. geometry helpers  box()/lathe()/mapBoxUV() build+UV-map meshes onto `shelf`
+     6. room              walls, tatami floor, shoji window, hanging scroll
+     7. shelf structure   the cabinet frame, shelves, doors, drawers (see "movables" below)
+     8. books             fillShelf() fills a shelf run with generated paperback/hardback
+                          spines; STYLE_DEFS/STYLES define the look of ordinary books
+     9. 和綴之書 (wabon)   the 27 user-supplied stitched-bound books (3 sizes x 9 covers).
+                          WA_* constants hold their config; placeWabonRow() lays them out
+                          on the centre shelf; buildRig()/openShowcase()/updateShowcase()
+                          drive the "float out, turn, open" animation (see below)
+    10. andon lamp        the standing paper lamp on the right
+    11. lights            sun/hemi/fill + applyMode() cross-fades day <-> night
+    12. camera rig        orbit state (cur/goal), pointer + wheel handlers, dbl-click zoom
+    13. buttons           day/night, shoji, drawers, auto-rotate, reset — wire up the HUD
+    14. render loop        tick(): advances movables, camera, mode, showcase, then renders
+
+   Two animation systems, don't confuse them:
+     - "movables": doors/drawers/shoji. makeMovable(obj,axis,delta,tag) registers a mesh;
+       tick() lerps mv.t toward mv.goal (0..1) each frame. findMv() walks up from a
+       raycast hit to find the owning entry. Tag is used only to group buttons/taps
+       ('shoji' toggles both leaves together; 'lower'/'tenbukuro' are per-pair).
+     - "showcase" (SC): exactly one wabon book at a time. openShowcase(wa) builds a
+       throwaway high-detail rig (buildRig) parented under scRoot, animates it through
+       u = 0..2 (0-1 float+turn, 1-2 page-open) in updateShowcase(), and at u=0 on the
+       way back it restores the shelf copy's visibility and frees the rig's geometry.
+
+   Adding a new wabon cover colour: append to WA_COLORS (hex + title ink colour) —
+   placeWabonRow()/buildRig() pick it up automatically, no other change needed.
+   Adding a new plain book title: append [title, author] to TITLES near the top.
+
+   Hidden puzzle (search "hidden puzzle" near the buttons section): an invisible catcher plane over
+   the tatami in front of the shelf counts 5 taps (`trap`/tapTrap()), then openTrap() hides the real
+   tile on that spot of the tatami grid (`tatamiInst`) and builds the flap/pit/stairs/door for the
+   first time — nothing is built or touched before that, so there's nothing to see or flicker.
+   After that first build, tapping the flap itself toggles it open/closed in one tap (toggleFlap()),
+   and tapping down into the open hole (`stairsCatcherRef`) plays a scripted camera move down the
+   stairs (descendStairs()). The stairs end at a locked door (`stairDoor`); tapping it shakes if
+   `hasKey` is false, or swings it open once true. `hasKey` becomes true via collectShiori(), when
+   the shiori tucked behind the cabinet's centre panel (`shiori`, revealed by sliding that panel —
+   it's `makeMovable`'d like the doors/drawers, tag 'secret-panel') is tapped. There is no literal
+   room modelled behind the cabinet or beyond the locked door yet — both simply fade to black.
+
+   Camera (search "camera rig"): goal.target can be panned with two fingers and zoomed with a pinch
+   or the wheel toward the real point under the cursor/pinch midpoint (zoomToward()/panBy()), but any
+   user-driven pan is clamped to TARGET_MIN/TARGET_MAX (clampTarget()) so it can't wander into
+   unbuilt parts of the room. Scripted camera moves (dblclick, the home reset, descendStairs()) set
+   goal.target directly and intentionally skip that clamp.
+   ===================================================================================== */
+const loadingEl=document.getElementById('loading');
+if(!window.THREE){ loadingEl.textContent='three.js を読み込めませんでした'; return; }
+
+const FONT='"Noto Serif JP","Hiragino Mincho ProN","Yu Mincho","MS PMincho",serif';
+const TITLES=[
+ ['源氏物語','紫式部'],['枕草子','清少納言'],['徒然草','兼好'],['方丈記','長明'],['万葉集',''],['古今和歌集',''],
+ ['平家物語',''],['奥の細道','芭蕉'],['雨月物語','秋成'],['竹取物語',''],['伊勢物語',''],['土佐日記','貫之'],
+ ['更級日記',''],['今昔物語集',''],['古事記',''],['日本書紀',''],['風姿花伝','世阿弥'],['五輪書','武蔵'],
+ ['葉隠',''],['茶の本','天心'],['陰翳礼讃','谷崎'],['吾輩は猫である','漱石'],['坊っちゃん','漱石'],['こころ','漱石'],
+ ['草枕','漱石'],['三四郎','漱石'],['夢十夜','漱石'],['舞姫','鷗外'],['五重塔','露伴'],['雪国','川端'],
+ ['伊豆の踊子','川端'],['羅生門','芥川'],['蜘蛛の糸','芥川'],['走れメロス','太宰'],['斜陽','太宰'],['銀河鉄道の夜','賢治'],
+ ['風の又三郎','賢治'],['山月記','中島'],['檸檬','梶井'],['細雪','谷崎'],['浮雲','四迷'],['たけくらべ','一葉'],
+ ['遠野物語','柳田'],['学問のすゝめ','諭吉'],['蕪村句集',''],['一茶句集',''],['花伝書',''],['歎異抄',''],
+ ['禅と日本文化','鈴木'],['武士道','新渡戸'],['日本の面影','八雲'],['山家集','西行']
+];
+try{
+  const chars=TITLES.map(t=>t[0]+t[1]).join('')+'書雅和松梅綴之鴛照眛琉';
+  await Promise.race([
+    Promise.all([document.fonts.load('700 40px "Noto Serif JP"',chars),document.fonts.load('500 40px "Noto Serif JP"',chars)]),
+    new Promise(r=>setTimeout(r,4000))
+  ]);
+}catch(e){}
+
+/* ---------- utils ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const rnd=mulberry32(20260919);
+const R=(a,b)=>a+(b-a)*rnd();
+const pick=arr=>arr[Math.floor(rnd()*arr.length)];
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const C=hex=>new THREE.Color(hex).convertSRGBToLinear();
+
+/* ---------- renderer ---------- */
+const host=document.getElementById('app');
+let renderer;
+try{
+  renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+}catch(e){ loadingEl.textContent='WebGL を利用できません'; return; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.0;
+host.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x0d0a08);
+const camera=new THREE.PerspectiveCamera(38,1,0.05,60);
+const maxAniso=renderer.capabilities.getMaxAnisotropy();
+
+/* ---------- environment (reflections) ---------- */
+function buildEnv(){
+  const es=new THREE.Scene();
+  const sg=new THREE.SphereGeometry(20,32,16);
+  const p=sg.attributes.position, cols=new Float32Array(p.count*3);
+  const top=[0.20,0.16,0.12], hor=[0.50,0.38,0.27], bot=[0.22,0.22,0.10];
+  for(let i=0;i<p.count;i++){
+    const y=p.getY(i)/20, a=y>=0?top:bot, k=Math.pow(Math.abs(y),0.7);
+    cols[i*3]=hor[0]+(a[0]-hor[0])*k; cols[i*3+1]=hor[1]+(a[1]-hor[1])*k; cols[i*3+2]=hor[2]+(a[2]-hor[2])*k;
+  }
+  sg.setAttribute('color',new THREE.BufferAttribute(cols,3));
+  es.add(new THREE.Mesh(sg,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.BackSide})));
+  const win=(w,h,pos,c)=>{
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({color:new THREE.Color(c[0],c[1],c[2]),side:THREE.DoubleSide}));
+    m.position.set(pos[0],pos[1],pos[2]); m.lookAt(0,1,0); es.add(m);
+  };
+  win(10,6,[-14,6,8],[6,5.4,4.4]);
+  win(14,4,[10,10,14],[2.4,2.3,2.2]);
+  win(20,10,[0,14,0],[0.9,0.85,0.75]);
+  const pm=new THREE.PMREMGenerator(renderer);
+  const rt=pm.fromScene(es,0.03);
+  pm.dispose();
+  return rt.texture;
+}
+const envTex=buildEnv();
+
+/* ---------- textures ---------- */
+function canvasTex(w,h,draw,o){
+  o=o||{};
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const g=c.getContext('2d'); draw(g,w,h);
+  const t=new THREE.CanvasTexture(c);
+  t.encoding=THREE.sRGBEncoding;
+  if(o.repeat!==false){ t.wrapS=t.wrapT=THREE.RepeatWrapping; }
+  t.anisotropy=maxAniso;
+  return t;
+}
+function wrapped(w,h,fn){ for(const dx of [-w,0,w]) for(const dy of [-h,0,h]) fn(dx,dy); }
+
+function drawWood(g,w,h,o){
+  g.fillStyle=o.base; g.fillRect(0,0,w,h);
+  for(let i=0;i<70;i++){
+    const y=rnd()*h, th=R(6,60), a=R(0.04,0.14), col=rnd()<0.55?o.dark:o.light;
+    for(const off of [-h,0,h]){
+      const grd=g.createLinearGradient(0,y+off-th,0,y+off+th);
+      grd.addColorStop(0,`rgba(${col},0)`); grd.addColorStop(0.5,`rgba(${col},${a})`); grd.addColorStop(1,`rgba(${col},0)`);
+      g.fillStyle=grd; g.fillRect(0,y+off-th,w,th*2);
+    }
+  }
+  g.lineCap='round';
+  const n=o.lines*5;
+  for(let i=0;i<n;i++){
+    const y0=rnd()*h, col=rnd()<0.62?o.dark:o.light;
+    g.strokeStyle=`rgba(${col},${R(0.05,0.28)})`;
+    g.lineWidth=R(0.4,1.8);
+    const amp=R(0.4,5)*o.wave, k=1+Math.floor(rnd()*4), ph=rnd()*6.283;
+    for(const off of [-h,0,h]){
+      g.beginPath();
+      for(let x=0;x<=w;x+=16){
+        const y=y0+off+Math.sin(x/w*6.283*k+ph)*amp;
+        if(x===0)g.moveTo(x,y); else g.lineTo(x,y);
+      }
+      g.stroke();
+    }
+  }
+  for(let i=0;i<2200;i++){
+    g.fillStyle=`rgba(${o.dark},${R(0.05,0.2)})`;
+    g.fillRect(rnd()*w,rnd()*h,R(2,9),R(0.5,1.2));
+  }
+}
+function drawPaper(g,w,h,o){
+  g.fillStyle=o.base; g.fillRect(0,0,w,h);
+  for(let i=0;i<40;i++){
+    const x=rnd()*w,y=rnd()*h,r=R(30,110);
+    wrapped(w,h,(dx,dy)=>{
+      const gr=g.createRadialGradient(x+dx,y+dy,0,x+dx,y+dy,r);
+      gr.addColorStop(0,`rgba(${rnd()<.5?'120,90,50':'255,255,255'},.05)`); gr.addColorStop(1,'rgba(0,0,0,0)');
+      g.fillStyle=gr; g.fillRect(x+dx-r,y+dy-r,r*2,r*2);
+    });
+  }
+  for(let i=0;i<o.fibers;i++){
+    const x=rnd()*w,y=rnd()*h,l=R(6,30),a=rnd()*6.283;
+    g.strokeStyle=rnd()<.5?`rgba(255,255,255,${R(.1,.35)})`:`rgba(120,90,50,${R(.03,.12)})`;
+    g.lineWidth=R(.4,1.2);
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l); g.stroke();
+  }
+  if(o.gold){
+    for(let i=0;i<o.gold;i++){
+      const x=rnd()*w,y=rnd()*h,s=R(1.5,6);
+      g.save(); g.translate(x,y); g.rotate(rnd()*3.14);
+      g.fillStyle=`rgba(${215+rnd()*25|0},${170+rnd()*25|0},${80+rnd()*30|0},${R(.35,.85)})`;
+      g.fillRect(0,0,s,s*R(.4,1)); g.restore();
+    }
+  }
+}
+function drawPlaster(g,w,h,base){
+  g.fillStyle=base; g.fillRect(0,0,w,h);
+  for(let i=0;i<220;i++){
+    const x=rnd()*w,y=rnd()*h,r=R(30,150),dark=rnd()<.5;
+    wrapped(w,h,(dx,dy)=>{
+      const gr=g.createRadialGradient(x+dx,y+dy,0,x+dx,y+dy,r);
+      gr.addColorStop(0,dark?`rgba(40,28,15,${R(.05,.13)})`:`rgba(255,240,215,${R(.04,.10)})`); gr.addColorStop(1,'rgba(0,0,0,0)');
+      g.fillStyle=gr; g.fillRect(x+dx-r,y+dy-r,r*2,r*2);
+    });
+  }
+  for(let i=0;i<9000;i++){
+    g.fillStyle=rnd()<.5?`rgba(30,20,10,${R(.05,.25)})`:`rgba(255,245,225,${R(.05,.22)})`;
+    g.fillRect(rnd()*w,rnd()*h,R(1,2.6),R(1,2.6));
+  }
+}
+function drawTatami(g,w,h){
+  g.fillStyle='#a8a66a'; g.fillRect(0,0,w,h);
+  for(let y=0;y<h;y+=2){
+    g.fillStyle=`rgba(${rnd()<.5?'255,250,190':'70,70,30'},${R(.04,.16)})`; g.fillRect(0,y,w,1);
+  }
+  for(let i=0;i<600;i++){
+    g.fillStyle=`rgba(${rnd()<.5?'255,250,190':'70,70,30'},${R(.05,.18)})`; g.fillRect(rnd()*w,rnd()*h,R(20,120),R(1,2));
+  }
+  for(let x=0;x<w;x+=10){ g.fillStyle='rgba(60,60,20,.05)'; g.fillRect(x,0,1,h); }
+  const b=Math.round(h*0.045);
+  for(const y0 of [0,h-b]){
+    g.fillStyle='#1b1d27'; g.fillRect(0,y0,w,b);
+    g.fillStyle='rgba(200,180,120,.18)'; g.fillRect(0,y0===0?b-3:y0,w,3);
+    for(let x=0;x<w;x+=14){ g.fillStyle='rgba(255,255,255,.05)'; g.fillRect(x,y0+b*0.3,7,b*0.4); }
+  }
+  g.strokeStyle='rgba(40,40,10,.45)'; g.lineWidth=3; g.strokeRect(0,0,w,h);
+}
+function drawFusuma(g,w,h){
+  const gr=g.createLinearGradient(0,0,0,h); gr.addColorStop(0,'#1b2c48'); gr.addColorStop(1,'#0e1626');
+  g.fillStyle=gr; g.fillRect(0,0,w,h);
+  const s=32;
+  for(let y=0;y<h;y+=s)for(let x=0;x<w;x+=s){ if(rnd()<0.10){ g.fillStyle=`rgba(214,172,84,${R(.05,.14)})`; g.fillRect(x+1,y+1,s-2,s-2);} }
+  for(let band=0;band<5;band++){
+    const cy=h*(0.14+band*0.19);
+    const grd=g.createLinearGradient(0,cy-20,0,cy+20);
+    grd.addColorStop(0,'rgba(240,206,120,0.95)'); grd.addColorStop(1,'rgba(176,132,52,0.85)');
+    g.fillStyle=grd;
+    for(let k=0;k<9;k++){
+      g.beginPath(); g.ellipse((k+R(-.2,.2))*w/8,cy+R(-5,5),R(46,95),R(9,16),0,0,6.283); g.fill();
+    }
+    for(let k=0;k<160;k++){ g.fillStyle=`rgba(240,210,130,${R(.2,.7)})`; g.fillRect(rnd()*w,cy+R(-6,32),R(1,2.6),R(1,2.6)); }
+  }
+}
+function drawMakie(g,w,h){
+  g.fillStyle='#120d0a'; g.fillRect(0,0,w,h);
+  for(let i=0;i<7000;i++){
+    const x=rnd()*w,y=rnd()*h,dens=Math.pow(y/h,1.6);
+    if(rnd()>0.15+dens*0.85) continue;
+    g.fillStyle=`rgba(${210+rnd()*30|0},${165+rnd()*30|0},${70+rnd()*30|0},${R(.15,.8)})`;
+    const s=R(.6,2.4); g.fillRect(x,y,s,s);
+  }
+  for(let b=0;b<4;b++){
+    const y=h*(.5+b*.14), gr=g.createLinearGradient(0,y-30,0,y+30);
+    gr.addColorStop(0,'rgba(200,150,60,0)'); gr.addColorStop(.5,'rgba(200,150,60,.10)'); gr.addColorStop(1,'rgba(200,150,60,0)');
+    g.fillStyle=gr; g.fillRect(0,y-30,w,60);
+  }
+}
+function vtext(g,s,cx,y0,maxH,maxW,color,weight){
+  const chars=[...s]; if(!chars.length) return;
+  const size=Math.min(maxW,maxH/chars.length);
+  g.font=`${weight} ${size}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle=color;
+  let y=y0+(maxH-size*chars.length)/2+size/2;
+  for(const c of chars){ g.fillText(c,cx,y); y+=size; }
+}
+function goldGrad(g,w,silver){
+  const gr=g.createLinearGradient(0,0,w,0);
+  if(silver){ gr.addColorStop(0,'#9aa1a8'); gr.addColorStop(.5,'#f2f4f6'); gr.addColorStop(1,'#8b929a'); }
+  else { gr.addColorStop(0,'#a9812f'); gr.addColorStop(.5,'#f3d580'); gr.addColorStop(1,'#a07728'); }
+  return gr;
+}
+function drawSpine(g,w,h,st,title,author){
+  g.fillStyle=st.base; g.fillRect(0,0,w,h);
+  for(let i=0;i<900;i++){
+    g.fillStyle=rnd()<.5?`rgba(255,255,255,${R(.02,.06)})`:`rgba(0,0,0,${R(.03,.08)})`;
+    g.fillRect(rnd()*w,rnd()*h,R(1,3),R(1,4));
+  }
+  const band=(y,col)=>{ g.fillStyle=col; g.fillRect(w*0.06,y,w*0.88,3); };
+  if(st.k==='label'){
+    for(const y of [h*0.045,h*0.065,h*0.935,h*0.955]) band(y,'#d0a850');
+    const lw=w*0.62,lh=h*0.6,lx=(w-lw)/2,ly=h*0.12;
+    g.fillStyle='#efe4c8'; g.fillRect(lx,ly,lw,lh);
+    g.strokeStyle='rgba(110,80,40,.75)'; g.lineWidth=1.5; g.strokeRect(lx+3,ly+3,lw-6,lh-6);
+    vtext(g,title,w/2,ly+lh*0.06,lh*0.88,lw*0.62,st.ink,'700');
+    g.fillStyle='#d0a850'; g.beginPath(); g.moveTo(w/2,h*0.86); g.lineTo(w/2+7,h*0.885); g.lineTo(w/2,h*0.91); g.lineTo(w/2-7,h*0.885); g.fill();
+  } else if(st.k==='foil'){
+    for(const y of [h*0.05,h*0.07,h*0.93,h*0.95]) band(y,goldGrad(g,w,st.fg==='silver'));
+    g.shadowColor='rgba(0,0,0,.55)'; g.shadowBlur=3;
+    vtext(g,title,w/2,h*0.11,h*0.66,w*0.46,goldGrad(g,w,st.fg==='silver'),'700');
+    g.shadowBlur=0;
+    g.fillStyle=goldGrad(g,w,st.fg==='silver'); g.beginPath(); g.moveTo(w/2,h*0.85); g.lineTo(w/2+8,h*0.88); g.lineTo(w/2,h*0.91); g.lineTo(w/2-8,h*0.88); g.fill();
+  } else {
+    g.fillStyle=st.stripe; g.fillRect(0,0,w,h*0.09);
+    g.fillStyle='rgba(255,255,255,.55)'; g.fillRect(0,h*0.09,w,3);
+    vtext(g,title,w/2,h*0.13,h*0.6,w*0.5,'#1f1b18','700');
+    if(author) vtext(g,author,w/2,h*0.75,h*0.15,w*0.3,'#4a4038','500');
+    g.strokeStyle=st.stripe; g.lineWidth=3; g.beginPath(); g.arc(w/2,h*0.94,w*0.14,0,6.283); g.stroke();
+  }
+  const lg=g.createLinearGradient(0,0,w,0);
+  lg.addColorStop(0,'rgba(0,0,0,.42)'); lg.addColorStop(.16,'rgba(0,0,0,0)'); lg.addColorStop(.84,'rgba(0,0,0,0)'); lg.addColorStop(1,'rgba(0,0,0,.42)');
+  g.fillStyle=lg; g.fillRect(0,0,w,h);
+  const hi=g.createLinearGradient(0,0,w,0);
+  hi.addColorStop(.3,'rgba(255,255,255,0)'); hi.addColorStop(.42,'rgba(255,255,255,.10)'); hi.addColorStop(.55,'rgba(255,255,255,0)');
+  g.fillStyle=hi; g.fillRect(0,0,w,h);
+}
+function drawWasoTop(g,w,h,base,title){
+  g.fillStyle=base; g.fillRect(0,0,w,h);
+  for(let i=0;i<1400;i++){
+    g.strokeStyle=rnd()<.5?`rgba(255,255,255,${R(.03,.09)})`:`rgba(0,0,0,${R(.03,.09)})`;
+    g.lineWidth=R(.4,1); const x=rnd()*w,y=rnd()*h,a=rnd()*6.28;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+Math.cos(a)*R(4,14),y+Math.sin(a)*R(4,14)); g.stroke();
+  }
+  const sx=w-30;
+  g.fillStyle='rgba(0,0,0,.18)'; g.fillRect(sx-18,0,w,h);
+  for(const fy of [0.14,0.38,0.62,0.86]){
+    const y=h*fy;
+    g.strokeStyle='#f3efe4'; g.lineWidth=4; g.lineCap='round';
+    g.beginPath(); g.moveTo(sx-2,y); g.lineTo(w,y); g.stroke();
+    g.fillStyle='#f3efe4'; g.beginPath(); g.arc(sx,y,4.5,0,6.283); g.fill();
+  }
+  const lw=54,lh=h*0.56,lx=26,ly=h*0.07;
+  g.fillStyle='#efe4c8'; g.fillRect(lx,ly,lw,lh);
+  g.strokeStyle='rgba(90,60,30,.7)'; g.lineWidth=1.5; g.strokeRect(lx+3,ly+3,lw-6,lh-6);
+  vtext(g,title,lx+lw/2,ly+lh*0.06,lh*0.88,lw*0.6,'#1a1a1a','700');
+}
+function drawScroll(g,w,h){
+  g.fillStyle='#26364f'; g.fillRect(0,0,w,h);
+  for(let i=0;i<2500;i++){ g.fillStyle=`rgba(${rnd()<.5?'255,255,255':'0,0,0'},${R(.02,.06)})`; g.fillRect(rnd()*w,rnd()*h,R(1,3),R(1,3)); }
+  g.fillStyle='#b59a55'; g.fillRect(0,h*0.155,w,4); g.fillRect(0,h*0.775,w,4);
+  const px=w*0.12,py=h*0.16,pw=w*0.76,ph=h*0.615;
+  g.fillStyle='#e9dec1'; g.fillRect(px,py,pw,ph);
+  const sky=g.createLinearGradient(0,py,0,py+ph); sky.addColorStop(0,'rgba(170,150,110,.30)'); sky.addColorStop(.6,'rgba(230,220,190,0)');
+  g.fillStyle=sky; g.fillRect(px,py,pw,ph);
+  g.fillStyle='#f5eed8'; g.beginPath(); g.arc(px+pw*0.68,py+ph*0.2,pw*0.13,0,6.283); g.fill();
+  const layers=[[.45,'rgba(40,40,40,.22)',.05],[.6,'rgba(30,30,30,.38)',.07],[.78,'rgba(20,20,20,.62)',.09]];
+  for(const [base,col,amp] of layers){
+    g.fillStyle=col; g.beginPath(); g.moveTo(px,py+ph);
+    for(let x=0;x<=pw;x+=6){ const t=x/pw; g.lineTo(px+x,py+ph*(base+Math.sin(t*9+base*20)*amp*0.7+Math.sin(t*23)*amp*0.25-t*0.05)); }
+    g.lineTo(px+pw,py+ph); g.closePath(); g.fill();
+  }
+  g.fillStyle='#a8281f'; g.fillRect(px+pw*0.62,py+ph*0.86,pw*0.2,pw*0.2);
+  g.font=`700 ${pw*0.14}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle='#f3e6c8';
+  g.fillText('照',px+pw*0.72,py+ph*0.86+pw*0.1);
+}
+function drawScrollBack(g,w,h){
+  g.fillStyle='#3a2c1e'; g.fillRect(0,0,w,h);
+  for(let i=0;i<3000;i++){ g.fillStyle=`rgba(${rnd()<.5?'255,255,255':'0,0,0'},${R(.02,.07)})`; g.fillRect(rnd()*w,rnd()*h,R(1,3),R(1,3)); }
+  g.strokeStyle='rgba(0,0,0,.18)'; g.lineWidth=1;
+  for(let y=0;y<h;y+=6){ g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke(); }
+  for(let x=0;x<w;x+=6){ g.strokeStyle='rgba(255,255,255,.05)'; g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke(); }
+  g.fillStyle='rgba(0,0,0,.35)'; g.fillRect(w*0.08,h*0.08,w*0.84,h*0.06);
+  g.fillStyle='rgba(0,0,0,.35)'; g.fillRect(w*0.08,h*0.86,w*0.84,h*0.06);
+}
+
+/* ---------- materials ---------- */
+const allMats=[];
+function std(o,envBase,phys){
+  const m=phys?new THREE.MeshPhysicalMaterial(o):new THREE.MeshStandardMaterial(o);
+  m.envMap=envTex; m.envMapIntensity=envBase; m.userData.envBase=envBase; allMats.push(m); return m;
+}
+const woodTex=(base,dark,light,lines,wave)=>canvasTex(576,576,(g,w,h)=>drawWood(g,w,h,{base,dark,light,lines,wave}));
+const tDark=woodTex('#4a2b18','20,10,4','150,95,55',70,1);
+const tMid=woodTex('#6d4526','35,18,8','190,135,80',60,1);
+const tLight=woodTex('#c8a271','110,70,35','240,215,170',45,0.5);
+const matDark=std({map:tDark,bumpMap:tDark,bumpScale:0.6,roughness:0.5,clearcoat:0.35,clearcoatRoughness:0.35},0.9,true);
+const matMid=std({map:tMid,bumpMap:tMid,bumpScale:0.5,roughness:0.55},0.8);
+const matLight=std({map:tLight,bumpMap:tLight,bumpScale:0.35,roughness:0.6},0.7);
+matDark.userData.woodUV=0.9; matMid.userData.woodUV=0.9; matLight.userData.woodUV=0.7;
+const matLacquer=std({color:C('#0b0908'),roughness:0.16,clearcoat:1,clearcoatRoughness:0.08},1.6,true);
+const matGold=std({color:C('#d7ae55'),metalness:1,roughness:0.28},1.6);
+const tPaper=canvasTex(384,384,(g,w,h)=>drawPaper(g,w,h,{base:'#f3ead4',fibers:1500}));
+const matPaper=std({map:tPaper,emissive:C('#ffc98a'),emissiveMap:tPaper,emissiveIntensity:0.12,roughness:0.95,transparent:true,opacity:0.88,side:THREE.DoubleSide},0.1);
+const matLampPaper=std({map:tPaper,emissive:C('#ffb060'),emissiveMap:tPaper,emissiveIntensity:0.35,roughness:0.9},0.05);
+const tWashi=canvasTex(384,384,(g,w,h)=>drawPaper(g,w,h,{base:'#e2d2a8',fibers:1800,gold:260}));
+const matWashi=std({map:tWashi,roughness:0.9},0.5); matWashi.userData.woodUV=0.55;
+const tMakie=canvasTex(384,384,drawMakie);
+const matMakie=std({map:tMakie,roughness:0.38,metalness:0.15},1.0); matMakie.userData.woodUV=0.7;
+const tFusuma=canvasTex(480,384,drawFusuma,{repeat:false});
+const matFusuma=std({map:tFusuma,roughness:0.45,metalness:0.25},1.2);
+const tPages=canvasTex(128,128,(g,w,h)=>{
+  g.fillStyle='#eadfc2'; g.fillRect(0,0,w,h);
+  for(let x=0;x<w;x+=2){ g.fillStyle=`rgba(${rnd()<.5?'120,95,55':'255,250,235'},${R(.06,.22)})`; g.fillRect(x,0,1,h); }
+});
+const matPages=std({map:tPages,roughness:0.92},0.3);
+const matBark=std({color:C('#2e2018'),roughness:0.9},0.3);
+const matPink=std({color:C('#f2b6c6'),roughness:0.6,emissive:C('#8a3a50'),emissiveIntensity:0.12},0.3);
+const matWhiteBlossom=std({color:C('#f7ece6'),roughness:0.6},0.3);
+const matCeladon=std({color:C('#9dbfae'),roughness:0.18,clearcoat:0.6,clearcoatRoughness:0.1,side:THREE.DoubleSide},1.2,true);
+const matPorcelain=std({color:C('#e9e6dc'),roughness:0.15,clearcoat:0.7,clearcoatRoughness:0.08,side:THREE.DoubleSide},1.2,true);
+const matRaku=std({color:C('#2a1a14'),roughness:0.3,clearcoat:0.5,side:THREE.DoubleSide},1.0,true);
+const matRed=std({color:C('#8a3a24'),roughness:0.35,clearcoat:0.5,side:THREE.DoubleSide},1.0,true);
+const matBrass=std({color:C('#b08d3c'),metalness:1,roughness:0.35},1.4);
+
+/* ---------- geometry helpers ---------- */
+function mapBoxUV(g,w,h,d,S){
+  const pos=g.attributes.position,nor=g.attributes.normal,uv=g.attributes.uv;
+  const dims=[w,h,d]; let L=0; if(h>dims[L])L=1; if(d>dims[L])L=2;
+  const off=[rnd()*10,rnd()*10];
+  for(let i=0;i<pos.count;i++){
+    const p=[pos.getX(i),pos.getY(i),pos.getZ(i)];
+    const n=[Math.abs(nor.getX(i)),Math.abs(nor.getY(i)),Math.abs(nor.getZ(i))];
+    const na=n[0]>0.5?0:(n[1]>0.5?1:2);
+    const axes=[0,1,2].filter(a=>a!==na);
+    let ua,va;
+    if(axes.indexOf(L)>=0){ ua=L; va=axes.find(a=>a!==L); } else { ua=axes[0]; va=axes[1]; }
+    uv.setXY(i,p[ua]/S+off[0],p[va]/S+off[1]);
+  }
+  uv.needsUpdate=true;
+}
+const shelf=new THREE.Group(); shelf.position.z=0.05; scene.add(shelf);   // nudged forward so it clears the inner door behind it
+const booksG=new THREE.Group(); shelf.add(booksG);
+const movables=[], pickables=[];
+let scrollGroup=null, scrollCurl=null;   // scrollGroup: fixed top-edge anchor, for tap detection. scrollCurl: the deformable-paper state (see below)
+const scrollSwing={t:0,goal:0};
+function toggleScroll(){ scrollSwing.goal=scrollSwing.goal?0:1; }
+let handleGroup=null;
+const handleExtra=[];   // fixed parts around the handle (backplate, niche back wall) that also count as a tap on it
+const handleSpin={angle:0,target:0};     // each tap adds three more full turns; it spins down to a stop like a real wheel
+const SHELF_SLIDE_DIST=0.85;             // about one door's width plus a bit more
+const shelfSlide={t:0,goal:0};
+function tapHandle(){ handleSpin.target+=Math.PI*2*3; if(!shelfSlide.goal) buildInnerRoom(); shelfSlide.goal=shelfSlide.goal?0:1; }
+// Bends the scroll's front/back geometry into a soft paper curl, parameterized by total bend angle A
+// (0 = flat/closed). Each vertex's rest position (x0,y0) — y0 running from 0 at the fixed top edge to
+// -panelH at the free bottom edge — is mapped onto a circular arc of radius R=panelH/A, so that as A
+// grows from 0 the sheet rolls up and away from the wall continuously (not as separate rigid segments,
+// so there are no seams), and every point's arc-length from the top edge is preserved. The bottom rod
+// is repositioned each frame to sit at the curled position of the free edge, extended slightly along
+// its local tangent so it keeps its original small overhang.
+function updateScrollCurl(A){
+  const sc=scrollCurl; if(!sc) return;
+  const flat=A<1e-4;
+  const R=flat?0:sc.panelH/A;
+  const bend=(geo,base)=>{
+    const pos=geo.attributes.position;
+    if(flat){ pos.array.set(base); }
+    else{
+      for(let i=0;i<pos.count;i++){
+        const x0=base[i*3], y0=base[i*3+1], s=-y0/sc.panelH, phi=s*A;
+        pos.setXYZ(i,x0,-R*Math.sin(phi),R*(1-Math.cos(phi)));
+      }
+    }
+    pos.needsUpdate=true; geo.computeVertexNormals();
+  };
+  bend(sc.frontGeo,sc.frontBase); bend(sc.backGeo,sc.backBase);
+  const y1=flat?-sc.panelH:-R*Math.sin(A), z1=flat?0:R*(1-Math.cos(A));
+  const tx=-Math.cos(A), tz=Math.sin(A);
+  sc.bottomRod.position.set(0,y1+0.015*tx,z1+0.015*tz);
+  sc.bottomRod.rotation.x=-A;
+}
+function box(w,h,d,mat,x,y,z,parent){
+  const g=new THREE.BoxGeometry(w,h,d);
+  if(mat.userData.woodUV) mapBoxUV(g,w,h,d,mat.userData.woodUV);
+  const m=new THREE.Mesh(g,mat); m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true;
+  (parent||shelf).add(m); return m;
+}
+function regroupBox(g,order,counts){
+  const idx=g.index.array, out=new idx.constructor(idx.length); let o=0;
+  for(const f of order){ for(let k=0;k<6;k++) out[o++]=idx[f*6+k]; }
+  idx.set(out); g.index.needsUpdate=true; g.clearGroups();
+  let s=0; counts.forEach((c,i)=>{ g.addGroup(s,c*6,i); s+=c*6; });
+}
+function lathe(pts,mat,seg){
+  const g=new THREE.LatheGeometry(pts.map(p=>new THREE.Vector2(p[0],p[1])),seg||56);
+  const m=new THREE.Mesh(g,mat); m.castShadow=true; m.receiveShadow=true; return m;
+}
+const VASE=[[0,0],[0.052,0],[0.058,0.008],[0.085,0.07],[0.104,0.17],[0.092,0.26],[0.05,0.33],[0.03,0.365],[0.028,0.4],[0.034,0.418],[0.03,0.42],[0.022,0.405],[0.022,0.3],[0,0.28]];
+const BOWL=[[0,0],[0.028,0],[0.03,0.006],[0.045,0.02],[0.058,0.05],[0.062,0.075],[0.058,0.076],[0.054,0.05],[0.04,0.024],[0,0.016]];
+const KORO=[[0,0],[0.035,0],[0.055,0.03],[0.062,0.06],[0.05,0.085],[0.042,0.09],[0.04,0.098],[0.014,0.122],[0.014,0.136],[0.006,0.142],[0,0.142]];
+function place(m,x,y,z,parent){ m.position.set(x,y,z); (parent||shelf).add(m); return m; }
+
+/* ---------- room ---------- */
+const ROOM_W=8.4, ROOM_D=8.0, ROOM_H=3.0;
+const tPlasterA=canvasTex(640,640,(g,w,h)=>drawPlaster(g,w,h,'#a89679'));
+tPlasterA.repeat.set(3,1.2);
+const tPlasterB=canvasTex(640,640,(g,w,h)=>drawPlaster(g,w,h,'#6c5842'));
+tPlasterB.repeat.set(1.2,1.2);
+const matWallA=std({map:tPlasterA,bumpMap:tPlasterA,bumpScale:0.8,roughness:0.97},0.25);
+const matWallB=std({map:tPlasterB,bumpMap:tPlasterB,bumpScale:0.8,roughness:0.97},0.25);
+const tPlasterS=tPlasterA.clone(); tPlasterS.needsUpdate=true; tPlasterS.repeat.set(2.4,1.2);
+const matWallS=std({map:tPlasterS,bumpMap:tPlasterS,bumpScale:0.8,roughness:0.97},0.25);
+const backWall=new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W,ROOM_H),matWallA);
+backWall.position.set(0,ROOM_H/2,0); backWall.receiveShadow=true; scene.add(backWall);
+const alcove=new THREE.Mesh(new THREE.PlaneGeometry(3.08,ROOM_H),matWallB);
+alcove.position.set(0,ROOM_H/2,0.003); alcove.receiveShadow=true; scene.add(alcove);
+for(const s of [-1,1]){
+  const w=new THREE.Mesh(new THREE.PlaneGeometry(ROOM_D,ROOM_H),matWallS);
+  w.rotation.y=s<0?Math.PI/2:-Math.PI/2; w.position.set(s*ROOM_W/2,ROOM_H/2,ROOM_D/2); w.receiveShadow=true; scene.add(w);
+}
+const ceil=new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W,ROOM_D),std({map:tDark,roughness:0.7},0.3));
+ceil.rotation.x=Math.PI/2; ceil.position.set(0,ROOM_H,ROOM_D/2); scene.add(ceil);
+box(0.12,ROOM_H,0.12,matDark,-1.6,ROOM_H/2,0.07,scene);
+box(0.12,ROOM_H,0.12,matDark,2.55,ROOM_H/2,0.07,scene);   // moved right to clear the shelf's slid-open position
+box(ROOM_W,0.12,0.06,matDark,0,2.42,0.03,scene);
+box(ROOM_W,0.09,0.02,matDark,0,0.045,0.01,scene);
+// tatami floor
+const tTatami=canvasTex(768,384,drawTatami,{repeat:false});
+const matTatami=std({map:tTatami,roughness:0.92},0.25);
+let tatamiInst=null;                         // referenced later by the hidden trapdoor, to remove the tiles under it
+{
+  const rows=Math.ceil(ROOM_D/0.9), cols=Math.ceil(ROOM_W/1.8)+1;
+  const inst=new THREE.InstancedMesh(new THREE.PlaneGeometry(1.8,0.9),matTatami,rows*cols);
+  const dummy=new THREE.Object3D(); let n=0;
+  for(let i=0;i<rows;i++)for(let k=0;k<cols;k++){
+    dummy.position.set(-ROOM_W/2+0.9+1.8*k-(i%2)*0.9+0.0,0,0.45+0.9*i);
+    dummy.rotation.set(-Math.PI/2,0,0); dummy.updateMatrix(); inst.setMatrixAt(n,dummy.matrix);
+    const v=R(0.9,1.06); inst.setColorAt(n,new THREE.Color(v,v,v*0.98)); n++;
+  }
+  inst.receiveShadow=true; scene.add(inst); tatamiInst=inst;
+}
+// shoji window (left wall)
+const winMat=new THREE.MeshBasicMaterial({color:new THREE.Color(1,0.975,0.93),map:tPaper});
+{
+  const g=new THREE.Group(); g.position.set(-ROOM_W/2+0.01,1.6,2.0); g.rotation.y=Math.PI/2; scene.add(g);
+  const p=new THREE.Mesh(new THREE.PlaneGeometry(2.2,1.7),winMat); p.position.z=0.005; g.add(p);
+  box(2.32,0.06,0.05,matDark,0,0.88,0.02,g); box(2.32,0.06,0.05,matDark,0,-0.88,0.02,g);
+  box(0.06,1.82,0.05,matDark,-1.13,0,0.02,g); box(0.06,1.82,0.05,matDark,1.13,0,0.02,g);
+  for(let i=1;i<6;i++) box(0.014,1.7,0.03,matDark,-1.1+2.2*i/6,0,0.02,g);
+  for(let j=1;j<5;j++) box(2.2,0.014,0.03,matDark,0,-0.85+1.7*j/5,0.02,g);
+  g.traverse(o=>{ if(o.isMesh) o.castShadow=false; });   // a shoji window lets light through -- its frame shouldn't throw a shadow onto the scroll wall
+}
+// hanging scroll -- its top edge is fixed in place; tapping it swings the whole sheet, as one rigid
+// piece, up and away from the wall through an arc (like a page turning on a top hinge), showing its
+// back. A handle sits in a shallow cavity recessed into the wall behind it, so it stays hidden while
+// closed and never pokes through the scroll.
+{
+  const tS=canvasTex(228,712,drawScroll,{repeat:false});
+  const tSBack=canvasTex(228,712,drawScrollBack,{repeat:false});
+  const g=new THREE.Group(); g.position.set(-2.15,1.55,0.012); scene.add(g);
+
+  // recessed niche (open-front box let into the wall) + handle mounted on its back panel -- fixed to
+  // the wall, unaffected by the scroll swinging in front of it. Kept shallow: the scroll sits close
+  // to the wall, so the whole cavity + handle has to fit within that thin gap.
+  const nw=0.14, nh=0.16, nz0=-0.007, nz1=-0.001, ncz=(nz0+nz1)/2, nd=nz1-nz0;
+  const nicheBack=box(nw,nh,0.003,matLacquer,0,0,nz0,g); pickables.push(nicheBack); handleExtra.push(nicheBack);
+  box(0.003,nh,nd,matLacquer,-nw/2,0,ncz,g); box(0.003,nh,nd,matLacquer,nw/2,0,ncz,g);
+  box(nw,0.003,nd,matLacquer,0,-nh/2,ncz,g); box(nw,0.003,nd,matLacquer,0,nh/2,ncz,g);
+  const plate=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,0.003,24),matLacquer);
+  plate.rotation.x=Math.PI/2; plate.position.set(0,0,nz0+0.002); plate.receiveShadow=true; g.add(plate);
+  pickables.push(plate); handleExtra.push(plate);
+  const hg=new THREE.Group(); g.add(hg);   // shaft+ring+spokes -- spins in place when tapped; the backplate stays fixed
+  const shaft=new THREE.Mesh(new THREE.CylinderGeometry(0.006,0.006,0.003,12),matGold);      // connects the plate to the ring
+  shaft.rotation.x=Math.PI/2; shaft.position.set(0,0,nz0+0.0035); shaft.castShadow=true; hg.add(shaft);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(0.025,0.0045,10,24),matGold);
+  ring.position.set(0,0,nz0+0.005); ring.castShadow=true; hg.add(ring);
+  const spokeIn=0.007, spokeOut=0.0205, spokeMid=(spokeIn+spokeOut)/2;   // 3 spokes, evenly spaced, bridging shaft to ring
+  for(let k=0;k<3;k++){
+    const ang=k*Math.PI*2/3;
+    const spoke=new THREE.Mesh(new THREE.CylinderGeometry(0.0022,0.0022,spokeOut-spokeIn,8),matGold);
+    spoke.position.set(Math.cos(ang)*spokeMid,Math.sin(ang)*spokeMid,nz0+0.005);
+    spoke.rotation.z=ang-Math.PI/2; spoke.castShadow=true; hg.add(spoke);
+  }
+  hg.traverse(o=>{ if(o.isMesh) pickables.push(o); });
+  handleGroup=hg;
+
+  // the scroll itself: a single deformable sheet (front/back single-sided planes) that bends like
+  // real paper rather than swinging as a rigid board -- see updateScrollCurl() above.
+  const panelW=0.34, panelH=1.06, SEGS=20;
+  const frontMat=std({map:tS,roughness:0.85,side:THREE.FrontSide},0.3);
+  const backMat=std({map:tSBack,roughness:0.85,side:THREE.BackSide},0.3);
+
+  const anchor=new THREE.Group(); anchor.position.set(0,panelH/2,0.006); g.add(anchor);   // the fixed top edge -- never moves; nudged slightly forward of the handle so the ring doesn't poke through it when closed
+  const topRod=new THREE.Mesh(new THREE.CylinderGeometry(0.007,0.007,0.37,16),matDark);
+  topRod.rotation.z=Math.PI/2; topRod.position.set(0,0.005,0.01); topRod.castShadow=true; anchor.add(topRod);
+
+  const frontGeo=new THREE.PlaneGeometry(panelW,panelH,1,SEGS); frontGeo.translate(0,-panelH/2,0);
+  const backGeo=new THREE.PlaneGeometry(panelW,panelH,1,SEGS); backGeo.translate(0,-panelH/2,0);
+  const segFront=new THREE.Mesh(frontGeo,frontMat), segBack=new THREE.Mesh(backGeo,backMat);
+  segFront.receiveShadow=true; segBack.receiveShadow=true;
+  anchor.add(segFront,segBack); pickables.push(segFront,segBack);
+
+  const bottomRod=new THREE.Group(); anchor.add(bottomRod);
+  const rodMesh=new THREE.Mesh(new THREE.CylinderGeometry(0.011,0.011,0.39,16),matDark);
+  rodMesh.rotation.z=Math.PI/2; rodMesh.castShadow=true; bottomRod.add(rodMesh);
+  for(const sx of [-1,1]){ const e=new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.014,0.014,16),matGold); e.rotation.z=Math.PI/2; e.position.set(sx*0.2,0,0); bottomRod.add(e); }
+
+  scrollGroup=anchor;
+  scrollCurl={frontGeo,backGeo,frontBase:frontGeo.attributes.position.array.slice(),backBase:backGeo.attributes.position.array.slice(),panelH,maxAngle:Math.PI*0.92,bottomRod};
+  updateScrollCurl(0);
+  g.scale.setScalar(1.5);
+}
+
+/* ---------- shelf: structure ---------- */
+const W=2.7, D=0.36, T=0.04, PL=0.09;
+box(T,2.02,D,matDark,-W/2+T/2,1.10,D/2);
+box(T,2.02,D,matDark,W/2-T/2,1.10,D/2);
+box(W,0.04,D,matDark,0,2.13,D/2);
+box(W+0.06,0.03,D+0.03,matDark,0,2.165,D/2+0.0075);
+box(W+0.055,0.005,0.002,matGold,0,2.165,D+0.0235);
+box(W-0.06,PL,D-0.05,matLacquer,0,PL/2,(0.02+D-0.03)/2);
+box(W,0.03,D,matDark,0,0.105,D/2);
+box(W,0.04,D+0.015,matDark,0,0.80,D/2+0.0075);
+box(W-0.02,0.004,0.002,matGold,0,0.80,D+0.0155);
+box(T,1.99,D,matDark,-0.45,1.115,D/2);
+box(T,1.99,D,matDark,0.45,1.115,D/2);
+box(W-2*T,0.66,0.012,matMid,0,0.45,0.02);
+box(0.86,1.29,0.012,matWashi,-0.88,1.465,0.02);
+const centerBackPanel=box(0.90,1.29,0.012,matWashi,0,1.465,0.02);  // referenced later by the hidden compartment
+box(0.86,1.29,0.012,matMakie,0.88,1.465,0.02);
+function board(x0,x1,ys,zf,mat,zb,th){
+  zb=zb===undefined?0.02:zb; th=th||0.025;
+  return box(x1-x0,th,zf-zb,mat||matMid,(x0+x1)/2,ys-th/2,(zf+zb)/2);
+}
+// left open shelves
+board(-1.31,-0.47,1.25,D-0.02); board(-1.31,-0.47,1.68,D-0.02);
+// centre cabinet shelves
+board(-0.43,0.43,1.25,0.30); board(-0.43,0.43,1.68,0.30);
+// tenbukuro floor + chigai-dana
+board(0.47,1.31,1.73,D-0.01,matMid,0.02,0.03);
+board(0.47,1.05,1.05,0.32); board(0.73,1.31,1.40,0.32);
+box(0.02,0.325,0.02,matDark,0.745,1.2125,0.30);
+box(0.014,0.05,0.014,matGold,0.745,1.362,0.30);
+
+/* ---------- movable helpers ---------- */
+function makeMovable(obj,axis,delta,tag){
+  const mv={obj,axis,base:obj.position[axis],delta,t:0,goal:0,tag:tag||''};
+  obj.userData.mv=mv; movables.push(mv); pickables.push(obj); return mv;
+}
+function findMv(o){ while(o){ if(o.userData&&o.userData.mv) return o.userData.mv; o=o.parent; } return null; }
+
+/* ---------- doors ---------- */
+function shojiDoor(w,h){
+  const g=new THREE.Group(), th=0.02, st=0.03, kick=0.22;
+  box(st,h,th,matDark,-w/2+st/2,0,0,g); box(st,h,th,matDark,w/2-st/2,0,0,g);
+  box(w-2*st,st,th,matDark,0,h/2-st/2,0,g); box(w-2*st,st,th,matDark,0,-h/2+st/2,0,g);
+  box(w-2*st,kick,th*0.7,matLacquer,0,-h/2+st+kick/2,0,g);
+  box(w-2*st,st*0.7,th,matDark,0,-h/2+st+kick+st*0.35,0,g);
+  const y0=-h/2+st+kick+st*0.7, y1=h/2-st, ph=y1-y0, pw=w-2*st, cy=(y0+y1)/2;
+  const paper=new THREE.Mesh(new THREE.PlaneGeometry(pw,ph),matPaper); paper.position.set(0,cy,-0.004); paper.receiveShadow=true; g.add(paper);
+  for(let i=1;i<=3;i++) box(0.009,ph,0.014,matDark,-pw/2+pw*i/4,cy,0.002,g);
+  for(let j=1;j<=6;j++) box(pw,0.009,0.014,matDark,0,y0+ph*j/7,0.002,g);
+  return g;
+}
+function woodDoor(w,h,side){
+  const g=new THREE.Group(), th=0.02, st=0.03;
+  box(st,h,th,matDark,-w/2+st/2,0,0,g); box(st,h,th,matDark,w/2-st/2,0,0,g);
+  box(w-2*st,st,th,matDark,0,h/2-st/2,0,g); box(w-2*st,st,th,matDark,0,-h/2+st/2,0,g);
+  box(w-2*st,h-2*st,0.012,matLight,0,0,-0.002,g);
+  const hx=side*(w/2-0.06);
+  const ring=new THREE.Mesh(new THREE.CylinderGeometry(0.018,0.018,0.004,32),matGold);
+  ring.rotation.x=Math.PI/2; ring.position.set(hx,0,0.008); ring.castShadow=true; g.add(ring);
+  const dot=new THREE.Mesh(new THREE.CylinderGeometry(0.009,0.009,0.005,24),matLacquer);
+  dot.rotation.x=Math.PI/2; dot.position.set(hx,0,0.0095); g.add(dot);
+  return g;
+}
+function fusumaDoor(w,h){
+  const g=new THREE.Group(), th=0.016, st=0.014;
+  const p=new THREE.Mesh(new THREE.PlaneGeometry(w-2*st,h-2*st),matFusuma); p.position.z=0.004; p.receiveShadow=true; g.add(p);
+  box(w-2*st,h-2*st,0.008,matLacquer,0,0,-0.002,g);
+  box(st,h,th,matLacquer,-w/2+st/2,0,0,g); box(st,h,th,matLacquer,w/2-st/2,0,0,g);
+  box(w-2*st,st,th,matLacquer,0,h/2-st/2,0,g); box(w-2*st,st,th,matLacquer,0,-h/2+st/2,0,g);
+  return g;
+}
+// centre shoji
+{
+  // Doors hang on tracks in FRONT of the frame so they can slide outward past the dividers.
+  const dw=0.48, dh=1.27, dy=1.465;
+  const a=shojiDoor(dw,dh); a.position.set(-0.235,dy,D+0.034); shelf.add(a); makeMovable(a,'x',-0.435,'shoji'); // left door -> further left
+  const b=shojiDoor(dw,dh); b.position.set(0.235,dy,D+0.012); shelf.add(b); makeMovable(b,'x',0.435,'shoji');   // right door -> further right
+}
+function slidingPair(xa,xb,y,h,mk,tagA){
+  const w=(xb-xa)/2+0.005;
+  const a=mk(w,h,-1); a.position.set(xa+w/2,y,0.34); shelf.add(a); makeMovable(a,'x',w-0.02,tagA);
+  const b=mk(w,h,+1); b.position.set(xb-w/2,y,0.315); shelf.add(b); makeMovable(b,'x',-(w-0.02),tagA);
+}
+slidingPair(-1.31,-0.47,0.45,0.64,woodDoor,'lower');
+slidingPair(0.47,1.31,0.45,0.64,woodDoor,'lower');
+slidingPair(0.47,1.31,1.92,0.36,fusumaDoor,'tenbukuro');
+
+// drawers
+const drawerMvs=[];
+{
+  const dh=(0.66-0.04)/3;
+  for(let i=0;i<3;i++){
+    const y=0.12+0.01+dh/2+i*(dh+0.01);
+    const g=new THREE.Group(); g.position.set(0,y,D-0.016); shelf.add(g);
+    box(0.85,dh,0.022,matLacquer,0,0,0,g);
+    const gy=dh/2-0.014, gx=0.85/2-0.014;
+    box(0.82,0.003,0.002,matGold,0,gy,0.0115,g); box(0.82,0.003,0.002,matGold,0,-gy,0.0115,g);
+    box(0.003,dh-0.028,0.002,matGold,-gx,0,0.0115,g); box(0.003,dh-0.028,0.002,matGold,gx,0,0.0115,g);
+    const bar=new THREE.Mesh(new THREE.CylinderGeometry(0.007,0.007,0.14,20),matGold);
+    bar.rotation.z=Math.PI/2; bar.position.set(0,0,0.026); bar.castShadow=true; g.add(bar);
+    for(const sx of [-0.06,0.06]){
+      const post=new THREE.Mesh(new THREE.CylinderGeometry(0.004,0.004,0.016,12),matGold);
+      post.rotation.x=Math.PI/2; post.position.set(sx,0,0.019); g.add(post);
+    }
+    const bh=0.17, bd=0.30;
+    box(0.81,0.012,bd,matLight,0,-bh/2+0.006-0.01,-0.011-bd/2,g);
+    box(0.012,bh,bd,matLight,-0.399,-0.01,-0.011-bd/2,g); box(0.012,bh,bd,matLight,0.399,-0.01,-0.011-bd/2,g);
+    box(0.81,bh,0.012,matLight,0,-0.01,-0.011-bd+0.006,g);
+    drawerMvs.push(makeMovable(g,'z',0.22,'drawer'));
+  }
+}
+
+/* ---------- books ---------- */
+function bookGeometry(t,h,d){
+  const g=new THREE.BoxGeometry(t,h,d);
+  regroupBox(g,[0,1,2,3,5,4],[2,3,1]);
+  return g;
+}
+const STYLE_DEFS=[
+ {k:'label',base:'#1d2c4b',ink:'#151515',h:[0.20,0.33],t:[0.024,0.05]},
+ {k:'label',base:'#7d2a24',ink:'#151515',h:[0.20,0.33],t:[0.024,0.05]},
+ {k:'label',base:'#465732',ink:'#151515',h:[0.20,0.33],t:[0.024,0.05]},
+ {k:'label',base:'#43284e',ink:'#151515',h:[0.20,0.33],t:[0.024,0.05]},
+ {k:'label',base:'#4b3121',ink:'#151515',h:[0.20,0.33],t:[0.024,0.05]},
+ {k:'label',base:'#20262b',ink:'#151515',h:[0.20,0.33],t:[0.024,0.05]},
+ {k:'label',base:'#b89058',ink:'#151515',h:[0.20,0.33],t:[0.024,0.05]},
+ {k:'foil',base:'#15110f',fg:'gold',h:[0.24,0.34],t:[0.03,0.055]},
+ {k:'foil',base:'#1e3a30',fg:'gold',h:[0.24,0.34],t:[0.03,0.055]},
+ {k:'foil',base:'#581a27',fg:'gold',h:[0.24,0.34],t:[0.03,0.055]},
+ {k:'foil',base:'#233757',fg:'silver',h:[0.24,0.34],t:[0.03,0.055]},
+ {k:'foil',base:'#5a3a22',fg:'gold',h:[0.24,0.34],t:[0.03,0.055]},
+ {k:'bunko',base:'#eee5d0',stripe:'#b3382c',h:[0.15,0.175],t:[0.012,0.026]},
+ {k:'bunko',base:'#ece6d6',stripe:'#2c4f7a',h:[0.15,0.175],t:[0.012,0.026]},
+ {k:'bunko',base:'#dcd8c8',stripe:'#3f6b4a',h:[0.15,0.175],t:[0.012,0.026]},
+ {k:'bunko',base:'#e8dcc0',stripe:'#7a4a8c',h:[0.15,0.175],t:[0.012,0.026]},
+];
+const shuffled=TITLES.slice().sort(()=>rnd()-0.5); let ti=0;
+const STYLES=STYLE_DEFS.map(def=>{
+  const cover=std({color:C(def.base),roughness:0.8},0.3);
+  const spines=[];
+  for(let k=0;k<3;k++){
+    const tt=shuffled[ti++%shuffled.length];
+    const tex=canvasTex(96,512,(g,w,h)=>drawSpine(g,w,h,def,tt[0],tt[1]),{repeat:false});
+    spines.push(std({map:tex,roughness:def.k==='foil'?0.5:0.7},0.4));
+  }
+  return {def,cover,spines};
+});
+const STYLE_WEIGHTED=[]; STYLES.forEach(s=>{ const n=s.def.k==='bunko'?1:2; for(let i=0;i<n;i++) STYLE_WEIGHTED.push(s); });
+function makeBook(st,spine,t,h,d){
+  const m=new THREE.Mesh(bookGeometry(t,h,d),[st.cover,matPages,spine]);
+  m.castShadow=true; m.receiveShadow=true; return m;
+}
+function fillShelf(x0,x1,y,clear,frontZ,o){
+  o=o||{};
+  const reserve=o.reserve===undefined?0.11:o.reserve, dMax=o.dMax||0.25;
+  let cx=x0+R(0.004,0.012), guard=0;
+  let last=null; // right face / height / depth / z of the last standing book
+  while(cx<x1-reserve-0.02 && guard++<60){
+    const st=pick(STYLE_WEIGHTED), df=st.def, spine=pick(st.spines);
+    const n=rnd()<0.45?(3+Math.floor(rnd()*5)):(1+Math.floor(rnd()*2));
+    const h0=Math.min(clear-0.03,R(df.h[0],df.h[1])*(o.hScale||1));
+    const t0=R(df.t[0],df.t[1]), d0=Math.min(dMax,R(0.15,0.25));
+    for(let i=0;i<n;i++){
+      const t=t0*(n>1?R(0.95,1.05):R(0.85,1.15));
+      if(cx+t>x1-reserve) break;
+      const h=h0+(n>1?R(-0.002,0.002):R(-0.02,0.02));
+      const b=makeBook(st,spine,t,h,d0);
+      const pull=rnd()<0.1?R(0.015,0.04):R(-0.004,0.004);
+      b.position.set(cx+t/2,y+h/2,frontZ-0.03-d0/2+pull);
+      b.rotation.y=R(-0.006,0.006);
+      booksG.add(b);
+      last={x:cx+t,h:h,d:d0,z:b.position.z};
+      cx+=t+R(0.0005,0.003);
+    }
+    if(rnd()<0.06) cx+=R(0.015,0.04);
+  }
+  // A leaning book rests on the LAST STANDING BOOK: its bottom-left corner sits on the shelf,
+  // its top-left corner touches the neighbour's right face, and it tips toward the left.
+  if(!o.noLean && last){
+    const st=pick(STYLE_WEIGHTED), spine=pick(st.spines);
+    const t=R(0.022,0.038);
+    const h=Math.min(clear-0.03,R(0.2,0.3),last.h-0.015);
+    const avail=x1-0.002-last.x;
+    if(h>0.12){
+      for(const a of [0.3,0.25,0.2,0.16,0.12]){
+        const need=h*Math.sin(a)+0.001+t*Math.cos(a);
+        if(need<=avail && h*Math.cos(a)<=last.h-0.008){
+          const grp=new THREE.Group();
+          grp.position.set(last.x+h*Math.sin(a)+0.001,y,last.z);
+          grp.rotation.z=a;
+          const b=makeBook(st,spine,t,h,last.d); b.position.set(t/2,h/2,0); grp.add(b); booksG.add(grp);
+          break;
+        }
+      }
+    }
+  }
+}
+// waso (stitched) books
+const WASO=[['#263a5e','古今'],['#dccfb2','和歌'],['#6a4a34','花伝'],['#66735a','茶湯']].map(([c,title])=>{
+  const tex=canvasTex(256,370,(g,w,h)=>drawWasoTop(g,w,h,c,title),{repeat:false});
+  return {top:std({map:tex,roughness:0.85},0.3),side:std({color:C(c),roughness:0.85},0.3)};
+});
+function wasoStack(x,y,z,n,rot){
+  let yy=y;
+  for(let i=0;i<n;i++){
+    const th=R(0.02,0.032), wv=pick(WASO);
+    const g=new THREE.BoxGeometry(0.18,th,0.26);
+    regroupBox(g,[0,2,1,3,4,5],[1,1,4]);
+    const m=new THREE.Mesh(g,[wv.side,wv.top,matPages]);
+    m.position.set(x+R(-0.008,0.008),yy+th/2,z+R(-0.008,0.008)); m.rotation.y=(rot||0)+R(-0.1,0.1);
+    m.castShadow=true; m.receiveShadow=true; booksG.add(m); yy+=th;
+  }
+}
+/* ---------- 和綴之書: 3 sizes x 9 cover colours = 27 patterns ---------- */
+const PXM=0.00075;                 // 1 CSS px of the original book = 0.75 mm
+const WA_SIZES=[{id:'l',kx:1.25,ky:1.4,kz:2},{id:'m',kx:1,ky:1,kz:1},{id:'s',kx:.8,ky:.68,kz:.6}];
+const WA_COLORS=[
+  {hex:'#483c49',title:'#c9a24a'},   // original cover colour (after the washi overlay)
+  {hex:'#bf1648',title:'#e6c988'},
+  {hex:'#e59f5c',title:'#2b2118'},
+  {hex:'#706145',title:'#e6c988'},
+  {hex:'#232323',title:'#ffffff'},
+  {hex:'#734e95',title:'#ffffff'},
+  {hex:'#3cab84',title:'#2b2118'},
+  {hex:'#2980af',title:'#ffffff'},
+  {hex:'#fef4f4',title:'#2b2118'}
+];
+const WA_AUTHOR='鴛照眛琉';
+function drawWaCover(g,w,h,hex,tc,withTitle){
+  g.fillStyle=hex; g.fillRect(0,0,w,h);
+  for(let i=0;i<1100;i++){
+    const x=rnd()*w,y=rnd()*h,l=R(8,40),a=rnd()*6.283;
+    g.strokeStyle=rnd()<.5?`rgba(255,255,255,${R(.04,.14)})`:`rgba(30,20,10,${R(.03,.10)})`;
+    g.lineWidth=R(.4,1.1); g.beginPath(); g.moveTo(x,y); g.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l); g.stroke();
+  }
+  for(const [cx,cy,rx,ry] of [[.26,.2,.62,.48],[.76,.8,.52,.4]]){
+    g.save(); g.translate(cx*w,cy*h); g.scale(rx,ry);
+    const gr=g.createRadialGradient(0,0,0,0,0,w*0.5); gr.addColorStop(0,'rgba(8,6,4,.30)'); gr.addColorStop(1,'rgba(8,6,4,0)');
+    g.fillStyle=gr; g.fillRect(-w,-w,2*w,2*w); g.restore();
+  }
+  const vg=g.createRadialGradient(w/2,h/2,Math.min(w,h)*.3,w/2,h/2,Math.max(w,h)*.75);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.30)');
+  g.fillStyle=vg; g.fillRect(0,0,w,h);
+  if(withTitle){
+    const fs=w*0.062, step=fs*1.4, cx=w*0.18+fs/2;
+    g.font=`500 ${fs}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle=tc; g.globalAlpha=.92;
+    let y=h*0.14+fs/2; for(const c of '和綴之書'){ g.fillText(c,cx,y); y+=step; }
+    const fa=w*0.05, sa=fa*1.4;
+    g.font=`500 ${fa}px ${FONT}`; y=h*0.68+fa/2;
+    for(const c of WA_AUTHOR){ g.fillText(c,cx,y); y+=sa; }
+    g.globalAlpha=1;
+  }
+}
+function drawWaSpine(g,w,h,hex,tc){
+  g.fillStyle=hex; g.fillRect(0,0,w,h);
+  for(let i=0;i<Math.round(h*0.6);i++){
+    g.strokeStyle=rnd()<.5?`rgba(255,255,255,${R(.04,.12)})`:`rgba(30,20,10,${R(.03,.09)})`;
+    g.lineWidth=R(.4,1); const x=rnd()*w,y=rnd()*h,a=rnd()*6.283;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+Math.cos(a)*R(4,14),y+Math.sin(a)*R(4,14)); g.stroke();
+  }
+  const vg=g.createLinearGradient(0,0,0,h);
+  vg.addColorStop(0,'rgba(0,0,0,.25)'); vg.addColorStop(.15,'rgba(0,0,0,0)'); vg.addColorStop(.85,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.25)');
+  g.fillStyle=vg; g.fillRect(0,0,w,h);
+  const fs=w*0.47, step=fs*1.35;
+  g.font=`500 ${fs}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle=tc; g.globalAlpha=.92;
+  let y=h/2-step*1.5; for(const c of '和綴之書'){ g.fillText(c,w/2,y); y+=step; }
+  const fa=w*0.36, sa=fa*1.25;
+  g.font=`500 ${fa}px ${FONT}`; y=h*0.78-sa*1.5;
+  for(const c of WA_AUTHOR){ g.fillText(c,w/2,y); y+=sa; }
+  g.globalAlpha=1;
+}
+function mergeGeos(list){
+  let vc=0,ic=0; list.forEach(g=>{ vc+=g.attributes.position.count; ic+=g.index.count; });
+  const pos=new Float32Array(vc*3),nor=new Float32Array(vc*3),uv=new Float32Array(vc*2),idx=new Uint16Array(ic);
+  let vo=0,io=0;
+  list.forEach(g=>{
+    const p=g.attributes.position;
+    pos.set(p.array,vo*3); nor.set(g.attributes.normal.array,vo*3); uv.set(g.attributes.uv.array,vo*2);
+    const ia=g.index.array; for(let k=0;k<ia.length;k++) idx[io+k]=ia[k]+vo;
+    vo+=p.count; io+=ia.length;
+  });
+  const out=new THREE.BufferGeometry();
+  out.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  out.setAttribute('normal',new THREE.BufferAttribute(nor,3));
+  out.setAttribute('uv',new THREE.BufferAttribute(uv,2));
+  out.setIndex(new THREE.BufferAttribute(idx,1));
+  return out;
+}
+const WA_R=0.0011, WA_OFF=0.0015, WA_LIFT=WA_R+WA_OFF;   // hexagonal cord: radius 1.1 mm, floats 1.5 mm off the surface
+function cylSeg(a,b,r){
+  const A=new THREE.Vector3(a[0],a[1],a[2]), B=new THREE.Vector3(b[0],b[1],b[2]);
+  const d=B.clone().sub(A).normalize(); A.addScaledVector(d,-r); B.addScaledVector(d,r);
+  const g=new THREE.CylinderGeometry(r,r,A.distanceTo(B),6,1);
+  const q=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),d);
+  g.applyMatrix4(new THREE.Matrix4().compose(A.clone().add(B).multiplyScalar(0.5),q,new THREE.Vector3(1,1,1)));
+  return g;
+}
+// Stitched binding (四つ目綴じ): a loop around the book + four ties that wrap over the spine.
+// Local frame: x = thickness (front cover at -x), y = height, z = page width (spine at +z).
+function cordGeometry(T,H,D,kx){
+  const r=WA_R,off=WA_OFF, zc=D/2-16.5*PXM*kx, zs=D/2+off;
+  const xf=-T/2-off, xb=T/2+off, yt=H/2+off, yb=-H/2-off, segs=[];
+  segs.push([[xf,yb,zc],[xf,yt,zc]],[[xb,yb,zc],[xb,yt,zc]],[[xf,yt,zc],[xb,yt,zc]],[[xf,yb,zc],[xb,yb,zc]]);
+  for(const p of [0.14,0.38,0.62,0.86]){
+    const y=H/2-p*H;
+    segs.push([[xf,y,zc],[xf,y,zs]],[[xf,y,zs],[xb,y,zs]],[[xb,y,zs],[xb,y,zc]]);
+  }
+  return mergeGeos(segs.map(sg=>cylSeg(sg[0],sg[1],r)));
+}
+const matCord=std({color:C('#6b4a2a'),roughness:0.85},0.25);
+const waBooks=[];
+const WA_MATS=WA_COLORS.map(c=>({
+  front:std({map:canvasTex(256,344,(g,w,h)=>drawWaCover(g,w,h,c.hex,c.title,true),{repeat:false}),roughness:0.78},0.3),
+  back:std({map:canvasTex(256,344,(g,w,h)=>drawWaCover(g,w,h,c.hex,c.title,false),{repeat:false}),roughness:0.78},0.3),
+  edge:std({color:C(c.hex),roughness:0.8},0.3)
+}));
+const WA_GEO=WA_SIZES.map(sz=>{
+  const D=230*PXM*sz.kx, H=310*PXM*sz.ky, T=19*PXM*sz.kz;
+  const body=new THREE.BoxGeometry(T,H,D);
+  regroupBox(body,[0,1,2,3,5,4],[1,1,3,1]);      // groups: +x back cover, -x front cover, pages, spine
+  return {D,H,T,body,cord:cordGeometry(T,H,D,sz.kx)};
+});
+// Stand all 27 books spine-out on the middle shelf. Old books are removed only as far as needed.
+function placeWabonRow(){
+  const y=1.25, zSpine=0.275, gap=0.002, groupGap=0.012;
+  let totalW=-groupGap; WA_GEO.forEach(g=>{ totalW+=(g.T+gap)*WA_COLORS.length+groupGap; });
+  const blockEnd=0.27, blockStart=blockEnd-totalW, oldEnd=blockStart-0.012;
+  if(oldEnd>-0.40) fillShelf(-0.43,oldEnd,y,0.405,0.30,{dMax:0.2,noLean:true,reserve:0.005});
+  let cx=blockStart;
+  WA_GEO.forEach((g,gi)=>{
+    WA_COLORS.forEach((c,ci)=>{
+      const hpx=Math.min(1200,Math.round(64*g.H/g.T));
+      const spine=std({map:canvasTex(64,hpx,(cg,w,h)=>drawWaSpine(cg,w,h,c.hex,c.title),{repeat:false}),roughness:0.78},0.3);
+      const body=new THREE.Mesh(g.body,[WA_MATS[ci].back,WA_MATS[ci].front,matPages,spine]);
+      const cord=new THREE.Mesh(g.cord,matCord);
+      body.castShadow=true; body.receiveShadow=true; cord.castShadow=true; cord.receiveShadow=true;
+      const grp=new THREE.Group(); grp.add(body); grp.add(cord);
+      grp.position.set(cx+g.T/2,y+WA_LIFT+g.H/2,zSpine-g.D/2);
+      booksG.add(grp); grp.userData.spine=spine; grp.userData.wa=waBooks.length; waBooks.push({gi:gi,ci:ci,grp:grp}); pickables.push(grp);
+      cx+=g.T+gap;
+    });
+    cx+=groupGap;
+  });
+}
+// left column
+fillShelf(-1.31,-0.47,0.82,0.405,0.34,{dMax:0.25});
+fillShelf(-1.31,-0.72,1.25,0.405,0.34,{dMax:0.25}); wasoStack(-0.58,1.25,0.19,3,0.05);
+fillShelf(-1.31,-0.66,1.68,0.43,0.34,{dMax:0.25});
+place(lathe(VASE,matCeladon),-0.54,1.68,0.2).scale.setScalar(0.34);
+// centre column
+fillShelf(-0.43,0.43,0.82,0.405,0.30,{dMax:0.2});
+placeWabonRow();
+place(lathe(BOWL,matRaku),0.36,1.25,0.17);
+fillShelf(-0.43,0.43,1.68,0.43,0.30,{dMax:0.2});
+// right column (chigai-dana)
+wasoStack(0.70,0.82,0.19,4,0.0); wasoStack(0.93,0.82,0.19,3,0.08);
+place(lathe(VASE,matCeladon),1.19,0.82,0.2).scale.setScalar(0.98);
+fillShelf(0.49,0.715,1.05,0.31,0.32,{dMax:0.22,noLean:true,reserve:0.004});
+place(lathe(BOWL,matRed),0.91,1.05,0.18);
+wasoStack(0.98,1.40,0.19,3,-0.05);
+place(lathe(VASE,matPorcelain),1.22,1.40,0.19).scale.setScalar(0.5);
+// top of the shelf
+place(lathe(KORO,matRaku),-1.05,2.18,0.17).scale.setScalar(1.15);
+wasoStack(-0.55,2.18,0.17,4,0.12);
+{
+  const g=new THREE.Group(); g.position.set(0.95,2.18,0.17); shelf.add(g);
+  const v=lathe(VASE,matPorcelain); v.scale.setScalar(0.72); g.add(v);
+  const branch=(pts,r,blossoms)=>{
+    const curve=new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(p[0],p[1],p[2])));
+    const tube=new THREE.Mesh(new THREE.TubeGeometry(curve,24,r,6,false),matBark); tube.castShadow=true; g.add(tube);
+    for(let i=0;i<blossoms;i++){
+      const p=curve.getPoint(R(0.25,1)), s=R(0.010,0.016);
+      const b=new THREE.Mesh(new THREE.IcosahedronGeometry(s,1),rnd()<0.7?matPink:matWhiteBlossom);
+      b.position.set(p.x+R(-0.035,0.035),p.y+R(-0.03,0.04),p.z+R(-0.035,0.035)); b.castShadow=true; g.add(b);
+    }
+  };
+  branch([[0,0.24,0],[0.03,0.36,0.01],[-0.02,0.5,0.03],[0.06,0.66,-0.01]],0.008,46);
+  branch([[0.03,0.36,0.01],[0.1,0.44,0.03],[0.17,0.52,0.05]],0.005,22);
+  branch([[-0.02,0.5,0.03],[-0.09,0.58,0.0],[-0.13,0.68,-0.03]],0.005,22);
+}
+
+/* ---------- andon lamp ---------- */
+const lampPos=new THREE.Vector3(2.0,0,1.0);
+{
+  const g=new THREE.Group(); g.position.copy(lampPos); scene.add(g);
+  box(0.36,0.035,0.36,matDark,0,0.0175,0,g);
+  for(const sx of [-1,1])for(const sz of [-1,1]) box(0.03,0.6,0.03,matDark,sx*0.165,0.335,sz*0.165,g);
+  box(0.38,0.03,0.38,matDark,0,0.65,0,g);
+  box(0.16,0.02,0.16,matDark,0,0.675,0,g);
+  const paper=box(0.30,0.56,0.30,matLampPaper,0,0.335,0,g); paper.castShadow=false;
+  for(const y of [0.16,0.335,0.51]) box(0.312,0.008,0.312,matDark,0,y,0,g).castShadow=false;
+  box(0.008,0.56,0.312,matDark,0,0.335,0,g).castShadow=false;
+  box(0.312,0.56,0.008,matDark,0,0.335,0,g).castShadow=false;
+}
+
+/* ---------- lights ---------- */
+const hemi=new THREE.HemisphereLight(0xffe9cf,0x5d4a2e,0.45); scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xfff0dc,1.8);
+sun.position.set(-3.2,3.6,3.6); sun.target.position.set(0,1.0,0.2);
+sun.castShadow=true; sun.shadow.mapSize.set(1536,1536);
+Object.assign(sun.shadow.camera,{left:-2.6,right:2.6,top:2.4,bottom:-2.4,near:1,far:12});
+sun.shadow.camera.updateProjectionMatrix(); sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.012; sun.shadow.radius=3;
+scene.add(sun,sun.target);
+const fill=new THREE.DirectionalLight(0xfff4e6,0.35); fill.position.set(1.5,1.6,4); fill.target.position.set(0,1.1,0.2); scene.add(fill,fill.target);
+const lampLight=new THREE.PointLight(0xffb15a,0,9,1.4); lampLight.position.set(lampPos.x,0.4,lampPos.z); scene.add(lampLight);   // lower decay softens the light's edge into a gentler gradient
+const inner=[
+  new THREE.PointLight(0xffc27a,0.4,0.35,3), new THREE.PointLight(0xffc27a,0.4,0.35,3), new THREE.PointLight(0xffc27a,0.4,0.35,3)
+];   // shortened reach + steeper falloff so these stay near the shelf and no longer light up the back wall
+inner[0].position.set(-0.88,1.5,0.2); inner[1].position.set(0,1.5,0.18); inner[2].position.set(0.9,1.5,0.22);
+inner.forEach(l=>shelf.add(l));   // parented to the shelf, not the scene, so they move with it instead of being left exposed, lighting the wall, once it slides away
+const cDaySun=new THREE.Color(0xfff0dc), cNightSun=new THREE.Color(0x8aa0d8);
+const cWinDay=new THREE.Color(1,0.975,0.93), cWinNight=new THREE.Color(0.55,0.5,0.42);
+const cDayHS=new THREE.Color(0xffe9cf), cNightHS=new THREE.Color(0x5c6a94);
+let lampBase=0;
+function applyMode(m){
+  sun.intensity=lerp(1.8,0.32,m); sun.color.copy(cDaySun).lerp(cNightSun,m);
+  hemi.intensity=lerp(0.45,0.12,m); hemi.color.copy(cDayHS).lerp(cNightHS,m);
+  fill.intensity=lerp(0.35,0.04,m);
+  lampBase=lerp(0,1.9,m);
+  inner.forEach(l=>{ l.intensity=lerp(0.4,1.4,m); });
+  matPaper.emissiveIntensity=lerp(0.12,0.95,m);
+  matLampPaper.emissiveIntensity=lerp(0.35,2.6,m);
+  winMat.color.copy(cWinDay).lerp(cWinNight,m);
+  renderer.toneMappingExposure=lerp(1.0,1.25,m);
+  const ef=lerp(1,0.28,m); for(const mm of allMats) mm.envMapIntensity=mm.userData.envBase*ef;
+}
+let mode=1, modeGoal=1; applyMode(1);
+
+/* ---------- camera / interaction ---------- */
+const home={theta:-0.16,phi:1.47,r:4.0,target:new THREE.Vector3(0,1.08,0.15)};
+const goal={theta:home.theta,phi:home.phi,r:home.r,target:home.target.clone()};
+const cur={theta:home.theta,phi:home.phi,r:home.r+1.4,target:home.target.clone()};
+let autoRotate=false;
+function fitRadius(){ const a=camera.aspect, t=Math.tan(THREE.MathUtils.degToRad(camera.fov/2)); return clamp(1.75/(t*a),4.0,6.6); }
+function resize(){
+  const w=host.clientWidth||window.innerWidth, h=host.clientHeight||window.innerHeight;
+  renderer.setSize(w,h); camera.aspect=w/h; camera.fov=camera.aspect<0.9?52:38; camera.updateProjectionMatrix();
+  home.r=fitRadius();
+}
+window.addEventListener('resize',resize); resize(); goal.r=home.r; cur.r=home.r+1.4;
+
+const $=id=>document.getElementById(id);
+function setAuto(v){ autoRotate=v; }
+const raycaster=new THREE.Raycaster(), ndc=new THREE.Vector2();
+function setNdc(e){ const r=host.getBoundingClientRect(); ndc.set((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1); raycaster.setFromCamera(ndc,camera); }
+// The target can be panned freely by the user, but only within this box -- it keeps every pan/zoom
+// gesture inside the room that's actually finished (the cabinet and the floor around it), so the
+// camera can never be dragged into the bare side walls or down into the unfinished stairwell.
+const TARGET_MIN=new THREE.Vector3(-2.1,0.25,-0.15), TARGET_MAX=new THREE.Vector3(2.1,2.35,2.5);   // z-min widens once the hidden room is revealed (see buildInnerRoom)
+// Bounds are different above ground vs. down in the stairwell -- clamping an underground target with
+// the above-ground box (whose y-minimum alone is +0.25) meant the target got yanked back up to the
+// room every single time, which is very likely what read as the camera always getting dragged the
+// same direction no matter which way the gesture went. Below ground, the only hard limit is not
+// going past the door; everything else in the corridor is fair game.
+function clampTarget(){
+  if(typeof trap!=='undefined'&&trap&&trap.opened&&goal.target.y<0.15){
+    const entranceX=TRAP_X_G+TRAP_W_G/2-0.14, doorWorldX=entranceX+STAIR_G.doorX;
+    goal.target.x=clamp(goal.target.x,doorWorldX,entranceX+0.3);          // never past the door, nor back out above the opening
+    goal.target.z=clamp(goal.target.z,TRAP_ZF_G+0.15,TRAP_ZN_G-0.15);     // stay inside the corridor's own width, not around the door's sides
+    goal.target.y=clamp(goal.target.y,STAIR_G.doorY-0.1,0.05);
+  }else{
+    goal.target.clamp(TARGET_MIN,TARGET_MAX);
+  }
+}
+function screenFocusPoint(clientX,clientY){
+  const r=host.getBoundingClientRect();
+  ndc.set((clientX-r.left)/r.width*2-1,-((clientY-r.top)/r.height)*2+1);
+  raycaster.setFromCamera(ndc,camera);
+  const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir);
+  const plane=new THREE.Plane().setFromNormalAndCoplanarPoint(camDir,goal.target);
+  const hit=new THREE.Vector3();
+  return raycaster.ray.intersectPlane(plane,hit) ? hit : null;
+}
+// Zooms toward the point under the cursor / the pinch midpoint, in real time, rather than always
+// toward the centre of the screen: the world point under (clientX,clientY) is found by raycasting
+// onto the plane through the current target, and the target is pulled toward it as the radius shrinks.
+function zoomToward(clientX,clientY,scaleFactor){
+  const focus=screenFocusPoint(clientX,clientY);
+  goal.r=clamp(goal.r*scaleFactor,0.7,6.6);
+  if(focus) goal.target.lerp(focus,clamp(1-scaleFactor,-0.4,0.4));
+  clampTarget();
+}
+function panBy(dxPix,dyPix){
+  const h=host.clientHeight||1;
+  const worldPerPixel=2*cur.r*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))/h;
+  if(typeof trap!=='undefined'&&trap&&trap.opened&&goal.target.y<0.15){
+    // Underground the camera faces almost straight down the corridor (theta=PI/2), so its own
+    // "right" vector has next to no X component -- the normal camera-relative pan below could only
+    // ever slide sideways, never toward or away from the door, which is exactly the complaint that
+    // dragging never reached the door's front. Drag along the corridor's own axis instead.
+    goal.target.x+=dxPix*worldPerPixel; goal.target.y+=dyPix*worldPerPixel;
+  }else{
+    const right=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,0);
+    const up=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,1);
+    goal.target.addScaledVector(right,-dxPix*worldPerPixel).addScaledVector(up,dyPix*worldPerPixel);
+  }
+  clampTarget();
+}
+const pointers=new Map(); let downInfo=null, pinchPrev=0, pinchMid=null;
+host.addEventListener('pointerdown',e=>{
+  try{ host.setPointerCapture(e.pointerId); }catch(_){}
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  downInfo={x:e.clientX,y:e.clientY,t:performance.now(),moved:false,multi:pointers.size>1};
+  if(pointers.size===2){ const [a,b]=[...pointers.values()]; pinchPrev=Math.hypot(a.x-b.x,a.y-b.y); pinchMid={x:(a.x+b.x)/2,y:(a.y+b.y)/2}; }
+});
+host.addEventListener('pointermove',e=>{
+  const p=pointers.get(e.pointerId);
+  if(!p){
+    setNdc(e); const hit=raycaster.intersectObjects(pickables,true);
+    host.style.cursor=hit.length?'pointer':''; return;
+  }
+  const dx=e.clientX-p.x, dy=e.clientY-p.y; p.x=e.clientX; p.y=e.clientY;
+  if(pointers.size===1){
+    if(downInfo&&Math.hypot(e.clientX-downInfo.x,e.clientY-downInfo.y)>6) downInfo.moved=true;
+    if(downInfo&&downInfo.moved){
+      const underground=typeof trap!=='undefined'&&trap&&trap.opened&&goal.target.y<0.15;
+      const thetaMin=underground?Math.PI/2-1.05:-1.05, thetaMax=underground?Math.PI/2+1.05:1.05;
+      goal.theta=clamp(goal.theta-dx*0.0055,thetaMin,thetaMax); goal.phi=clamp(goal.phi-dy*0.004,0.8,1.72); setAuto(false);
+    }
+  } else if(pointers.size===2){
+    // two fingers: pinch zooms toward the real-time midpoint between them, and dragging that
+    // midpoint pans the view -- both at once, like a phone map.
+    const [a,b]=[...pointers.values()], d=Math.hypot(a.x-b.x,a.y-b.y), mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+    if(pinchPrev>0){
+      zoomToward(mx,my,pinchPrev/d);
+      if(pinchMid) panBy(mx-pinchMid.x,my-pinchMid.y);
+      setAuto(false);
+    }
+    pinchPrev=d; pinchMid={x:mx,y:my}; if(downInfo) downInfo.multi=true;
+  }
+});
+function endPointer(e){
+  const wasSingle=pointers.size===1;
+  pointers.delete(e.pointerId); pinchPrev=0; pinchMid=null;
+  if(wasSingle&&downInfo&&!downInfo.moved&&!downInfo.multi&&performance.now()-downInfo.t<600){
+    if(SC.rig){ if(SC.goal>0) SC.goal=0; }
+    else{
+      setNdc(e); const hit=raycaster.intersectObjects(pickables,true);
+      if(hit.length){
+        const obj=hit[0].object;
+        if(obj===trapCatcher) tapTrap();
+        else if(isDescendant(obj,trapHinge)) toggleFlap();
+        else if(doorPanelRef&&obj===doorPanelRef) tapDoor();
+        else if(isDescendant(obj,shiori)) collectShiori();
+        else if(scrollGroup&&isDescendant(obj,scrollGroup)) toggleScroll();
+        else if(handleGroup&&(isDescendant(obj,handleGroup)||handleExtra.includes(obj))) tapHandle();
+        else{
+          const wa=findWa(obj);
+          if(wa) openShowcase(wa);
+          else{ const mv=findMv(obj); if(mv){ if(mv.tag==='shoji') setShoji(!shojiMvs.some(m=>m.goal>0.5)); else mv.goal=mv.goal?0:1; } }
+        }
+      } else if(trap.opened&&hitStairsOpening(raycaster.ray)){
+        // only reached when the tap hit nothing solid at all -- so a closed flap (a real pickable)
+        // always wins the branch above and opens instead, exactly like before.
+        descendStairs();
+      }
+    }
+  }
+  if(!pointers.size) downInfo=null;
+}
+host.addEventListener('pointerup',endPointer);
+host.addEventListener('pointercancel',e=>{ pointers.delete(e.pointerId); pinchPrev=0; pinchMid=null; if(!pointers.size) downInfo=null; });
+host.addEventListener('wheel',e=>{ e.preventDefault(); zoomToward(e.clientX,e.clientY,Math.exp(e.deltaY*0.0012)); },{passive:false});
+host.addEventListener('dblclick',e=>{
+  setNdc(e); const hit=raycaster.intersectObjects(scene.children,true).find(h=>h.object.isMesh&&h.object.visible);
+  if(hit){
+    goal.target.set(clamp(hit.point.x,-1.8,1.8),clamp(hit.point.y,0.35,2.3),clamp(hit.point.z,0,0.5));
+    goal.r=clamp(hit.distance*0.55,0.8,2.2); setAuto(false);
+  }
+});
+
+/* ---------- showcase: tap a book -> it floats out, spins 180 degrees, then opens ---------- */
+const ease=t=>t*t*(3-2*t);
+const scRoot=new THREE.Group(); scRoot.visible=false; scene.add(scRoot);
+const showLight=new THREE.PointLight(0xffe6bd,0,4.5,2); scene.add(showLight);
+const SC={rig:null,wa:null,u:0,goal:0,th:0,scale:1,start:new THREE.Vector3(),P:new THREE.Vector3(),right:new THREE.Vector3(),toCam:new THREE.Vector3()};
+function findWa(o){ while(o){ if(o.userData&&o.userData.wa!==undefined) return waBooks[o.userData.wa]; o=o.parent; } return null; }
+const WA_TEXT_A='つれづれなるままに、日暮らし、硯にむかひて、心にうつりゆくよしなし事を、そこはかとなく書きつくれば、あやしうこそものぐるほしけれ。';
+const WA_TEXT_B='行く川の流れは絶えずして、しかももとの水にあらず。よどみに浮かぶうたかたは、かつ消えかつ結びて、久しくとどまりたる例なし。世の中にある人と栖と、またかくのごとし。';
+function drawSheet(g,w,h,text,shade){
+  drawPaper(g,w,h,{base:'#efe4c8',fibers:900});
+  if(!text) return;
+  const mx=w*0.09, my=h*0.08, cols=8, cw=(w-2*mx)/cols;
+  g.strokeStyle='rgba(90,60,30,.55)'; g.lineWidth=2; g.strokeRect(mx*0.7,my*0.7,w-mx*1.4,h-my*1.4);
+  g.strokeStyle='rgba(90,60,30,.22)'; g.lineWidth=1;
+  for(let i=1;i<cols;i++){ g.beginPath(); g.moveTo(mx+cw*i,my); g.lineTo(mx+cw*i,h-my); g.stroke(); }
+  const fs=cw*0.62, step=fs*1.12, per=Math.floor((h-2*my)/step);
+  g.font=`500 ${fs}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle';
+  [...text].forEach((ch,i)=>{
+    const col=Math.floor(i/per), row=i%per;
+    if(col>=cols) return;
+    const cx=w-mx-cw*(col+0.5), cy=my+step*(row+0.5), pu='、。'.indexOf(ch)>=0;
+    g.fillStyle=`rgba(32,24,18,${R(.78,.92).toFixed(2)})`;
+    g.fillText(ch,pu?cx+fs*0.45:cx,pu?cy-fs*0.45:cy);
+  });
+  // the original bakes shadows next to the gutter: 30px ramp on the left page, 10px on the right page (page body = 211px wide)
+  if(shade==='left'){ const gr=g.createLinearGradient(w*188/211,0,w,0); gr.addColorStop(0,'rgba(16,11,7,0)'); gr.addColorStop(1,'rgba(16,11,7,.31)'); g.fillStyle=gr; g.fillRect(w*188/211,0,w*23/211,h); }
+  if(shade==='right'){ const gr=g.createLinearGradient(0,0,w*10/211,0); gr.addColorStop(0,'rgba(16,11,7,.4)'); gr.addColorStop(1,'rgba(16,11,7,0)'); g.fillStyle=gr; g.fillRect(0,0,w*10/211,h); }
+}
+let SHEETS=null;
+function ensureSheets(){
+  if(SHEETS) return SHEETS;
+  const mk=(txt,sd)=>std({map:canvasTex(384,512,(g,w,h)=>drawSheet(g,w,h,txt,sd),{repeat:false}),roughness:0.9},0.2);
+  SHEETS={A:mk(WA_TEXT_A,'left'),B:mk(WA_TEXT_B,'right'),N:mk('')};
+  return SHEETS;
+}
+function setFaceU(geo,face,u0,u1){
+  const uv=geo.attributes.uv;
+  for(let i=face*4;i<face*4+4;i++) uv.setX(i,u0+uv.getX(i)*(u1-u0));
+  uv.needsUpdate=true;
+}
+// Cords: those lying on the front cover (hidden once it opens), fixed ones, and those running through the thickness
+// (top/bottom edge cords and the wraps over the spine). The latter are shortened while open, exactly like the original.
+function cordParts(T,H,D,kx){
+  const r=WA_R,off=WA_OFF, zc=D/2-16.5*PXM*kx, zs=D/2+off;
+  const xf=-T/2-off, xb=T/2+off, yt=H/2+off, yb=-H/2-off, front=[], fixed=[], tb=[], wr=[];
+  front.push([[xf,yb,zc],[xf,yt,zc]]);
+  fixed.push([[xb,yb,zc],[xb,yt,zc]]);
+  tb.push([[xf,yt,zc],[xb,yt,zc]],[[xf,yb,zc],[xb,yb,zc]]);
+  for(const p of [0.14,0.38,0.62,0.86]){
+    const y=H/2-p*H;
+    front.push([[xf,y,zc],[xf,y,zs]]);
+    wr.push([[xf,y,zs],[xb,y,zs]]);
+    fixed.push([[xb,y,zs],[xb,y,zc]]);
+  }
+  const m=a=>mergeGeos(a.map(sg=>cylSeg(sg[0],sg[1],r)));
+  return {front:m(front),fixed:m(fixed),tb:m(tb),wr:m(wr),xb:xb,xfEnd:xf-r};
+}
+// Openable book, rebuilt from the original CSS (all numbers are the original CSS pixels):
+//  * every leaf = a BODY (x 0..211, hinged at its right edge x=211, the plane of the vertical cords)
+//                 + a fixed STRIP (21px, x 209..230) between the cords and the spine.
+//  * opening: the 3 upper bodies swing 178deg about x=211 and then sit 4px to the left;
+//    the strips do NOT move sideways, they only turn over in place. Depths: cover 9->1, page1 5->5, page2 1->9.
+//  * left page = the body of leaf 3 (depth -3). The book slides 107px to the left when open.
+// Local frame = the shelf book: x depth (front cover at -x), y up, z = CSS x (spine at +z).
+function buildRig(wa){
+  scRoot.traverse(o=>{ if(o.isMesh) o.geometry.dispose(); });
+  while(scRoot.children.length) scRoot.remove(scRoot.children[0]);
+  const g=WA_GEO[wa.gi], sz0=WA_SIZES[wa.gi], mats=WA_MATS[wa.ci], sh=ensureSheets(), E=mats.edge, P=matPages;
+  const sx=PXM*sz0.kx, sz=PXM*sz0.kz, D=g.D, H=g.H, ts=0.0012;
+  const Z=px=>(px-115)*sx, X=dep=>-(dep+0.75)*sz, stripDX=-0.0003;
+  const rig=new THREE.Group(); scRoot.add(rig);
+  const LV=[
+    {f:9,  s:4,   od:5, opens:1, dly:0,     sr:0 },
+    {f:5,  s:4,   od:7, opens:1, dly:0.125, sr:.6},
+    {f:1,  s:4,   od:9, opens:1, dly:0.25,  sr:.6},
+    {f:-3, s:4,   sr:.6},
+    {f:-7, s:3,   sr:.6},
+    {f:-10,s:0.5, sr:0 }
+  ];
+  const bodies=[]; let fadeMat=null;
+  LV.forEach((L,i)=>{
+    const th=L.s*sz, c0=L.f-L.s/2, c1=L.od!==undefined?L.od-L.s/4:c0;   // opened: half the thickness, front face at depth od
+    let bB=sh.N,bF=sh.N,sB=sh.N,sF=sh.N;
+    if(i===0){ bF=mats.front; sF=mats.front; }
+    if(i===2){ bB=sh.B; }                       // right page (seen after flipping)
+    if(i===3){ bF=sh.A; }                       // left page
+    if(i===5){ bB=mats.back; sB=mats.back; }    // outer back cover
+    const ed=(i===0||i===5)?E:P;
+    const bodyMat=[bB,bF,ed,ed,ed,ed], stripMat=[sB,sF,ed,ed,ed,ed];
+    const bgeo=new THREE.BoxGeometry(th,H,211*sx), sgeo=new THREE.BoxGeometry(th,H,21*sx);
+    const s0=209-L.sr, s1=230-L.sr;
+    if(i===0){ setFaceU(bgeo,1,0,211/230); setFaceU(sgeo,1,s0/230,s1/230); }
+    if(i===5){ setFaceU(bgeo,0,19/230,1); setFaceU(sgeo,0,(230-s1)/230,(230-s0)/230); }
+    const zStrip=Z((s0+s1)/2);
+    if(L.opens){
+      const hb=new THREE.Group(); hb.position.set(X(c0),0,Z(211)); rig.add(hb);
+      const mb=new THREE.Mesh(bgeo,bodyMat); mb.position.z=-105.5*sx; hb.add(mb);
+      bodies.push({g:hb,m:mb,x0:X(c0),x1:X(c1),dly:L.dly,z0:Z(211)});
+      // the strip between the cord plane and the spine never moves. Only its outer face changes, by a quick cross-fade:
+      // cover (closed) -> blank paper (open); the paper sits just under the cover face.
+      if(i===0){
+        if(!mats.stripFade){ const cm=mats.front.clone(); cm.transparent=true; cm.userData.envBase=mats.front.userData.envBase; allMats.push(cm); mats.stripFade=cm; }
+        stripMat[1]=mats.stripFade; fadeMat=mats.stripFade;
+        const pl=new THREE.Mesh(new THREE.PlaneGeometry(21*sx,H),sh.N);
+        pl.rotation.y=-Math.PI/2; pl.position.set(X(c0)+stripDX-th/2+0.0001,0,zStrip); rig.add(pl);
+      }
+      const ms=new THREE.Mesh(sgeo,stripMat); ms.position.set(X(c0)+stripDX,0,zStrip); rig.add(ms);
+    }else{
+      const mb=new THREE.Mesh(bgeo,bodyMat); mb.position.set(X(c0),0,Z(105.5)); rig.add(mb);
+      const ms=new THREE.Mesh(sgeo,stripMat); ms.position.set(X(c0)+stripDX,0,zStrip); rig.add(ms);
+    }
+  });
+  const T=19.5*sz;
+  const sp=new THREE.Mesh(new THREE.BoxGeometry(T,H,ts),[E,E,E,E,wa.grp.userData.spine,E]);   // spine panel
+  sp.position.set(0,0,Z(230)+ts/2); rig.add(sp);
+  const cp=cordParts(T,H,D,sz0.kx);
+  const mk=(geo,xEnd)=>{                                                                        // shortenable cord group, pivot at the back
+    const grp=new THREE.Group(); grp.position.x=cp.xb; rig.add(grp);
+    const me=new THREE.Mesh(geo,matCord); me.position.x=-cp.xb; grp.add(me);
+    return {g:grp,k:xEnd===undefined?1:(cp.xb-xEnd)/(cp.xb-cp.xfEnd)};
+  };
+  rig.add(new THREE.Mesh(cp.fixed,matCord));
+  const tb=mk(cp.tb,X(8.5)), wr=mk(cp.wr,X(6.5));                                              // original: front ends pulled back to depth 8.5 / 6.5
+  const frontCords=new THREE.Mesh(cp.front,matCord); rig.add(frontCords);
+  fadeMat&&(fadeMat.opacity=1);
+  return {bodies:bodies,fade:fadeMat,frontCords:frontCords,tb:tb,wr:wr};
+}
+function openShowcase(wa){
+  if(SC.rig) return;
+  if(goal.r<2.4){ goal.r=2.6; goal.target.copy(home.target); }
+  SC.wa=wa; SC.rig=buildRig(wa); SC.kx=WA_SIZES[wa.gi].kx;
+  const th=goal.theta; SC.th=th;
+  SC.toCam.set(Math.sin(th),0,Math.cos(th)); SC.right.set(Math.cos(th),0,-Math.sin(th));
+  wa.grp.updateWorldMatrix(true,false); wa.grp.getWorldPosition(SC.start);
+  const dist=clamp(goal.r*0.55,0.9,2.2);
+  SC.P.set(goal.target.x+SC.toCam.x*dist, goal.target.y+0.15, 0.36+SC.toCam.z*dist);
+  const dcam=Math.max(0.8,goal.r-dist+0.2);
+  const visH=2*dcam*Math.tan(THREE.MathUtils.degToRad(camera.fov/2)), visW=visH*camera.aspect;
+  SC.scale=Math.min(0.42*visH/0.2325,0.86*visW/(2*WA_GEO[0].D));
+  wa.grp.visible=false; scRoot.visible=true; SC.u=0; SC.goal=2;
+}
+const _tmp=new THREE.Vector3();
+function updateShowcase(dt,time){
+  if(!SC.rig) return;
+  const sp=SC.goal>SC.u?0.95:1.25;
+  SC.u+=clamp(SC.goal-SC.u,-dt*sp,dt*sp);
+  const u=SC.u, a=ease(clamp(u,0,1)), rr=ease(clamp((u-0.3)/0.7,0,1));
+  const yaw=lerp(0,Math.PI/2+SC.th,rr);                                     // one direct turn about the vertical axis: the front cover comes straight to the camera
+  const v=clamp(u-1,0,1), open=ease(v), sc=lerp(1,SC.scale,a);
+  scRoot.position.copy(SC.start).lerp(SC.P,a);
+  scRoot.position.x=lerp(SC.start.x,SC.P.x,ease(clamp((u-0.3)/0.7,0,1)));   // slide sideways only after the book has cleared the cabinet
+  scRoot.position.y+=Math.sin(time*1.6)*0.006*a;
+  scRoot.position.addScaledVector(SC.right,-(107*PXM*SC.kx*sc)*open);         // original: the opened book slides 107px to the left
+  scRoot.rotation.y=yaw; scRoot.scale.setScalar(sc);
+  SC.rig.bodies.forEach(B=>{
+    const e=ease(clamp((v-B.dly)/0.75,0,1));
+    B.g.rotation.y=Math.PI*178/180*e;                                          // rotateY(178deg) about x=211 (the cord plane)
+    B.g.position.x=lerp(B.x0,B.x1,e);
+    B.g.position.z=B.z0-4*PXM*SC.kx*e;                                         // translateX(-4px)
+    B.m.scale.x=lerp(1,0.5,e);                                                 // the flipped pages get half as thick
+  });
+  if(SC.rig.fade){ const e0=ease(clamp(v/0.75,0,1)); SC.rig.fade.opacity=1-clamp((e0-0.35)/0.3,0,1); }
+  SC.rig.frontCords.visible=v<0.02;
+  const kc=ease(clamp(v/0.4,0,1));
+  SC.rig.tb.g.scale.x=lerp(1,SC.rig.tb.k,kc); SC.rig.wr.g.scale.x=lerp(1,SC.rig.wr.k,kc);
+  showLight.intensity=a*lerp(0.9,1.7,mode);
+  showLight.position.copy(scRoot.position); showLight.position.y+=0.55; showLight.position.addScaledVector(SC.toCam,0.6);
+  if(SC.goal===0&&u<=0.0001){
+    SC.wa.grp.visible=true; scRoot.visible=false; showLight.intensity=0;
+    scRoot.traverse(o=>{ if(o.isMesh) o.geometry.dispose(); });
+    while(scRoot.children.length) scRoot.remove(scRoot.children[0]);
+    SC.rig=null; SC.wa=null; SC.u=0;
+  }
+}
+
+/* ---------- hidden puzzle: 5 quick taps on the tatami in front of the shelf ---------- */
+// Nothing about the floor is touched until the puzzle actually triggers, so there is nothing to look
+// wrong or flicker beforehand: an invisible "catcher" plane (raycastable, never drawn) sits over the
+// tatami area in front of the cabinet and only counts taps. On the 5th tap (within TRAP_TAP_WINDOW ms
+// of the last) the real tile at that spot on the tatami grid is hidden and swapped, in the same
+// instant, for a matching tatami-textured flap that swings 90 degrees open on its far long edge
+// (the edge nearest the shelf), lifting up and back like a real cellar hatch so it clears the
+// opening entirely, revealing a wooden staircase (the cabinet's own wood texture) that descends
+// from one of the opening's short edges into darkness. The underground room itself isn't built yet,
+// so the stairs simply fade to black; extend `stairs` (built inside openTrap()) here once that space
+// exists.
+const TRAP_TAP_WINDOW=900;                                    // ms allowed between taps before the count resets
+const trap={taps:0,last:0,built:false,opened:false,t:0,goal:0};  // built once (5 taps); opened toggles after that (1 tap)
+let trapHinge=null;                                           // only created once the puzzle actually triggers
+let stairDoor=null, doorPanelRef=null, hasKey=false;          // the locked door at the bottom of the stairs, and whether it's been unlocked
+let stairsOpening=null;                                       // {xMin,xMax,zMin,zMax,y} over the revealed opening -- tapping inside it starts the descend camera move
+function hitStairsOpening(ray){
+  if(!stairsOpening) return false;
+  const t=(stairsOpening.y-ray.origin.y)/ray.direction.y;
+  if(!(t>0)) return false;
+  const x=ray.origin.x+ray.direction.x*t, z=ray.origin.z+ray.direction.z*t;
+  return x>=stairsOpening.xMin&&x<=stairsOpening.xMax&&z>=stairsOpening.zMin&&z<=stairsOpening.zMax;
+}
+let TRAP_X_G=0, TRAP_W_G=1.8, TRAP_ZF_G=0.9, TRAP_ZN_G=1.8;    // the tile's grid position, kept for descendStairs() to aim at
+const STAIR_G={};                                              // lastTreadFarX/doorX/doorY/landW, filled in by openTrap()
+const catcherMat=std({color:0x000000},0);
+catcherMat.transparent=true; catcherMat.opacity=0; catcherMat.depthWrite=false;
+const trapCatcher=new THREE.Mesh(new THREE.PlaneGeometry(3.4,1.9),catcherMat);
+trapCatcher.rotation.x=-Math.PI/2; trapCatcher.position.set(0,0.002,1.4);
+scene.add(trapCatcher); pickables.push(trapCatcher);
+function openTrap(){
+  try{
+    // snap onto the real tatami grid (the row just in front of the shelf, the column nearest centre)
+    // so the flap that replaces it lines up with its neighbours exactly.
+    const rows=Math.ceil(ROOM_D/0.9), cols=Math.ceil(ROOM_W/1.8)+1, ti=1;
+    let bestK=0,bestX=Infinity;
+    for(let k=0;k<cols;k++){ const x=-ROOM_W/2+0.9+1.8*k-(ti%2)*0.9; if(Math.abs(x)<Math.abs(bestX)){ bestX=x; bestK=k; } }
+    const TRAP_X=bestX, TRAP_ZF=0.9*ti, TRAP_ZN=0.9*ti+0.9, TRAP_W=1.8, TRAP_D=0.9, TRAP_THICK=0.045;
+    TRAP_X_G=TRAP_X; TRAP_W_G=TRAP_W; TRAP_ZF_G=TRAP_ZF; TRAP_ZN_G=TRAP_ZN;
+    if(tatamiInst){                                             // remove the real tile this flap replaces
+      tatamiInst.setMatrixAt(ti*cols+bestK,new THREE.Matrix4().makeScale(0,0,0));
+      tatamiInst.instanceMatrix.needsUpdate=true;
+    }
+    const zF=TRAP_ZF, zN=TRAP_ZN;    // the tile's own front/back edges, still used to size the frame-free opening
+    const z0=zF, z1=zN;
+    const N=18, rise=0.19, run=0.24, w=TRAP_D-0.14;                                     // 18 steps: twice the original run
+    // enters from a short edge of the opening (x, near TRAP_W/2) and descends along X, not along the
+    // long edge the door hinges on -- width now spans the short (Z) dimension instead.
+    const stairs=new THREE.Group(); stairs.position.set(TRAP_X+TRAP_W/2-0.14,0,(z0+z1)/2); scene.add(stairs);
+    for(let i=0;i<N;i++){
+      const y=-0.07-rise*i, x=-run*i;
+      box(run+0.03,0.045,w,matMid,x,y,0,stairs);                                         // tread
+      box(0.04,rise+0.02,w,matMid,x+run/2,y-rise/2+0.03,0,stairs);                        // riser
+    }
+    // Decorative side walls flanking the whole run, styled after the cabinet itself (wood panel with
+    // dark cabinetry trim and a thin gold accent line) instead of the bare dark pit-wall colour.
+    const totalRun=run*N, totalDrop=rise*N, slopeAng=Math.atan2(-totalDrop,-totalRun);
+    for(const sz of [-1,1]){
+      const wall=new THREE.Group();
+      wall.position.set(-totalRun/2,-totalDrop/2,sz*(w/2+0.035)); wall.rotation.z=slopeAng; stairs.add(wall);
+      const wl=Math.hypot(totalRun,totalDrop);
+      // The panel's local +Y runs DOWNWARD once tilted to the slope (a quick check: rotating (0,1) by
+      // slopeAng gives a world-Y component of -totalRun/L, negative, i.e. down); local Y=0 sits right
+      // on the slope's own centreline, which itself passes through the tatami's surface exactly at the
+      // top of the stairs. So the panel is built spanning LOCAL Y 0..0.82 (never negative) -- entirely
+      // in the safe, downward direction -- instead of centred on 0, which used to push its other edge
+      // up through the tatami right at the entrance.
+      box(wl,0.82,0.03,matMid,0,0.41,0,wall);                                              // panel, z in [-0.015,+0.015]
+      // trim/mullions are mounted PROUD of the panel's own front face (z=+0.015), starting exactly
+      // there and extending further out -- never sharing the panel's own z-range, so there is no
+      // volume where the two could compete for the same pixels.
+      const tz=0.015+0.006;                                                                // trim/mullion centre z
+      box(wl,0.03,0.012,matDark,0,0.80,tz,wall); box(wl,0.03,0.012,matDark,0,0.02,tz,wall); // top/bottom trim
+      box(wl,0.012,0.013,matGold,0,0.71,tz,wall);                                           // gold accent line
+      const panels=Math.round(wl/0.5)||1;
+      for(let i=1;i<panels;i++) box(0.03,0.76,0.012,matDark,-wl/2+wl*i/panels,0.41,tz,wall); // vertical mullions, shelf-style
+    }
+    // A locked door at the foot of the stairs. It opens once the shiori key (hidden behind the
+    // cabinet) has been found -- see hasKey/tapDoor() below -- and stays shut until then. The room
+    // beyond it isn't built yet, so opening it just reveals darkness for now.
+    const doorH=1.29;                                                        // 1.5x the original 0.86 height
+    const lastTreadFarX=-run*(N-1)-(run+0.03)/2;
+    const landW=w+1.1, doorX=lastTreadFarX-landW, doorY=-0.07-rise*(N-1);   // landing lengthened so the door frames cleanly once the (unchanged) descend camera move settles
+    box(landW,0.05,w,matMid,(lastTreadFarX+doorX)/2,doorY-0.025,0,stairs);
+    const doorHinge=new THREE.Group(); doorHinge.position.set(doorX,doorY,-w/2); stairs.add(doorHinge);
+    const doorPanel=box(0.05,doorH,w,matMid,0,doorH/2,w/2,doorHinge);
+    box(0.055,0.06,w+0.06,matDark,0,doorH,w/2,doorHinge); box(0.055,0.06,w+0.06,matDark,0,0,w/2,doorHinge);
+    box(0.03,0.05,0.05,matGold,0.03,doorH/2,w-0.05,doorHinge);                              // latch, at the free edge
+    stairDoor={hinge:doorHinge,t:0,goal:0}; doorPanelRef=doorPanel;
+    pickables.push(doorPanel);
+    STAIR_G.lastTreadFarX=lastTreadFarX; STAIR_G.doorX=doorX; STAIR_G.doorY=doorY; STAIR_G.landW=landW; STAIR_G.doorH=doorH;
+    trapHinge=new THREE.Group(); trapHinge.position.set(TRAP_X,0,TRAP_ZF); scene.add(trapHinge);
+    const trapTile=new THREE.Mesh(new THREE.BoxGeometry(TRAP_W,TRAP_THICK,TRAP_D),
+      [matTatami,matTatami,matTatami,matMid,matTatami,matTatami]);                      // +x,-x,+y(top),-y(underside),+z,-z
+    trapTile.position.set(0,-TRAP_THICK/2,TRAP_D/2);
+    trapTile.castShadow=true; trapTile.receiveShadow=true;
+    trapHinge.add(trapTile); pickables.push(trapTile);   // was missing entirely -- taps on the flap could never be detected
+    trapCatcher.visible=false;
+    const ci=pickables.indexOf(trapCatcher); if(ci>=0) pickables.splice(ci,1);
+    // tapping down into the now-empty opening starts the descend camera move -- detected with pure
+    // ray/plane maths in endPointer (see hitStairsOpening below), not a rendered mesh, so there is
+    // nothing here that could ever show up as a stray visible surface.
+    stairsOpening={xMin:TRAP_X-TRAP_W/2,xMax:TRAP_X+TRAP_W/2,zMin:TRAP_ZF,zMax:TRAP_ZN,y:-0.05};
+    trap.opened=true; trap.goal=1;
+  }catch(err){ console.error('hidden puzzle: failed to open',err); }
+}
+function toggleFlap(){ trap.opened=!trap.opened; trap.goal=trap.opened?1:0; }
+function isDescendant(o,anc){ if(!anc) return false; while(o){ if(o===anc) return true; o=o.parent; } return false; }
+function tapDoor(){
+  if(!stairDoor) return;
+  if(!hasKey){
+    const base=stairDoor.hinge.rotation.y; let n=0;
+    const id=setInterval(()=>{ stairDoor.hinge.rotation.y=base+(n%2?0.06:-0.06); n++; if(n>5){ clearInterval(id); stairDoor.hinge.rotation.y=base; } },70);
+    return;
+  }
+  stairDoor.goal=stairDoor.goal?0:1;
+}
+// Rather than jumping straight to a fixed viewpoint, the target itself glides down the slope over
+// a few seconds while r/theta/phi stay fixed -- since the offset from target to camera never
+// changes, and the target moves in a straight line down the stairs, the camera keeps exactly the
+// same distance from the stair surface throughout, which reads as smoothly walking down them.
+let stairsRide=null;
+function descendStairs(){
+  if(!trap.opened||stairsRide) return;
+  const run=0.24, rise=0.19, START_STEP=3, z=(TRAP_ZF_G+TRAP_ZN_G)/2, x0=TRAP_X_G+TRAP_W_G/2-0.14;
+  goal.theta=Math.PI/2; goal.phi=0.71; goal.r=3.0; setAuto(false);
+  // Two phases: first (0..SPLIT) is exactly the original tread-following glide -- phi fixed, target
+  // following the tread line down to the landing -- unchanged from what already worked. Only the
+  // last stretch (SPLIT..1) swings the aim point over to the door's own centre and eases phi down to
+  // exactly level, so the door ends up centred and faced dead-on right at the very end, without
+  // disturbing the well-tuned descent that came before it. STAIR_G.* are LOCAL to the stairs group,
+  // so x0 (the group's own world position) is added back in to get real world coordinates.
+  const sx=x0-run*START_STEP, sy=-0.07-rise*START_STEP;
+  const mx=x0+(STAIR_G.lastTreadFarX+STAIR_G.doorX)/2, my=STAIR_G.doorY;
+  const ex=x0+STAIR_G.doorX, ey=STAIR_G.doorY+STAIR_G.doorH/2;
+  // Levelling off at the SAME r=3.0 would swing the camera ~3m back up the corridor while it's
+  // still at floor height -- and the corridor (unlike the landing) is filled by the actual sloped
+  // treads there, which is exactly the "sinks into the stairs" collision. So r eases down to 0.8
+  // over the same final stretch: by the time the view is level (phi=PI/2), the camera has pulled
+  // in close enough to stay within the landing itself, clear of every tread.
+  stairsRide={t:0,duration:5.5,split:0.78,sx,sy,mx,my,ex,ey,z,phi0:0.71,phi1:Math.PI/2,r0:3.0,r1:1.6};
+}
+function tapTrap(){
+  if(trap.revealed) return;
+  const now=performance.now();
+  if(now-trap.last>TRAP_TAP_WINDOW) trap.taps=0;
+  trap.taps++; trap.last=now;
+  if(trap.taps>=5){ trap.revealed=true; openTrap(); }
+}
+
+/* ---------- hidden compartment: the centre back panel hides the shiori key ---------- */
+// NOTE: the cabinet sits flush against the back wall, so there's no literal walk-in room modelled
+// behind it. As a stand-in for "hidden behind the cabinet", the centre panel behind the shoji doors
+// slides forward (the same sliding-panel mechanism as the doors and drawers) to reveal a shallow
+// compartment with the shiori sitting in it. A real room back there would be a good follow-up.
+let shiori=null;
+makeMovable(centerBackPanel,'z',0.05,'secret-panel');
+{
+  const shioriMat=std({color:C('#7a2f3a'),roughness:0.7},0.3);
+  shiori=new THREE.Group(); shiori.position.set(0,1.55,0.008); shelf.add(shiori);  // tucked in the 14mm gap behind the closed panel, so it doesn't clip through it
+  box(0.03,0.16,0.004,shioriMat,0,0,0,shiori);
+  box(0.03,0.01,0.004,matGold,0,0.075,0.002,shiori);
+  const tassel=new THREE.Mesh(new THREE.ConeGeometry(0.012,0.03,8),matGold);
+  tassel.castShadow=true; tassel.position.set(0,-0.095,0); shiori.add(tassel);
+  pickables.push(shiori);
+}
+function collectShiori(){
+  if(hasKey||!shiori) return;
+  hasKey=true; shiori.visible=false;
+  const idx=pickables.indexOf(shiori); if(idx>=0) pickables.splice(idx,1);
+}
+
+/* ---------- hidden doorway + second room, behind where the shelf slides away from ---------- */
+// Nothing here is built until the shelf is actually opened for the first time (see
+// buildInnerRoom(), called from tapHandle()) -- exactly like the tatami trapdoor -- so there is
+// nothing for the camera to peek at behind or around the shelf before that happens.
+const WALL_T=0.15;
+const doorW=0.75, doorH=1.9, doorX0=-1.3, doorX1=doorX0+doorW;   // sits within the strip the shelf uncovers once slid open
+let innerRoomBuilt=false;
+function buildInnerRoom(){
+  if(innerRoomBuilt) return; innerRoomBuilt=true;
+  try{
+    scene.remove(backWall); backWall.geometry.dispose();
+    // Same material and same shadow behaviour as the original single plane (matWallA, receiveShadow
+    // only, never castShadow) -- so cutting the doorway changes nothing about how this wall is lit;
+    // only the doorway opening itself is new.
+    const leftW=doorX0+ROOM_W/2, rightW=ROOM_W/2-doorX1;
+    const wSeg1=box(leftW,ROOM_H,WALL_T,matWallA,(-ROOM_W/2+doorX0)/2,ROOM_H/2,-WALL_T/2,scene);
+    const wSeg2=box(rightW,ROOM_H,WALL_T,matWallA,(doorX1+ROOM_W/2)/2,ROOM_H/2,-WALL_T/2,scene);
+    const wSeg3=box(doorW,ROOM_H-doorH,WALL_T,matWallA,(doorX0+doorX1)/2,(doorH+ROOM_H)/2,-WALL_T/2,scene);
+    [wSeg1,wSeg2,wSeg3].forEach(m=>{ m.castShadow=false; m.receiveShadow=true; });
+    // thin dark-wood trim around the opening, mounted on the front face
+    box(0.04,doorH+0.04,0.03,matDark,doorX0-0.02,doorH/2,0.02,scene);
+    box(0.04,doorH+0.04,0.03,matDark,doorX1+0.02,doorH/2,0.02,scene);
+    box(doorW+0.08,0.04,0.03,matDark,(doorX0+doorX1)/2,doorH+0.02,0.02,scene);
+    // narrow the tokonoma-style alcove patch so it no longer overlaps the new opening
+    alcove.geometry.dispose(); alcove.geometry=new THREE.PlaneGeometry(1.54-doorX1,ROOM_H);
+    alcove.position.x=(doorX1+1.54)/2;
+    // a fusuma panel across the opening, sliding sideways to reveal the room beyond
+    const newDoor=fusumaDoor(doorW,doorH);
+    newDoor.position.set((doorX0+doorX1)/2,doorH/2,0.03); scene.add(newDoor);
+    makeMovable(newDoor,'x',doorW+0.02,'inner-door');
+    // the second room itself -- floor, three walls and a ceiling, starting WALL_T beyond the back wall
+    const ROOM2_W=3.0, ROOM2_D=3.0, z0=-WALL_T, z1=-WALL_T-ROOM2_D, zc=(z0+z1)/2;
+    const floor2=new THREE.Mesh(new THREE.PlaneGeometry(ROOM2_W,ROOM2_D),matTatami);
+    floor2.rotation.x=-Math.PI/2; floor2.position.set(0,0,zc); floor2.receiveShadow=true; scene.add(floor2);
+    const ceil2=new THREE.Mesh(new THREE.PlaneGeometry(ROOM2_W,ROOM2_D),std({map:tDark,roughness:0.7},0.3));
+    ceil2.rotation.x=Math.PI/2; ceil2.position.set(0,ROOM_H,zc); scene.add(ceil2);
+    const farWall2=new THREE.Mesh(new THREE.PlaneGeometry(ROOM2_W,ROOM_H),matWallA);
+    farWall2.position.set(0,ROOM_H/2,z1); farWall2.receiveShadow=true; scene.add(farWall2);
+    for(const s of [-1,1]){
+      const w2=new THREE.Mesh(new THREE.PlaneGeometry(ROOM2_D,ROOM_H),matWallA);
+      w2.rotation.y=s<0?Math.PI/2:-Math.PI/2; w2.position.set(s*ROOM2_W/2,ROOM_H/2,zc); w2.receiveShadow=true; scene.add(w2);
+    }
+    TARGET_MIN.z=z1+0.15;   // let the camera pan into the room now that it actually exists
+  }catch(err){ console.error('inner room: failed to build',err); }
+}
+
+/* ---------- buttons ---------- */
+$('bDay').addEventListener('click',()=>{
+  modeGoal=modeGoal?0:1; $('bDay').textContent=modeGoal?'昼にする':'夜にする'; $('bDay').classList.toggle('on',!!modeGoal);
+});
+const shojiMvs=movables.filter(m=>m.tag==='shoji');
+function setShoji(open){
+  shojiMvs.forEach(m=>{ m.goal=open?1:0; });
+}
+$('bReset').addEventListener('click',()=>{
+  goal.theta=home.theta; goal.phi=home.phi; goal.r=home.r; goal.target.copy(home.target); setAuto(false);
+});
+setTimeout(()=>{ $('hint').style.opacity='0'; },14000);
+
+/* ---------- loop ---------- */
+const clock=new THREE.Clock(); let first=true;
+function tick(){
+  requestAnimationFrame(tick);
+  const dt=Math.min(clock.getDelta(),0.05), time=clock.elapsedTime;
+  for(const m of movables){
+    if(Math.abs(m.goal-m.t)>0.0004){ m.t+=(m.goal-m.t)*(1-Math.exp(-dt*7)); m.obj.position[m.axis]=m.base+m.delta*m.t; }
+  }
+  if(autoRotate) goal.theta=Math.sin(time*0.22)*0.6;
+  if(trapHinge&&Math.abs(trap.goal-trap.t)>0.0004){ trap.t+=(trap.goal-trap.t)*(1-Math.exp(-dt*1.6)); trapHinge.rotation.x=-(Math.PI/2)*ease(clamp(trap.t,0,1)); }
+  if(stairsRide){
+    const R=stairsRide; R.t=Math.min(1,R.t+dt/R.duration);
+    if(R.t<=R.split){
+      const f=ease(R.t/R.split);
+      goal.target.set(lerp(R.sx,R.mx,f),lerp(R.sy,R.my,f),R.z); goal.phi=R.phi0; goal.r=R.r0;
+    }else{
+      const f=ease((R.t-R.split)/(1-R.split));
+      goal.target.set(lerp(R.mx,R.ex,f),lerp(R.my,R.ey,f),R.z); goal.phi=lerp(R.phi0,R.phi1,f); goal.r=lerp(R.r0,R.r1,f);
+    }
+    if(R.t>=1) stairsRide=null;
+  }
+  if(stairDoor&&Math.abs(stairDoor.goal-stairDoor.t)>0.0004){ stairDoor.t+=(stairDoor.goal-stairDoor.t)*(1-Math.exp(-dt*1.8)); stairDoor.hinge.rotation.y=-Math.PI*0.72*ease(clamp(stairDoor.t,0,1)); }
+  if(scrollCurl&&Math.abs(scrollSwing.goal-scrollSwing.t)>0.0004){ scrollSwing.t+=(scrollSwing.goal-scrollSwing.t)*(1-Math.exp(-dt*3)); updateScrollCurl(scrollCurl.maxAngle*ease(clamp(scrollSwing.t,0,1))); }
+  if(handleGroup&&Math.abs(handleSpin.target-handleSpin.angle)>0.001){ handleSpin.angle+=(handleSpin.target-handleSpin.angle)*(1-Math.exp(-dt*2.2)); handleGroup.rotation.z=handleSpin.angle; }
+  if(Math.abs(shelfSlide.goal-shelfSlide.t)>0.0004){ shelfSlide.t+=(shelfSlide.goal-shelfSlide.t)*(1-Math.exp(-dt*2)); shelf.position.x=SHELF_SLIDE_DIST*ease(clamp(shelfSlide.t,0,1)); }
+  const k=1-Math.exp(-dt*6);
+  cur.theta+=(goal.theta-cur.theta)*k; cur.phi+=(goal.phi-cur.phi)*k; cur.r+=(goal.r-cur.r)*k; cur.target.lerp(goal.target,k);
+  const sp=Math.sin(cur.phi);
+  camera.position.set(cur.target.x+cur.r*sp*Math.sin(cur.theta),cur.target.y+cur.r*Math.cos(cur.phi),cur.target.z+cur.r*sp*Math.cos(cur.theta));
+  camera.lookAt(cur.target);
+  if(Math.abs(modeGoal-mode)>0.0005){ mode+=(modeGoal-mode)*(1-Math.exp(-dt*3)); applyMode(mode); }
+  lampLight.intensity=lampBase*(1+0.04*Math.sin(time*7.3)*Math.sin(time*2.1));
+  updateShowcase(dt,time);
+  renderer.render(scene,camera);
+  if(first){ first=false; loadingEl.style.opacity='0'; setTimeout(()=>loadingEl.remove(),1000); }
+}
+tick();
+})();
+</script>
+</body>
+</html>
