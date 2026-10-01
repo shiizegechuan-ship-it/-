@@ -107,7 +107,13 @@ canvas{display:block}
    `hasKey` is false, or swings it open once true. `hasKey` becomes true via collectShiori(), when
    the shiori tucked behind the cabinet's centre panel (`shiori`, revealed by sliding that panel —
    it's `makeMovable`'d like the doors/drawers, tag 'secret-panel') is tapped. There is no literal
-   room modelled behind the cabinet or beyond the locked door yet — both simply fade to black.
+   room modelled beyond the locked door yet — it simply fades to black.
+
+   Hidden room (search "the room behind the fusuma"): tapping the handle behind the scroll slides the
+   shelf aside and, the first time, buildInnerRoom() cuts a doorway with a fusuma into the back wall and
+   buildInnerInterior() furnishes the room beyond it (8.4 x 6 m). That room lives in its own scene
+   (`innerScene`) with its own lights, drawn after the main scene into the same depth buffer and only
+   while the fusuma is open; applyMode() forwards day/night to it via `innerMode`.
 
    Camera (search "camera rig"): goal.target can be panned with two fingers and zoomed with a pinch
    or the wheel toward the real point under the cursor/pinch midpoint (zoomToward()/panBy()), but any
@@ -1089,12 +1095,14 @@ const cDaySun=new THREE.Color(0xfff0dc), cNightSun=new THREE.Color(0x8aa0d8);
 const cWinDay=new THREE.Color(1,0.975,0.93), cWinNight=new THREE.Color(0.55,0.5,0.42);
 const cDayHS=new THREE.Color(0xffe9cf), cNightHS=new THREE.Color(0x5c6a94);
 let lampBase=0;
+let innerScene=null, innerMode=null, innerDoorMv=null;   // the furnished room behind the fusuma (built later by buildInnerRoom())
 function applyMode(m){
   sun.intensity=lerp(1.8,0.32,m); sun.color.copy(cDaySun).lerp(cNightSun,m);
   hemi.intensity=lerp(0.45,0.12,m); hemi.color.copy(cDayHS).lerp(cNightHS,m);
   fill.intensity=lerp(0.35,0.04,m);
   lampBase=lerp(0,1.9,m);
-  lampShade.value=lerp(0.45,1,m);   // by day the lamp is out, so its pool of light on the wall mostly fades away
+  lampShade.value=lerp(0.45,1,m);
+  if(innerMode) innerMode(m);   // by day the lamp is out, so its pool of light on the wall mostly fades away
   inner.forEach(l=>{ l.intensity=lerp(0.4,1.4,m); });
   matPaper.emissiveIntensity=lerp(0.12,0.95,m);
   matLampPaper.emissiveIntensity=lerp(0.35,2.6,m);
@@ -1616,6 +1624,470 @@ function worldUV(mesh,x0,w,h){
   }
   uv.needsUpdate=true;
 }
+
+/* ---------- the room behind the fusuma: a chic wa-yo (Japanese-Western) sitting room ---------- */
+// It lives in its own scene (innerScene) with its own lights, rendered after the main scene into the
+// same depth buffer (see tick()): the main room's walls hide it everywhere but the doorway, the main
+// room's sun and lamps can't shine through the wall into it, and its lamps can't leak back out onto
+// the main room's plaster. It is only drawn while the fusuma is open. Everything is built once, the
+// first time the shelf is slid open, by buildInnerInterior() -- like the rest of the hidden room.
+// Layout (x across, z into the room; the doorway is at x≈-0.92 on the front wall z0):
+//   far wall: tokonoma straight ahead of the door, display shelf to its left, shoji window + bench
+//   to its right; centre: rug, low table, two leather armchairs, paper pendant lantern above;
+//   left wall: wool sofa + floor lamp + side table; right wall: sideboard, table lamp, gold-leaf art.
+
+// walnut herringbone parquet, painted per pixel. Planks are 1 x n units; the pattern repeats every
+// P units in both directions, so the canvas tiles seamlessly (plank ids are reduced mod P).
+function drawHerringbone(g,w,h){
+  const n=4, P=16, u=w/P;
+  const img=g.createImageData(w,h), d=img.data;
+  const tone=[]; for(let i=0;i<2*P;i++) tone.push([R(0.74,1.14),R(0,100),R(0.7,1.4),R(-0.06,0.06)]);
+  const base=[106,68,41], dark=[48,28,15];
+  for(let py=0;py<h;py++){
+    const y=(py+0.5)/u, k=Math.floor(y);
+    for(let px=0;px<w;px++){
+      const x=(px+0.5)/u, m=Math.floor((x-k+n)/(2*n)), xl=x-2*n*m-k;
+      let id,along,across;
+      if(xl>=0){ id=(((k+2*n*m)%P)+P)%P; along=xl; across=y-k; }
+      else{ const j=Math.floor(x-m*n); id=P+((((j-n*m)%P)+P)%P); across=x-m*n-j; along=y-(j+1-m*n); }
+      const t0=tone[id];
+      const wv=across*t0[2]*7+0.32*Math.sin(along*1.6+t0[1])+0.1*Math.sin(along*5.7+t0[1]*2);
+      let gr=0.5+0.5*Math.sin(wv*Math.PI*2); gr=gr*gr*gr;
+      const fig=0.5+0.5*Math.sin(along*0.7+t0[1]*0.7+across*2.4);
+      const tt=Math.min(1,gr*0.5+fig*0.22+rnd()*0.08);
+      let b=t0[0];
+      const e=Math.min(across,1-across,along,n-along);
+      if(e<0.022) b*=0.3; else if(e<0.06) b*=0.84+0.16*(e-0.022)/0.038;   // hairline joints with a slight eased bevel
+      const i4=(py*w+px)*4;
+      d[i4]=Math.min(255,(base[0]+(dark[0]-base[0])*tt)*b*(1+t0[3]));
+      d[i4+1]=Math.min(255,(base[1]+(dark[1]-base[1])*tt)*b);
+      d[i4+2]=Math.min(255,(base[2]+(dark[2]-base[2])*tt)*b*(1-t0[3]));
+      d[i4+3]=255;
+    }
+  }
+  g.putImageData(img,0,0);
+}
+// dark-stained vertical boards for the wainscot (koshi-ita): 6 boards per tile
+function drawWainscot(g,w,h){
+  g.save(); g.translate(w,0); g.rotate(Math.PI/2);
+  drawWood(g,h,w,{base:'#33201a',dark:'14,7,4',light:'110,72,48',lines:60,wave:0.5});
+  g.restore();
+  for(let i=0;i<6;i++){
+    const x=Math.round(i*w/6);
+    g.fillStyle='rgba(6,3,2,.9)'; g.fillRect(x,0,2,h);
+    g.fillStyle='rgba(255,220,180,.08)'; g.fillRect(x+2,0,2,h);
+  }
+}
+// cedar ceiling boards running across the room (sao-buchi tenjo: battens are separate geometry)
+function drawCeilBoards(g,w,h){
+  drawWood(g,w,h,{base:'#7b5a3a',dark:'52,30,14',light:'190,150,105',lines:40,wave:0.5});
+  for(let i=0;i<4;i++){ const y=Math.round(i*h/4); g.fillStyle='rgba(20,10,4,.75)'; g.fillRect(0,y,w,2); }
+}
+// deep indigo wool rug: a quiet seigaiha (wave) field inside a rust-and-gold border
+function drawRug(g,w,h){
+  g.fillStyle='#1a212d'; g.fillRect(0,0,w,h);
+  const r=w/26;
+  g.lineWidth=1.4;
+  for(let row=0,y=-r;y<h+r;row++,y+=r*0.5){
+    for(let x=(row%2?r:0)-r;x<w+r;x+=2*r){
+      for(let k=4;k>=1;k--){
+        g.beginPath(); g.arc(x,y,r*k/4,Math.PI,2*Math.PI); g.closePath();
+        g.fillStyle=k%2?'#1d2533':'#18202b'; g.fill();
+        g.strokeStyle='rgba(150,162,180,.16)'; g.stroke();
+      }
+    }
+  }
+  const band=(inset,width,col)=>{ g.fillStyle=col; g.fillRect(inset,inset,w-2*inset,width); g.fillRect(inset,h-inset-width,w-2*inset,width); g.fillRect(inset,inset,width,h-2*inset); g.fillRect(w-inset-width,inset,width,h-2*inset); };
+  band(0,w*0.055,'#2a211d');
+  band(w*0.018,3,'rgba(176,140,74,.75)');
+  band(w*0.038,2,'rgba(140,62,40,.8)');
+  band(w*0.055,4,'rgba(176,140,74,.65)');
+  for(let i=0;i<60000;i++){
+    g.fillStyle=rnd()<.5?`rgba(0,0,0,${R(.08,.22)})`:`rgba(210,215,230,${R(.03,.09)})`;
+    g.fillRect(rnd()*w,rnd()*h,R(1,3),R(1,2));
+  }
+}
+function drawLeather(g,w,h,base){
+  g.fillStyle=base; g.fillRect(0,0,w,h);
+  for(let i=0;i<40;i++){
+    const x=rnd()*w,y=rnd()*h,r=R(40,140),dark=rnd()<.6;
+    wrapped(w,h,(dx,dy)=>{ const gr=g.createRadialGradient(x+dx,y+dy,0,x+dx,y+dy,r);
+      gr.addColorStop(0,dark?`rgba(20,8,4,${R(.08,.18)})`:`rgba(255,210,170,${R(.05,.1)})`); gr.addColorStop(1,'rgba(0,0,0,0)');
+      g.fillStyle=gr; g.fillRect(x+dx-r,y+dy-r,r*2,r*2); });
+  }
+  for(let i=0;i<16000;i++){
+    g.fillStyle=rnd()<.55?`rgba(0,0,0,${R(.03,.08)})`:`rgba(255,225,190,${R(.02,.05)})`;
+    g.beginPath(); g.arc(rnd()*w,rnd()*h,R(1.2,3.4),0,6.283); g.fill();
+  }
+}
+function drawWeave(g,w,h,base){
+  g.fillStyle=base; g.fillRect(0,0,w,h);
+  for(let y=0;y<h;y+=2){ g.fillStyle=`rgba(255,255,255,${R(.02,.07)})`; g.fillRect(0,y,w,1); }
+  for(let x=0;x<w;x+=2){ g.fillStyle=`rgba(0,0,0,${R(.05,.14)})`; g.fillRect(x,0,1,h); }
+  for(let i=0;i<6000;i++){ g.fillStyle=rnd()<.5?'rgba(0,0,0,.14)':'rgba(255,255,255,.06)'; g.fillRect(rnd()*w,rnd()*h,R(2,7),1); }
+}
+// hanging scroll for the tokonoma: an enso (single brush circle) on cream paper in a grey silk mount
+function drawEnsoScroll(g,w,h){
+  g.fillStyle='#3b3e38'; g.fillRect(0,0,w,h);
+  for(let i=0;i<3000;i++){ g.fillStyle=`rgba(255,255,255,${R(.01,.05)})`; g.fillRect(rnd()*w,rnd()*h,R(2,8),1); }
+  const px=w*0.12,pw=w*0.76,py=h*0.2,ph=h*0.6;
+  g.fillStyle='#8f7744'; g.fillRect(px,py-h*0.035,pw,h*0.035); g.fillRect(px,py+ph,pw,h*0.022);
+  g.fillStyle='#ebe3d0'; g.fillRect(px,py,pw,ph);
+  for(let i=0;i<900;i++){ g.strokeStyle=`rgba(150,130,100,${R(.05,.14)})`; g.lineWidth=R(.4,1); const x=px+rnd()*pw,y=py+rnd()*ph,a=rnd()*6.283,l=R(4,14);
+    g.beginPath(); g.moveTo(x,y); g.lineTo(Math.min(px+pw,Math.max(px,x+Math.cos(a)*l)),Math.min(py+ph,Math.max(py,y+Math.sin(a)*l))); g.stroke(); }
+  const cx=px+pw/2, cy=py+ph*0.42, r0=pw*0.34, a0=-2.0, span=Math.PI*2*0.9;
+  for(let s=0;s<=1;s+=0.0015){
+    const a=a0+span*s, wdt=(1-s)*pw*0.075+pw*0.022, x=cx+Math.cos(a)*r0, y=cy+Math.sin(a)*r0;
+    for(let b=0;b<16;b++){
+      if(s>0.5&&rnd()<(s-0.5)*1.5) continue;   // the brush runs dry toward the end of the stroke
+      const o=(b/15-0.5)*wdt;
+      g.fillStyle=`rgba(14,11,9,${0.5+0.45*(1-s)})`;
+      g.beginPath(); g.arc(x+Math.cos(a)*o,y+Math.sin(a)*o,1.1+wdt*0.025,0,6.283); g.fill();
+    }
+  }
+  vtext(g,'一円相',px+pw*0.86,py+ph*0.6,ph*0.22,pw*0.075,'rgba(22,18,14,.85)',500);
+  g.fillStyle='#a3291c'; g.fillRect(px+pw*0.82,py+ph*0.85,pw*0.075,pw*0.075);
+}
+// gold-leaf and black-lacquer panel for the sideboard wall (a quiet Rinpa-style landscape)
+function drawGoldArt(g,w,h){
+  g.fillStyle='#14110f'; g.fillRect(0,0,w,h);
+  for(let i=0;i<4000;i++){ g.fillStyle=`rgba(255,240,220,${R(.01,.04)})`; g.fillRect(rnd()*w,rnd()*h,R(1,3),R(1,3)); }
+  const tile=w/18;
+  g.save(); g.beginPath(); g.moveTo(0,h); g.lineTo(0,h*0.62); g.bezierCurveTo(w*0.22,h*0.3,w*0.5,h*0.62,w,h*0.5); g.lineTo(w,h); g.closePath(); g.clip();
+  for(let y=0;y<h;y+=tile)for(let x=0;x<w;x+=tile){ const v=R(0.82,1.06); g.fillStyle=`rgb(${198*v|0},${158*v|0},${78*v|0})`; g.fillRect(x,y,tile-0.8,tile-0.8); }
+  g.restore();
+  const gr=g.createRadialGradient(w*0.74,h*0.26,0,w*0.74,h*0.26,h*0.13);
+  gr.addColorStop(0,'rgba(214,210,200,.95)'); gr.addColorStop(0.92,'rgba(190,186,176,.9)'); gr.addColorStop(1,'rgba(190,186,176,0)');
+  g.fillStyle=gr; g.beginPath(); g.arc(w*0.74,h*0.26,h*0.13,0,6.283); g.fill();
+}
+
+// soft rounded box (a cushion): a sphere whose vertices are pushed out onto a rounded box, so the
+// normals stay smooth. `bulge` puffs the top face up slightly. UVs are projected in metres.
+function softBox(w,h,d,r,mat,bulge){
+  const g=new THREE.SphereGeometry(1,28,18), p=g.attributes.position, uv=g.attributes.uv, v=new THREE.Vector3();
+  const hx=w/2-r, hy=h/2-r, hz=d/2-r;
+  for(let i=0;i<p.count;i++){
+    v.fromBufferAttribute(p,i);
+    const x=Math.sign(v.x)*hx+v.x*r, z=Math.sign(v.z)*hz+v.z*r;
+    let y=Math.sign(v.y)*hy+v.y*r;
+    if(bulge&&v.y>0) y+=bulge*Math.max(0,1-(2*x/w)**2)*Math.max(0,1-(2*z/d)**2);
+    p.setXYZ(i,x,y,z);
+    const ax=Math.abs(v.x), ay=Math.abs(v.y), az=Math.abs(v.z);
+    if(ay>=ax&&ay>=az) uv.setXY(i,x/0.5,z/0.5); else if(ax>=az) uv.setXY(i,z/0.5,y/0.5); else uv.setXY(i,x/0.5,y/0.5);
+  }
+  g.computeVertexNormals();
+  const m=new THREE.Mesh(g,mat); m.castShadow=m.receiveShadow=true; return m;
+}
+function put(m,x,y,z,parent,ry,rx){ m.position.set(x,y,z); if(ry) m.rotation.y=ry; if(rx) m.rotation.x=rx; parent.add(m); return m; }
+function cyl(rt,rb,h,mat,seg,open){ const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg||24,1,!!open),mat); m.castShadow=m.receiveShadow=true; return m; }
+function mat2(o,env,phys){ return std(o,env,phys); }   // room-2-only materials (kept separate from the main room's)
+
+function buildInnerInterior(z0,z1){
+  const S=new THREE.Scene();
+  const RW=ROOM_W, RD=z0-z1, zc=(z0+z1)/2, cx=(doorX0+doorX1)/2;
+
+  /* materials */
+  const tFloor=canvasTex(1536,1536,drawHerringbone);
+  const matFloor=mat2({map:tFloor,bumpMap:tFloor,bumpScale:0.35,roughness:0.4,clearcoat:0.45,clearcoatRoughness:0.22},0.7,true);
+  const tPl=canvasTex(640,640,(g,w,h)=>drawPlaster(g,w,h,'#6e665b'));
+  const matPl=mat2({map:tPl,bumpMap:tPl,bumpScale:0.7,roughness:0.96},0.2);
+  const tPlInk=canvasTex(512,512,(g,w,h)=>drawPlaster(g,w,h,'#38332d'));
+  const matPlInk=mat2({map:tPlInk,bumpMap:tPlInk,bumpScale:0.7,roughness:0.97},0.15);
+  const tWain=canvasTex(512,512,drawWainscot);
+  const matWain=mat2({map:tWain,bumpMap:tWain,bumpScale:0.4,roughness:0.5,clearcoat:0.25,clearcoatRoughness:0.4},0.7,true);
+  const tCeil=canvasTex(512,512,drawCeilBoards);
+  const matCeil=mat2({map:tCeil,roughness:0.75},0.25);
+  const tWal=woodTex('#4a2c1a','20,10,5','138,90,54',60,0.8);
+  const matWal=mat2({map:tWal,bumpMap:tWal,bumpScale:0.3,roughness:0.38,clearcoat:0.55,clearcoatRoughness:0.22},0.9,true); matWal.userData.woodUV=0.8;
+  const tKeyaki=woodTex('#5e3a22','30,15,6','160,110,70',55,1.1);
+  const matKeyaki=mat2({map:tKeyaki,roughness:0.3,clearcoat:0.8,clearcoatRoughness:0.1},1.0,true); matKeyaki.userData.woodUV=1.0;
+  const tPost=woodTex('#8a6a4a','70,45,25','200,170,130',30,0.4);
+  const matPost=mat2({map:tPost,roughness:0.35,clearcoat:0.5,clearcoatRoughness:0.2},0.8,true);
+  const matTrim=mat2({map:tDark,bumpMap:tDark,bumpScale:0.5,roughness:0.5,clearcoat:0.3,clearcoatRoughness:0.35},0.8,true); matTrim.userData.woodUV=0.9;
+  const matIron=mat2({color:C('#1b1a19'),metalness:0.65,roughness:0.42},0.9);
+  const matBrass2=mat2({color:C('#a8833a'),metalness:1,roughness:0.3},1.3);
+  const matLacq=mat2({color:C('#0c0a09'),roughness:0.16,clearcoat:1,clearcoatRoughness:0.08},1.5,true);
+  const tLea=canvasTex(512,512,(g,w,h)=>drawLeather(g,w,h,'#6a361c')); tLea.repeat.set(1.6,1.6);
+  const matLeather=mat2({map:tLea,bumpMap:tLea,bumpScale:0.12,roughness:0.48,clearcoat:0.25,clearcoatRoughness:0.45},0.7,true);
+  const tWool=canvasTex(256,256,(g,w,h)=>drawWeave(g,w,h,'#3a3836')); tWool.repeat.set(3,3);
+  const matWool=mat2({map:tWool,bumpMap:tWool,bumpScale:0.15,roughness:0.97},0.15);
+  const tIndigo=canvasTex(256,256,(g,w,h)=>drawWeave(g,w,h,'#26324a')); tIndigo.repeat.set(3,3);
+  const matIndigo=mat2({map:tIndigo,bumpMap:tIndigo,bumpScale:0.15,roughness:0.95},0.15);
+  const tOchre=canvasTex(256,256,(g,w,h)=>drawWeave(g,w,h,'#6e5730')); tOchre.repeat.set(3,3);
+  const matOchre=mat2({map:tOchre,bumpMap:tOchre,bumpScale:0.15,roughness:0.95},0.15);
+  const tRug=canvasTex(1024,768,drawRug,{repeat:false});
+  const matRug=mat2({map:tRug,bumpMap:tRug,bumpScale:0.9,roughness:1},0.1);
+  const matShade=mat2({map:tPaper,emissive:C('#ffbf7a'),emissiveMap:tPaper,emissiveIntensity:1.4,roughness:0.9,side:THREE.DoubleSide},0.05);
+  const matRib=mat2({color:C('#6b5a44'),roughness:0.8,emissive:C('#3a2410'),emissiveIntensity:0.6},0.1);
+  const matCeramic=mat2({color:C('#171513'),roughness:0.32,clearcoat:0.7,clearcoatRoughness:0.1,side:THREE.DoubleSide},1.1,true);
+  const matCeladon2=mat2({color:C('#8fb3a2'),roughness:0.18,clearcoat:0.6,clearcoatRoughness:0.1,side:THREE.DoubleSide},1.2,true);
+  const matPorc2=mat2({color:C('#e6e2d8'),roughness:0.15,clearcoat:0.7,clearcoatRoughness:0.08,side:THREE.DoubleSide},1.2,true);
+  const matRaku2=mat2({color:C('#2b1b15'),roughness:0.35,clearcoat:0.5,side:THREE.DoubleSide},1.0,true);
+  const matBark2=mat2({color:C('#2b1e16'),roughness:0.9},0.3);
+  const matLeaf=mat2({color:C('#34502a'),roughness:0.55,side:THREE.DoubleSide},0.4);
+  const matPine=mat2({color:C('#2c3d22'),roughness:0.9,flatShading:true},0.3);
+  const matCamellia=mat2({color:C('#9b1c22'),roughness:0.5,side:THREE.DoubleSide},0.4);
+  const matStamen=mat2({color:C('#e0b84a'),roughness:0.6},0.3);
+  const matPaperBook=mat2({color:C('#d9cfb8'),roughness:0.9},0.2);
+  const tScroll=canvasTex(256,640,drawEnsoScroll,{repeat:false});
+  const matScroll=mat2({map:tScroll,roughness:0.85},0.1);
+  const tArt=canvasTex(768,512,drawGoldArt,{repeat:false});
+  const matArt=mat2({map:tArt,roughness:0.45,metalness:0.25},1.0);
+  const matWinPaper=new THREE.MeshBasicMaterial({map:tPaper,color:new THREE.Color(1,0.97,0.92)});
+  const matMatte=c=>mat2({color:C(c),roughness:0.85},0.2);
+
+  /* shell: floor, walls (plaster over a dark wainscot), ceiling */
+  const plane=(w,h,mat,x,y,z,ry,rx,S0)=>{ const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat); m.position.set(x,y,z); if(ry) m.rotation.y=ry; if(rx) m.rotation.x=rx; m.receiveShadow=true; S.add(m); worldUV(m,0,S0||2.5,S0||2.5); return m; };
+  plane(RW,RD,matFloor,0,0,zc,0,-Math.PI/2,1.2);
+  plane(RW,RD,matCeil,0,ROOM_H,zc,0,Math.PI/2,1.8);
+  plane(RW,ROOM_H,matPl,0,ROOM_H/2,z1);                                   // far wall
+  plane(RD,ROOM_H,matPl,-RW/2,ROOM_H/2,zc,Math.PI/2);                     // left wall
+  plane(RD,ROOM_H,matPl,RW/2,ROOM_H/2,zc,-Math.PI/2);                     // right wall
+  const fz=z0-0.002;                                                       // front wall, inside face, around the doorway
+  plane(doorX0+RW/2,ROOM_H,matPl,(-RW/2+doorX0)/2,ROOM_H/2,fz,Math.PI);
+  plane(RW/2-doorX1,ROOM_H,matPl,(doorX1+RW/2)/2,ROOM_H/2,fz,Math.PI);
+  plane(doorW,ROOM_H-doorH,matPl,cx,(doorH+ROOM_H)/2,fz,Math.PI);
+  box(doorW,0.014,WALL_T+0.004,matTrim,cx,0.007,z0/2,S);                  // threshold (shikii) through the wall
+  // wainscot, top rail, skirting, nageshi rail and ceiling cornice, run around every wall
+  const WH=0.86, TW=2.0, tx0=cx-TW/2, tx1=cx+TW/2;   // TW: tokonoma width -- the far wall's wainscot stops either side of it
+  const runs=[   // [x,z,length,rotationY] centre of each straight wall run, inside face
+    [0,z1,RW,0],[(-RW/2+tx0-0.12)/2,z1,tx0-0.12+RW/2,0],[(tx1+0.12+RW/2)/2,z1,RW/2-tx1-0.12,0],[-RW/2,zc,RD,Math.PI/2],[RW/2,zc,RD,-Math.PI/2],
+    [(-RW/2+doorX0)/2,z0,doorX0+RW/2,Math.PI],[(doorX1+RW/2)/2,z0,RW/2-doorX1,Math.PI]
+  ];
+  for(const [x,z,len,ry] of runs.slice(1)){
+    const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=ry; S.add(g);
+    const wn=box(len,WH,0.018,matWain,0,WH/2,0.009,g); worldUV(wn,0,0.9,0.9);
+    box(len,0.03,0.04,matTrim,0,WH+0.015,0.02,g);
+    box(len,0.075,0.026,matLacq,0,0.0375,0.031,g);
+  }
+  for(const [x,z,len,ry] of [runs[0],runs[3],runs[4]]){
+    const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=ry; S.add(g);
+    box(len,0.1,0.045,matTrim,0,2.25,0.0225,g);
+    box(len,0.05,0.05,matTrim,0,ROOM_H-0.025,0.025,g);
+  }
+  {
+    const g=new THREE.Group(); g.position.set(0,0,z0); g.rotation.y=Math.PI; S.add(g);
+    box(RW,0.1,0.045,matTrim,0,2.25,0.0225,g);
+    box(RW,0.05,0.05,matTrim,0,ROOM_H-0.025,0.025,g);
+  }
+  for(let x=-RW/2+0.45;x<RW/2;x+=0.45) box(0.03,0.035,RD,matTrim,x,ROOM_H-0.0175,zc,S);   // ceiling battens (sao-buchi)
+
+  /* tokonoma, straight ahead of the doorway */
+  const TD=0.72, tz=z1+TD;
+  {
+    const pl=(w,h,d,mat,x,y,z)=>{ const m=box(w,h,d,mat,x,y,z,S); worldUV(m,0,2.5,2.5); return m; };
+    pl(0.12,ROOM_H,TD,matPl,tx0-0.06,ROOM_H/2,z1+TD/2);                       // side walls (sode-kabe)
+    pl(0.12,ROOM_H,TD,matPl,tx1+0.06,ROOM_H/2,z1+TD/2);
+    const back=new THREE.Mesh(new THREE.PlaneGeometry(TW,ROOM_H),matPlInk); back.position.set(cx,ROOM_H/2,z1+0.002); back.receiveShadow=true; S.add(back); worldUV(back,0,2.0,2.0);
+    box(TW,0.04,TD-0.02,matKeyaki,cx,0.13,z1+(TD-0.02)/2,S);                   // toko-ita: polished keyaki board
+    box(TW+0.02,0.15,0.07,matLacq,cx,0.075,tz-0.035,S);                        // toko-gamachi: black lacquer front rail
+    box(TW+0.24,0.08,0.07,matTrim,cx,2.05,tz-0.035,S);                         // otoshi-gake lintel
+    pl(TW+0.24,ROOM_H-2.09,0.06,matPl,cx,(2.09+ROOM_H)/2,tz-0.03);             // small wall above it
+    // toko-bashira: a natural, slightly irregular polished post at the right front corner
+    const pts=[]; for(let i=0;i<=24;i++){ const y=i/24*ROOM_H; pts.push([0.062+0.006*Math.sin(i*1.7)+0.004*Math.sin(i*4.3),y]); }
+    const post=lathe([[0,0],...pts,[0,ROOM_H]],matPost,20); post.position.set(tx1+0.02,0,tz-0.02); S.add(post);
+    // hanging scroll
+    const sc=new THREE.Mesh(new THREE.PlaneGeometry(0.56,1.4),matScroll); sc.position.set(cx-0.15,1.2,z1+0.012); sc.castShadow=true; S.add(sc);
+    const rod=cyl(0.011,0.011,0.62,matTrim,12); rod.rotation.z=Math.PI/2; put(rod,cx-0.15,0.5,z1+0.02,S);
+    const rodT=cyl(0.007,0.007,0.58,matTrim,12); rodT.rotation.z=Math.PI/2; put(rodT,cx-0.15,1.9,z1+0.015,S);
+    for(const s of [-1,1]) put(cyl(0.013,0.013,0.025,matIron,12),cx-0.15+s*0.32,0.5,z1+0.02,S).rotation.z=Math.PI/2;
+    // ikebana: a low black suiban with a camellia branch
+    const suiban=lathe([[0,0],[0.17,0],[0.19,0.01],[0.2,0.05],[0.185,0.05],[0.175,0.015],[0,0.015]],matCeramic,48);
+    put(suiban,cx+0.48,0.15,z1+0.36,S);
+    const br=new THREE.Group(); br.position.set(cx+0.48,0.165,z1+0.36); S.add(br);
+    const stem=(pts,r)=>{ const c=new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p))); const m=new THREE.Mesh(new THREE.TubeGeometry(c,24,r,6),matBark2); m.castShadow=true; br.add(m); return c; };
+    const c1=stem([[0,0,0],[-0.04,0.25,0.02],[-0.12,0.52,0.03],[-0.3,0.74,0.06],[-0.46,0.82,0.08]],0.008);
+    const c2=stem([[-0.02,0.2,0.01],[0.08,0.34,0.03],[0.16,0.42,0.05]],0.005);
+    const leafG=new THREE.SphereGeometry(1,10,6);
+    const leafAt=(c,t,a,s)=>{ const p=c.getPoint(t); const l=new THREE.Mesh(leafG,matLeaf); l.scale.set(0.06*s,0.006,0.028*s); l.position.copy(p); l.rotation.set(R(-0.6,0.6),a,R(-0.5,0.5)); l.castShadow=true; br.add(l); };
+    for(let i=0;i<9;i++) leafAt(c1,0.3+i*0.075,i*1.9,R(0.8,1.15));
+    for(let i=0;i<4;i++) leafAt(c2,0.4+i*0.18,i*2.3,R(0.7,1));
+    const flower=(p,s)=>{ const f=new THREE.Group(); f.position.copy(p); f.rotation.set(R(-0.5,0.2),R(0,6),R(-0.4,0.4)); br.add(f);
+      for(let i=0;i<6;i++){ const pe=new THREE.Mesh(leafG,matCamellia); pe.scale.set(0.036*s,0.008*s,0.028*s); pe.position.set(Math.cos(i*1.05)*0.024*s,0.008*s,Math.sin(i*1.05)*0.024*s); pe.rotation.set(0,-i*1.05,0.5); pe.castShadow=true; f.add(pe); }
+      const st=new THREE.Mesh(new THREE.CylinderGeometry(0.012*s,0.009*s,0.02*s,10),matStamen); st.position.y=0.016*s; f.add(st); };
+    flower(c1.getPoint(0.62),1); flower(c2.getPoint(1),0.85);
+    // small celadon incense burner on the left of the board
+    const koro=lathe(KORO,matCeladon2,40); koro.scale.setScalar(0.85); put(koro,cx-0.62,0.15,z1+0.4,S);
+  }
+
+  /* display shelf, far-left corner */
+  {
+    const g=new THREE.Group(); g.position.set(-RW/2+1.0,0,z1+0.2); S.add(g);
+    const w=1.5,h=2.05,d=0.36;
+    box(0.04,h,d,matWal,-w/2+0.02,h/2,0,g); box(0.04,h,d,matWal,w/2-0.02,h/2,0,g);
+    box(w,0.04,d,matWal,0,h-0.02,0,g); box(w-0.08,0.08,d-0.02,matLacq,0,0.04,0,g);
+    const ys=[0.08,0.55,1.05,1.55];
+    for(const y of ys.slice(1)) box(w-0.08,0.028,d,matWal,0,y,0,g);
+    const vase=lathe(VASE,matCeladon2,48); vase.scale.setScalar(0.9); put(vase,-0.35,ys[3]+0.014,0,g);
+    put(lathe(BOWL,matRaku2,40),0.3,ys[3]+0.014,0.02,g).scale.setScalar(1.5);
+    put(lathe(KORO,matPorc2,40),0.35,ys[2]+0.014,0,g);
+    let bx=-0.62;
+    for(const c of ['#2a2a2a','#5a4632','#7a6a52','#3b2e2a','#1e2a3a','#6b5a40','#2f3a2c']){
+      const bw=R(0.025,0.045), bh=R(0.24,0.32); box(bw,bh,0.2,matMatte(c),bx+bw/2,ys[2]+0.014+bh/2,-0.02,g); bx+=bw+0.003;
+    }
+    const lean=box(0.03,0.3,0.2,matMatte('#4a3a2c'),bx+0.06,ys[2]+0.16,-0.02,g); lean.rotation.z=-0.28;
+    for(let i=0;i<3;i++) box(0.3-i*0.03,0.035,0.22-i*0.02,matMatte(['#2b2622','#6a5a48','#1f2630'][i]),-0.3,ys[1]+0.014+0.0175+i*0.035,0,g);
+    put(lathe(BOWL,matCeramic,40),-0.3,ys[1]+0.12,0,g);
+    put(lathe(VASE,matRaku2,48),0.3,ys[1]+0.014,0,g).scale.set(0.7,1.1,0.7);
+  }
+
+  /* shoji window on the far wall, to the right of the tokonoma, with a low walnut bench under it */
+  const winX=2.35, winW=2.2, winY0=0.82, winY1=2.12, winH=winY1-winY0, winYc=(winY0+winY1)/2;
+  {
+    const g=new THREE.Group(); g.position.set(winX,winYc,z1); S.add(g);
+    const paper=new THREE.Mesh(new THREE.PlaneGeometry(winW,winH),matWinPaper); paper.position.z=0.004; g.add(paper);   // lit from outside: casts no shadow
+    box(winW+0.16,0.07,0.08,matTrim,0,winH/2+0.035,0.04,g);
+    box(winW+0.2,0.05,0.14,matTrim,0,-winH/2-0.025,0.07,g);
+    box(0.07,winH,0.08,matTrim,-winW/2-0.035,0,0.04,g); box(0.07,winH,0.08,matTrim,winW/2+0.035,0,0.04,g);
+    const pw=winW/4;
+    for(let i=0;i<4;i++){
+      const px=-winW/2+pw*(i+0.5), pz=i%2?0.018:0.034;   // panels on two tracks, like real sliding shoji
+      box(0.028,winH,0.026,matTrim,px-pw/2+0.014,0,pz,g); box(0.028,winH,0.026,matTrim,px+pw/2-0.014,0,pz,g);
+      box(pw,0.03,0.026,matTrim,px,winH/2-0.015,pz,g); box(pw,0.05,0.026,matTrim,px,-winH/2+0.025,pz,g);
+      for(let k=1;k<3;k++) box(0.009,winH-0.06,0.014,matTrim,px-pw/2+pw*k/3,0,pz,g);
+      for(let k=1;k<7;k++) box(pw-0.04,0.009,0.014,matTrim,px,-winH/2+0.05+(winH-0.08)*k/7,pz,g);
+    }
+    // bench
+    const b=new THREE.Group(); b.position.set(winX,0,z1+0.36); S.add(b);
+    box(1.9,0.05,0.4,matWal,0,0.405,0,b);
+    for(const sx of [-1,1]){ box(0.05,0.38,0.34,matWal,sx*0.82,0.19,0,b); }
+    box(1.6,0.03,0.05,matWal,0,0.12,0,b);
+    // bonsai pine in a black rectangular pot
+    const pot=box(0.36,0.08,0.24,matCeramic,0.45,0.47,0,b); void pot;
+    const tr=new THREE.CatmullRomCurve3([[0.45,0.5,0],[0.42,0.6,0.01],[0.5,0.7,0.0],[0.4,0.8,-0.02],[0.32,0.86,0.0]].map(p=>new THREE.Vector3(...p)));
+    const trunk=new THREE.Mesh(new THREE.TubeGeometry(tr,20,0.018,8),matBark2); trunk.castShadow=true; b.add(trunk);
+    const ico=new THREE.IcosahedronGeometry(1,1);
+    for(const [x,y,z,s] of [[0.32,0.9,0,0.11],[0.52,0.74,0.02,0.08],[0.38,0.79,-0.05,0.07],[0.2,0.86,0.03,0.07]]){
+      const geo=ico.clone(), p=geo.attributes.position; for(let i=0;i<p.count;i++) p.setXYZ(i,p.getX(i)*R(0.85,1.15),p.getY(i)*R(0.85,1.15),p.getZ(i)*R(0.85,1.15)); geo.computeVertexNormals();
+      const pad=new THREE.Mesh(geo,matPine); pad.scale.set(s,s*0.42,s*0.8); pad.position.set(x,y,z); pad.castShadow=true; b.add(pad);
+    }
+    // tea caddy and a book on the other end
+    put(cyl(0.035,0.035,0.09,matLacq,24),-0.55,0.475,0.02,b);
+    box(0.22,0.03,0.16,matMatte('#3a2d24'),-0.25,0.445,0,b).rotation.y=0.2;
+  }
+
+  /* centre: rug, low table, two armchairs, pendant lantern */
+  const gx=cx, gz=zc-0.15;
+  { const rug=box(3.2,0.012,2.3,matRug,gx,0.006,gz,S); rug.castShadow=false; }
+  {
+    const g=new THREE.Group(); g.position.set(gx,0,gz); S.add(g);
+    box(1.25,0.055,0.7,matWal,0,0.375,0,g);
+    box(1.21,0.004,0.66,matLacq,0,0.405,0,g).receiveShadow=true;   // thin black inlay panel on top
+    for(const sx of [-1,1])for(const sz of [-1,1]) box(0.035,0.35,0.035,matIron,sx*0.56,0.175,sz*0.29,g);
+    box(1.12,0.022,0.035,matIron,0,0.33,0.29,g); box(1.12,0.022,0.035,matIron,0,0.33,-0.29,g);
+    box(1.1,0.02,0.58,matWal,0,0.1,0,g);
+    // tetsubin iron kettle on a small tray, two cups
+    box(0.34,0.012,0.24,matKeyaki,-0.22,0.413,0.04,g);
+    const pot=lathe([[0,0],[0.05,0],[0.075,0.02],[0.085,0.05],[0.08,0.08],[0.06,0.1],[0.036,0.11],[0.036,0.118],[0,0.118]],matIron,40); put(pot,-0.26,0.419,0.04,g);
+    const knob=new THREE.Mesh(new THREE.SphereGeometry(0.012,12,8),matIron); put(knob,-0.26,0.54,0.04,g);
+    const spout=cyl(0.008,0.013,0.08,matIron,10); spout.rotation.z=-0.9; put(spout,-0.19,0.49,0.04,g);
+    const handle=new THREE.Mesh(new THREE.TorusGeometry(0.07,0.005,8,24,Math.PI),matIron); handle.castShadow=true; put(handle,-0.26,0.53,0.04,g);
+    for(const [x,z] of [[-0.08,0.1],[-0.1,-0.03]]) put(lathe([[0,0],[0.022,0],[0.03,0.01],[0.034,0.05],[0.031,0.05],[0.027,0.012],[0,0.012]],matCeladon2,32),x,0.419,z,g);
+    for(let i=0;i<2;i++) box(0.24-i*0.02,0.03,0.17-i*0.01,matMatte(['#1f2630','#7a6a52'][i]),0.32,0.422+i*0.03,-0.08,g).rotation.y=0.15-i*0.3;
+  }
+  const chair=(x,ry)=>{
+    const g=new THREE.Group(); g.position.set(x,0,gz); g.rotation.y=ry; S.add(g);
+    for(const sx of [-1,1]){
+      box(0.05,0.6,0.05,matWal,sx*0.37,0.3,0.34,g); box(0.05,0.6,0.05,matWal,sx*0.37,0.3,-0.34,g);
+      box(0.08,0.035,0.84,matWal,sx*0.37,0.615,0.0,g);                    // arm rail
+      box(0.04,0.04,0.68,matWal,sx*0.37,0.12,0,g);
+      const bp=box(0.05,0.62,0.05,matWal,sx*0.33,0.78,-0.37,g); bp.rotation.x=-0.2;
+    }
+    box(0.7,0.045,0.72,matWal,0,0.28,0,g);
+    box(0.7,0.05,0.05,matWal,0,1.08,-0.43,g).rotation.x=-0.2;
+    put(softBox(0.68,0.13,0.7,0.045,matLeather,0.015),0,0.37,0.02,g);
+    put(softBox(0.64,0.5,0.13,0.05,matLeather,0),0,0.7,-0.3,g,0,-0.2);
+    put(softBox(0.36,0.3,0.1,0.05,matOchre,0),0.1,0.56,-0.2,g,0.15,-0.25);
+  };
+  chair(gx-1.28,Math.PI/2); chair(gx+1.28,-Math.PI/2);
+  // Akari-style paper pendant lantern
+  const lanternY=2.15;
+  {
+    const g=new THREE.Group(); g.position.set(gx,lanternY,gz); S.add(g);
+    const prof=[]; for(let i=0;i<=20;i++){ const t=i/20; prof.push([0.012+0.25*Math.pow(Math.sin(Math.PI*t),0.75),-0.26+0.52*t]); }
+    const shade=lathe(prof,matShade,48); shade.castShadow=false; g.add(shade);
+    for(let i=1;i<20;i++){ const [r,y]=prof[i]; const rib=new THREE.Mesh(new THREE.TorusGeometry(r+0.002,0.0018,4,48),matRib); rib.rotation.x=Math.PI/2; rib.position.y=y; g.add(rib); }
+    put(cyl(0.03,0.03,0.02,matIron,16),0,0.27,0,g); put(cyl(0.025,0.025,0.015,matIron,16),0,-0.265,0,g);
+    put(cyl(0.004,0.004,ROOM_H-lanternY-0.28,matIron,6),0,(ROOM_H-lanternY+0.28)/2,0,g).castShadow=false;
+    put(cyl(0.05,0.05,0.02,matIron,20),0,ROOM_H-lanternY-0.01,0,g);
+  }
+
+  /* left wall: sofa, floor lamp, side table */
+  {
+    const g=new THREE.Group(); g.position.set(-RW/2+0.5,0,gz); g.rotation.y=Math.PI/2; S.add(g);
+    for(const sx of [-1,1])for(const sz of [-1,1]) box(0.05,0.06,0.05,matIron,sx*1.0,0.03,sz*0.36,g);
+    box(2.16,0.13,0.86,matWal,0,0.125,0,g);
+    put(softBox(2.12,0.42,0.18,0.05,matWool,0),0,0.4,-0.36,g);
+    for(const sx of [-1,1]) put(softBox(0.16,0.38,0.86,0.05,matWool,0),sx*1.0,0.38,0,g);
+    for(let i=-1;i<=1;i++){
+      put(softBox(0.6,0.14,0.68,0.05,matWool,0.02),i*0.61,0.26,0.06,g);
+      put(softBox(0.6,0.42,0.17,0.07,matWool,0.01),i*0.61,0.53,-0.22,g,0,-0.14);
+    }
+    put(softBox(0.42,0.42,0.13,0.07,matIndigo,0),-0.62,0.52,-0.08,g,0.25,-0.3);
+    put(softBox(0.38,0.38,0.12,0.07,matOchre,0),0.66,0.5,-0.1,g,-0.2,-0.3);
+  }
+  const floorLampZ=gz-1.55;
+  {
+    const g=new THREE.Group(); g.position.set(-RW/2+0.42,0,floorLampZ); S.add(g);
+    put(lathe([[0,0],[0.15,0],[0.15,0.018],[0.03,0.03],[0,0.03]],matIron,40),0,0,0,g);
+    put(cyl(0.011,0.011,1.38,matBrass2,12),0,0.72,0,g);
+    const sh=cyl(0.2,0.22,0.32,matShade,40,true); sh.castShadow=false; put(sh,0,1.48,0,g);
+  }
+  {
+    const g=new THREE.Group(); g.position.set(-RW/2+0.42,0,gz+1.45); S.add(g);
+    put(lathe([[0,0],[0.17,0],[0.17,0.012],[0.02,0.02],[0,0.02]],matIron,40),0,0,0,g);
+    put(cyl(0.016,0.016,0.48,matIron,12),0,0.25,0,g);
+    put(cyl(0.22,0.22,0.03,matWal,48),0,0.5,0,g);
+    put(lathe(BOWL,matRaku2,40),0.05,0.515,0.04,g);
+    box(0.2,0.025,0.14,matMatte('#5a4632'),-0.06,0.528,-0.06,g).rotation.y=0.5;
+  }
+
+  /* right wall: sideboard with a table lamp, and the gold-leaf art above it */
+  const sbLampZ=gz+0.6;
+  {
+    const g=new THREE.Group(); g.position.set(RW/2-0.25,0,gz); g.rotation.y=-Math.PI/2; S.add(g);
+    for(const sx of [-1,1])for(const sz of [-1,1]) box(0.035,0.14,0.035,matIron,sx*0.9,0.07,sz*0.18,g);
+    box(1.92,0.5,0.44,matLacq,0,0.39,0,g);
+    box(1.98,0.035,0.47,matWal,0,0.6575,0,g);
+    for(let i=-1;i<=1;i++){ box(0.004,0.44,0.004,matBrass2,i*0.64+0.32,0.39,0.222,g); }
+    for(const x of [-0.64,0,0.64]) box(0.14,0.012,0.012,matBrass2,x,0.52,0.225,g);
+    // table lamp: dark ceramic body, linen drum shade
+    put(lathe([[0,0],[0.07,0],[0.1,0.08],[0.095,0.2],[0.05,0.27],[0.02,0.3],[0,0.3]],matCeramic,40),-0.6,0.675,0,g);
+    const sh=cyl(0.15,0.17,0.2,matShade,40,true); sh.castShadow=false; put(sh,-0.6,1.06,0,g);
+    put(cyl(0.006,0.006,0.12,matBrass2,8),-0.6,0.98,0,g);
+    const vase=lathe(VASE,matPorc2,48); vase.scale.set(1.1,1.3,1.1); put(vase,0.55,0.675,0,g);
+    for(let i=0;i<3;i++) box(0.26-i*0.02,0.03,0.2-i*0.015,matMatte(['#2a2a2a','#5a4632','#1e2a3a'][i]),0.05,0.69+i*0.03,0.02,g).rotation.y=i*0.12;
+    // framed art
+    const af=new THREE.Group(); af.position.set(0,1.62,-0.2); g.add(af);
+    const art=new THREE.Mesh(new THREE.PlaneGeometry(1.2,0.8),matArt); art.position.z=0.012; art.receiveShadow=true; af.add(art);
+    box(1.3,0.9,0.012,matMatte('#d9d2c2'),0,0,0.004,af);
+    box(1.34,0.025,0.04,matLacq,0,0.4625,0.02,af); box(1.34,0.025,0.04,matLacq,0,-0.4625,0.02,af);
+    box(0.025,0.95,0.04,matLacq,-0.6575,0,0.02,af); box(0.025,0.95,0.04,matLacq,0.6575,0,0.02,af);
+  }
+
+  /* lights */
+  const hemi2=new THREE.HemisphereLight(0xfff1e0,0x3a2c20,0.3); S.add(hemi2);
+  const pend=new THREE.PointLight(0xffb978,1.4,7.5,1.6); pend.position.set(gx,lanternY,gz);
+  pend.castShadow=true; pend.shadow.mapSize.set(512,512); pend.shadow.bias=-0.004; pend.shadow.radius=5; pend.shadow.camera.near=0.3; S.add(pend);
+  const toko=new THREE.SpotLight(0xffd6a0,2.0,4,0.62,0.75,1.4); toko.position.set(cx,1.98,z1+0.6); toko.target.position.set(cx,0.8,z1+0.05);
+  toko.castShadow=true; toko.shadow.mapSize.set(512,512); toko.shadow.bias=-0.002; toko.shadow.radius=4; S.add(toko,toko.target);
+  const win=new THREE.SpotLight(0xfff3e2,1.5,12,0.8,1.0,1); win.position.set(winX,2.4,z1-1.6); win.target.position.set(winX-1.2,0,zc);
+  win.castShadow=true; win.shadow.mapSize.set(1024,1024); win.shadow.bias=-0.0015; win.shadow.radius=3; win.shadow.camera.near=0.8; S.add(win,win.target);
+  const flamp=new THREE.PointLight(0xffc690,0.7,4,2); flamp.position.set(-RW/2+0.42,1.48,floorLampZ); S.add(flamp);
+  const tlamp=new THREE.PointLight(0xffc690,0.5,3.5,2); tlamp.position.set(RW/2-0.25,1.06,sbLampZ); S.add(tlamp);
+
+  const cWinD=new THREE.Color(1,0.97,0.92), cWinN=new THREE.Color(0.2,0.24,0.34), cSunD=new THREE.Color(0xfff3e2), cMoon=new THREE.Color(0x9fb4e0);
+  function applyInnerMode(m){
+    hemi2.intensity=lerp(0.36,0.12,m);
+    win.intensity=lerp(1.6,0.35,m); win.color.copy(cSunD).lerp(cMoon,m);
+    matWinPaper.color.copy(cWinD).lerp(cWinN,m);
+    pend.intensity=lerp(0.55,1.5,m); toko.intensity=lerp(1.2,2.1,m);
+    flamp.intensity=lerp(0.15,0.8,m); tlamp.intensity=lerp(0.12,0.6,m);
+    matShade.emissiveIntensity=lerp(0.4,1.25,m);
+  }
+  return {scene:S,applyMode:applyInnerMode};
+}
+
 function buildInnerRoom(){
   if(innerRoomBuilt) return; innerRoomBuilt=true;
   try{
@@ -1647,20 +2119,12 @@ function buildInnerRoom(){
     const newDoor=fusumaDoor(doorW,doorH);
     newDoor.position.set((doorX0+doorX1)/2,doorH/2,0.03); scene.add(newDoor);
     makeMovable(newDoor,'x',doorW+0.02,'inner-door');
-    // the second room itself -- floor, three walls and a ceiling, starting WALL_T beyond the back wall
-    const ROOM2_W=3.0, ROOM2_D=3.0, z0=-WALL_T, z1=-WALL_T-ROOM2_D, zc=(z0+z1)/2;
-    const floor2=new THREE.Mesh(new THREE.PlaneGeometry(ROOM2_W,ROOM2_D),matTatami);
-    floor2.rotation.x=-Math.PI/2; floor2.position.set(0,0,zc); floor2.receiveShadow=true; scene.add(floor2);
-    const ceil2=new THREE.Mesh(new THREE.PlaneGeometry(ROOM2_W,ROOM2_D),std({map:tDark,roughness:0.7},0.3));
-    ceil2.rotation.x=Math.PI/2; ceil2.position.set(0,ROOM_H,zc); scene.add(ceil2);
-    const farWall2=new THREE.Mesh(new THREE.PlaneGeometry(ROOM2_W,ROOM_H),matWallA);
-    farWall2.position.set(0,ROOM_H/2,z1); farWall2.receiveShadow=true; scene.add(farWall2);
-    worldUV(farWall2,-ROOM_W/2,ROOM_W,ROOM_H);
-    for(const s of [-1,1]){
-      const w2=new THREE.Mesh(new THREE.PlaneGeometry(ROOM2_D,ROOM_H),matWallA);
-      w2.rotation.y=s<0?Math.PI/2:-Math.PI/2; w2.position.set(s*ROOM2_W/2,ROOM_H/2,zc); w2.receiveShadow=true; scene.add(w2);
-      worldUV(w2,-ROOM_W/2,ROOM_W,ROOM_H);
-    }
+    // the second room itself: as wide as the main room and twice as deep as before, starting WALL_T
+    // beyond the back wall -- furnished and lit in its own scene (see buildInnerInterior())
+    const ROOM2_D=6.0, z0=-WALL_T, z1=-WALL_T-ROOM2_D;
+    const inner2=buildInnerInterior(z0,z1);
+    innerScene=inner2.scene; innerMode=inner2.applyMode; innerMode(mode);
+    innerDoorMv=newDoor.userData.mv;
     TARGET_MIN.z=z1+0.15;   // let the camera pan into the room now that it actually exists
   }catch(err){ console.error('inner room: failed to build',err); }
 }
@@ -1712,6 +2176,8 @@ function tick(){
   lampLight.intensity=lampBase*(1+0.04*Math.sin(time*7.3)*Math.sin(time*2.1));
   updateShowcase(dt,time);
   renderer.render(scene,camera);
+  // the room behind the fusuma, drawn over the same depth buffer -- only while the fusuma is open
+  if(innerScene&&innerDoorMv&&innerDoorMv.t>0.002){ renderer.autoClear=false; renderer.render(innerScene,camera); renderer.autoClear=true; }
   if(first){ first=false; loadingEl.style.opacity='0'; setTimeout(()=>loadingEl.remove(),1000); }
 }
 tick();
