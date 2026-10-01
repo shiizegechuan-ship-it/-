@@ -1040,6 +1040,36 @@ const lampPos=new THREE.Vector3(2.0,0,1.0);
   box(0.312,0.56,0.008,matDark,0,0.335,0,g).castShadow=false;
 }
 
+/* ---------- soft wall shading either side of the alcove ---------- */
+// The lighter plaster beyond the dark alcove used to stop at hard edges, so it read as flat panels of
+// light. These dark-plaster overlays fade it out instead: the left one fades in toward the alcove (so
+// that light is most transparent at its right end); the right one leaves a soft pool around the andon
+// lamp, brightest nearest the lamp and dying away with distance. Alpha is computed from world position
+// in the shader -- an alphaMap would share the plaster's repeat/UV transform.
+function wallShade(x0,x1,fn){
+  const m=std({map:tPlasterB,bumpMap:tPlasterB,bumpScale:0.8,roughness:0.97,transparent:true,depthWrite:false},0.25);
+  const uStrength={value:1};
+  m.onBeforeCompile=sh=>{
+    sh.uniforms.uStrength=uStrength;
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vWPos;')
+      .replace('#include <project_vertex>','#include <project_vertex>\nvWPos=(modelMatrix*vec4(transformed,1.0)).xyz;');
+    sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vWPos;\nuniform float uStrength;\n'+fn)
+      .replace('#include <alphamap_fragment>','#include <alphamap_fragment>\ndiffuseColor.a*=shadeAlpha(vWPos);');
+  };
+  m.customProgramCacheKey=()=>fn;   // both shades share onBeforeCompile's source, so key them apart
+  const p=new THREE.Mesh(new THREE.PlaneGeometry(x1-x0,ROOM_H),m);
+  p.position.set((x0+x1)/2,ROOM_H/2,alcove.position.z); p.receiveShadow=true; scene.add(p);
+  worldUV(p,-1.54,3.08,ROOM_H);   // same plaster scale as the alcove, so they meet seamlessly
+  return uStrength;
+}
+wallShade(-ROOM_W/2,-1.54,'float shadeAlpha(vec3 p){ return smoothstep(-3.6,-1.54,p.x); }');
+const lampShade=wallShade(1.54,ROOM_W/2,
+  'float shadeAlpha(vec3 p){'+
+  ' vec2 d=(p.xy-vec2('+lampPos.x.toFixed(2)+',0.5))/vec2(1.5,1.2);'+
+  ' float glow=exp(-dot(d,d));'+                          // 1 at the lamp, falling off smoothly with distance
+  ' float edge=1.0-smoothstep(1.54,1.9,p.x);'+            // fully dark where it meets the alcove: no seam
+  ' return max(edge,uStrength*(1.0-glow)); }');
+
 /* ---------- lights ---------- */
 const hemi=new THREE.HemisphereLight(0xffe9cf,0x5d4a2e,0.45); scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xfff0dc,1.8);
@@ -1064,6 +1094,7 @@ function applyMode(m){
   hemi.intensity=lerp(0.45,0.12,m); hemi.color.copy(cDayHS).lerp(cNightHS,m);
   fill.intensity=lerp(0.35,0.04,m);
   lampBase=lerp(0,1.9,m);
+  lampShade.value=lerp(0.45,1,m);   // by day the lamp is out, so its pool of light on the wall mostly fades away
   inner.forEach(l=>{ l.intensity=lerp(0.4,1.4,m); });
   matPaper.emissiveIntensity=lerp(0.12,0.95,m);
   matLampPaper.emissiveIntensity=lerp(0.35,2.6,m);
@@ -1608,6 +1639,10 @@ function buildInnerRoom(){
     const alcoveL=new THREE.Mesh(new THREE.PlaneGeometry(doorX0+1.54,ROOM_H),matWallB);
     alcoveL.position.set((-1.54+doorX0)/2,ROOM_H/2,alcove.position.z); alcoveL.receiveShadow=true; scene.add(alcoveL);
     worldUV(alcoveL,-1.54,3.08,ROOM_H);
+    // and above the opening, so no patch of the lighter plaster shows over the fusuma
+    const alcoveT=new THREE.Mesh(new THREE.PlaneGeometry(doorW,ROOM_H-doorH),matWallB);
+    alcoveT.position.set((doorX0+doorX1)/2,(doorH+ROOM_H)/2,alcove.position.z); alcoveT.receiveShadow=true; scene.add(alcoveT);
+    worldUV(alcoveT,-1.54,3.08,ROOM_H);
     // a fusuma panel across the opening, sliding sideways to reveal the room beyond
     const newDoor=fusumaDoor(doorW,doorH);
     newDoor.position.set((doorX0+doorX1)/2,doorH/2,0.03); scene.add(newDoor);
