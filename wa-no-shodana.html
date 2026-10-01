@@ -32,6 +32,26 @@ canvas{display:block}
 .bar button:hover{background:var(--panel-hover)}
 .bar button:focus-visible{outline:2px solid #e8c878;outline-offset:2px}
 .bar button[hidden]{display:none}
+/* item box (top centre) and lightbox */
+#items{position:absolute;top:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;pointer-events:auto;z-index:7;
+  padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:3px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#items[hidden]{display:none}
+#items button{width:52px;height:52px;padding:0;border:1px solid rgba(214,176,98,.35);border-radius:2px;background:rgba(0,0,0,.35);cursor:pointer}
+#items button.empty{cursor:default;opacity:.45}
+#items button.sel{border-color:#e8c878;box-shadow:0 0 0 2px rgba(232,200,120,.5),0 0 12px rgba(232,200,120,.45)}
+#items canvas{width:100%;height:100%;display:block}
+#lb{position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.62);pointer-events:auto;z-index:6}
+#lb[hidden]{display:none}
+#lb .card{width:min(86vw,340px);padding:18px 18px 16px;background:rgba(24,16,10,.94);border:1px solid var(--line);border-radius:3px;text-align:center}
+#lb canvas{width:220px;height:220px;max-width:100%}
+#lb b{display:block;margin-top:6px;font-size:17px;letter-spacing:.2em}
+#lb p{margin:8px 0 0;font-size:13px;line-height:1.8;color:var(--muted)}
+#lb .msg{min-height:1.8em;color:#e8c878}
+#lb .x{position:absolute;margin:-10px 0 0 calc(min(86vw,340px) - 52px);background:none;border:0;color:var(--muted);font-size:22px;cursor:pointer}
+#toast{position:absolute;top:84px;left:50%;transform:translateX(-50%);padding:7px 16px;background:var(--panel);border:1px solid var(--line);
+  font-size:13px;letter-spacing:.12em;opacity:0;transition:opacity .5s;white-space:nowrap}
+#toast.on{opacity:1}
+@media (max-width:640px){ #items{top:66px} #toast{top:136px} }
 #loading{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);color:var(--muted);
   letter-spacing:.45em;font-size:14px;transition:opacity .9s;z-index:5}
 @media (prefers-reduced-motion: reduce){ #loading,.hint{transition:none} }
@@ -46,6 +66,9 @@ canvas{display:block}
     <button id="bReset" type="button">位置をリセット</button>
     <button id="bExit" type="button" hidden>部屋を出る</button>
   </div>
+  <div id="items" hidden></div>
+  <div id="toast"></div>
+  <div id="lb" hidden><div class="card"><button class="x" type="button" aria-label="閉じる">×</button><canvas width="440" height="440"></canvas><b></b><p class="desc"></p><p class="msg"></p></div></div>
 </div>
 <div id="loading">読み込み中</div>
 
@@ -69,6 +92,10 @@ canvas{display:block}
                             (buildInnerRoom); the furnished room is `innerScene` (buildInnerInterior,
                             built at startup). Tap the fusuma to walk in; props carry userData.innerAct
                             (movable() there) -- give any object one to make a new puzzle piece.
+   items                    ITEMS (name, description, icon painter) and RECIPES ([a,b,result]); itemProp() makes
+                            something in the world a pick-up; giveItem(id) adds one directly. Item box shows
+                            after first entering the hidden room: tap = select, tap again = lightbox, and with
+                            the lightbox open, tapping another item tries a recipe.
    loop                     tick(): animations, camera, then main scene + innerScene + underScene
  Taps: main room -> raycast `pickables`; inside the hidden room -> innerRoom.pick() (its own scene only).
  Animations: makeMovable() (main room, slides along an axis, tag groups them) and step() for the rest.
@@ -707,7 +734,7 @@ const drawerMvs=[];
     box(0.81,0.012,bd,matLight,0,-bh/2+0.006-0.01,-0.011-bd/2,g);
     box(0.012,bh,bd,matLight,-0.399,-0.01,-0.011-bd/2,g); box(0.012,bh,bd,matLight,0.399,-0.01,-0.011-bd/2,g);
     box(0.81,bh,0.012,matLight,0,-0.01,-0.011-bd+0.006,g);
-    drawerMvs.push(makeMovable(g,'z',0.22,'drawer'));
+    drawerMvs.push(makeMovable(g,'z',0.27,'drawer'));
   }
 }
 
@@ -1142,8 +1169,9 @@ function endPointer(e){
     else{
       setNdc(e); const hit=raycaster.intersectObjects(pickables,true);
       if(hit.length){
-        const obj=hit[0].object;
-        if(obj===trapCatcher) tapTrap();
+        const obj=hit[0].object, it=findUp(obj,x=>x.userData.item);
+        if(it) pickUp(it);
+        else if(obj===trapCatcher) tapTrap();
         else if(isDescendant(obj,trapHinge)) toggleFlap();
         else if(stairDoor&&isDescendant(obj,stairDoor.hinge)) tapDoor();
         else if(isDescendant(obj,shiori)) collectShiori();
@@ -1636,6 +1664,7 @@ function collectShiori(){
   if(hasKey||!shiori) return;
   hasKey=true; shiori.visible=false;
   const idx=pickables.indexOf(shiori); if(idx>=0) pickables.splice(idx,1);
+  giveItem('shiori');
 }
 
 /* ---------- hidden doorway + second room, behind where the shelf slides away from ---------- */
@@ -1826,10 +1855,11 @@ function cyl(rt,rb,h,mat,seg,open){ const m=new Mesh(new CylinderGeometry(rt,rb,
 function battenCeiling(parent,x0,x1,z0,z1,y,trim,cornice){
   const m=new Mesh(new PlaneGeometry(x1-x0,z1-z0),std({map:tCeilBoards,roughness:0.75},0.25));
   m.rotation.x=PI/2; m.position.set((x0+x1)/2,y,(z0+z1)/2); m.receiveShadow=true; parent.add(m); worldUV(m,0,1.8,1.8);
-  for(let x=x0+0.45;x<x1-0.1;x+=0.45) box(0.03,0.035,z1-z0,trim,x,y-0.0175,(z0+z1)/2,parent);
+  const b=(w,h,d,x,yy,z)=>{ box(w,h,d,trim,x,yy,z,parent).castShadow=false; };   // no shadows from the ceiling onto the walls
+  for(let x=x0+0.45;x<x1-0.1;x+=0.45) b(0.03,0.035,z1-z0,x,y-0.0175,(z0+z1)/2);
   if(cornice!==false){
-    box(x1-x0,0.05,0.05,trim,(x0+x1)/2,y-0.025,z0+0.025,parent); box(x1-x0,0.05,0.05,trim,(x0+x1)/2,y-0.025,z1-0.025,parent);
-    box(0.05,0.05,z1-z0,trim,x0+0.025,y-0.025,(z0+z1)/2,parent); box(0.05,0.05,z1-z0,trim,x1-0.025,y-0.025,(z0+z1)/2,parent);
+    b(x1-x0,0.05,0.05,(x0+x1)/2,y-0.025,z0+0.025); b(x1-x0,0.05,0.05,(x0+x1)/2,y-0.025,z1-0.025);
+    b(0.05,0.05,z1-z0,x0+0.025,y-0.025,(z0+z1)/2); b(0.05,0.05,z1-z0,x1-0.025,y-0.025,(z0+z1)/2);
   }
   return m;
 }
@@ -1941,8 +1971,8 @@ function buildInnerInterior(z0,z1){
     pl(0.12,ROOM_H,TD,matPl,tx1+0.06,ROOM_H/2,z1+TD/2);
     const back=new Mesh(new PlaneGeometry(TW,ROOM_H),matPlInk); back.position.set(cx,ROOM_H/2,z1+0.002); back.receiveShadow=true; S.add(back); worldUV(back,0,2.0,2.0);
     box(TW,0.04,TD-0.02,matKeyaki,cx,0.13,z1+(TD-0.02)/2,S);   // toko-ita: polished keyaki board
-    box(TW+0.02,0.15,0.07,matLacq,cx,0.075,tz-0.035,S);   // toko-gamachi: black lacquer front rail
-    box(TW+0.24,0.08,0.07,matTrim,cx,2.05,tz-0.035,S);   // otoshi-gake lintel
+    box(TW+0.02,0.15,0.07,matLacq,cx,0.075,tz-0.03,S);   // toko-gamachi: black lacquer front rail
+    box(TW+0.27,0.08,0.07,matTrim,cx,2.05,tz-0.015,S);   // otoshi-gake lintel, proud of the walls so its faces don't flicker against them
     pl(TW+0.24,ROOM_H-2.09,0.06,matPl,cx,(2.09+ROOM_H)/2,tz-0.03);   // small wall above it
     // toko-bashira: a natural, slightly irregular polished post at the right front corner
     const pts=[]; for(let i=0;i<=24;i++){ const y=i/24*ROOM_H; pts.push([0.062+0.006*Math.sin(i*1.7)+0.004*Math.sin(i*4.3),y]); }
@@ -1996,7 +2026,7 @@ function buildInnerInterior(z0,z1){
     box(w-0.1,0.062,0.02,matLacq,0,0.04,d/2-0.01,dg); box(0.16,0.01,0.012,matBrass2,0,0.045,d/2+0.006,dg);
     box(w-0.14,0.006,d-0.07,matWal,0,0.013,-0.01,dg); box(w-0.14,0.05,0.008,matWal,0,0.04,-(d/2-0.04),dg);
     for(const sx of [-1,1]) box(0.008,0.05,d-0.07,matWal,sx*(w/2-0.075),0.04,-0.01,dg);
-    box(0.17,0.004,0.11,matPaperBook,0.25,0.018,0,dg).rotation.y=0.12;   // an envelope left in it
+    itemProp('letter',box(0.17,0.004,0.11,matPaperBook,0.25,0.018,0,dg),true).rotation.y=0.12;   // an envelope left in it
     movable(dg,'position','z',0.26);
     const ys=[0.08,0.55,1.05,1.55];
     for(const y of ys.slice(1)) box(w-0.08,0.028,d,matWal,0,y,0,g);
@@ -2050,6 +2080,7 @@ function buildInnerInterior(z0,z1){
     // tea caddy and a book on the other end
     put(cyl(0.035,0.035,0.09,matLacq,24),-0.55,0.475,0.02,b);
     box(0.22,0.03,0.16,matMatte('#3a2d24'),-0.25,0.445,0,b).rotation.y=0.2;
+    itemProp('keyShaft',itemMesh('keyShaft'),true,-0.25,0.46,0.02,b).rotation.y=0.6;   // lying on the book
   }
 
   /* centre: rug, low table, two armchairs, pendant lantern */
@@ -2127,6 +2158,7 @@ function buildInnerInterior(z0,z1){
     put(cyl(0.22,0.22,0.03,matWal,48),0,0.5,0,g);
     put(lathe(BOWL,matRaku2,40),0.05,0.515,0.04,g);
     box(0.2,0.025,0.14,matMatte('#5a4632'),-0.06,0.528,-0.06,g).rotation.y=0.5;
+    itemProp('candle',itemMesh('candle'),true,-0.1,0.515,0.11,g);
   }
 
   /* right wall: sideboard with a table lamp, and the gold-leaf art above it */
@@ -2150,6 +2182,7 @@ function buildInnerInterior(z0,z1){
     // what's inside
     put(lathe(BOWL,matRaku2,40),-0.64,0.16,0.02,g).scale.setScalar(1.4);
     box(0.22,0.07,0.15,matKeyaki,0,0.195,0,g); box(0.226,0.012,0.156,matLacq,0,0.235,0,g);   // a small lidded wooden box
+    itemProp('keyBow',itemMesh('keyBow'),true,0.19,0.16,0.08,g);
     for(let i=0;i<2;i++) box(0.2,0.028,0.15,matMatte(['#3b2e2a','#1f2630'][i]),0.62,0.42+i*0.028,0,g);
     // table lamp: dark ceramic body, linen drum shade (tap to switch)
     const tl=new Group(); g.add(tl); tl.userData.innerAct=()=>toggleLamp('table'); tl.userData.noFocus=true;
@@ -2227,6 +2260,97 @@ function buildInnerRoom(){
   }catch(err){ console.error('inner room: failed to build',err); }
 }
 
+/* ---------- items: pick-ups, the item box and the lightbox ---------- */
+// ITEMS: everything that can be carried. icon(g) paints it in a 100x100 box (item box + lightbox).
+// RECIPES: [a, b, result] -- with a in the lightbox, tapping b in the item box combines them (either order).
+// To add an item: an ITEMS entry (+ itemMesh() case for its 3D look), then itemProp(id, mesh, ...) where it lies.
+const ITEMS={
+  shiori:{name:'栞',desc:'臙脂色の栞。金の房が付いている。裏に小さく「下へ」と書かれている。',icon(g){
+    g.translate(50,50); g.rotate(-0.5); g.fillStyle='#7a2f3a'; g.fillRect(-9,-36,18,64); g.fillStyle='#c9a24a'; g.fillRect(-9,-36,18,5);
+    g.beginPath(); g.moveTo(0,28); g.lineTo(-6,44); g.lineTo(6,44); g.fill(); }},
+  matches:{name:'マッチ箱',desc:'古いマッチ箱。中に数本だけ残っている。',icon(g){
+    g.fillStyle='#4a3424'; g.fillRect(18,36,64,32); g.fillStyle='#b8322a'; g.fillRect(18,36,64,10); g.fillStyle='#e8d9b5'; g.fillRect(40,50,22,12);
+    g.fillStyle='#d9c8a0'; g.save(); g.translate(64,30); g.rotate(-0.6); g.fillRect(0,-2,30,4); g.fillStyle='#7a1e18'; g.beginPath(); g.arc(0,0,4,0,7); g.fill(); g.restore(); }},
+  candle:{name:'蝋燭',desc:'和蝋燭。芯はまだ新しい。',icon(g){ candleIcon(g,false); }},
+  litCandle:{name:'灯した蝋燭',desc:'静かに揺れる炎。暗い所も照らせそうだ。',icon(g){ candleIcon(g,true); }},
+  letter:{name:'封筒',desc:'中に一枚の紙。「月の裏に 金の扉」とだけ書かれている。',icon(g){
+    g.fillStyle='#e6dcc4'; g.fillRect(14,30,72,44); g.strokeStyle='#8a7a5a'; g.lineWidth=2; g.strokeRect(14,30,72,44);
+    g.beginPath(); g.moveTo(14,30); g.lineTo(50,56); g.lineTo(86,30); g.stroke(); g.fillStyle='#a3291c'; g.beginPath(); g.arc(50,56,5,0,7); g.fill(); }},
+  keyBow:{name:'鍵の持ち手',desc:'真鍮の輪。先が折れている。何かと繋がりそうだ。',icon(g){ keyIcon(g,true,false); }},
+  keyShaft:{name:'鍵の軸',desc:'歯の付いた真鍮の棒。持ち手がない。',icon(g){ keyIcon(g,false,true); }},
+  brassKey:{name:'真鍮の鍵',desc:'持ち手と軸がぴたりと合わさった鍵。',icon(g){ keyIcon(g,true,true); }},
+};
+const RECIPES=[['keyBow','keyShaft','brassKey'],['matches','candle','litCandle']];
+function candleIcon(g,lit){
+  g.fillStyle='#efe6d2'; g.fillRect(40,38,20,48); g.beginPath(); g.ellipse(50,38,10,3,0,0,7); g.fillStyle='#fff8ea'; g.fill();
+  g.fillStyle='#8a2a20'; g.fillRect(38,80,24,6); g.strokeStyle='#222'; g.lineWidth=2; g.beginPath(); g.moveTo(50,36); g.lineTo(50,30); g.stroke();
+  if(lit){ const f=g.createRadialGradient(50,20,1,50,22,14); f.addColorStop(0,'#fff6c8'); f.addColorStop(.5,'#ffb43c'); f.addColorStop(1,'rgba(255,120,20,0)');
+    g.fillStyle=f; g.beginPath(); g.ellipse(50,20,8,14,0,0,7); g.fill(); }
+}
+function keyIcon(g,bow,shaft){
+  g.strokeStyle=g.fillStyle='#c9a24a'; g.lineWidth=7;
+  if(bow){ g.beginPath(); g.arc(28,50,13,0,7); g.stroke(); g.fillRect(40,46,8,8); }
+  if(shaft){ g.fillRect(bow?48:22,46,(bow?36:56),8); g.fillRect(70,54,6,12); g.fillRect(80,54,5,9); }
+}
+// small 3D stand-ins for items lying in the world
+function itemMesh(id){
+  const g=new Group(), gold=std({color:C('#c9a24a'),metalness:1,roughness:0.3},1.2);
+  if(id==='matches'){ box(0.075,0.02,0.05,std({color:C('#4a3424'),roughness:0.8},0.2),0,0.01,0,g); box(0.076,0.021,0.016,std({color:C('#b8322a'),roughness:0.8},0.2),0,0.01,-0.017,g);
+    box(0.03,0.002,0.018,std({color:C('#e8d9b5'),roughness:0.8},0.2),0.01,0.021,0.01,g); }
+  if(id==='candle'){ put(cyl(0.013,0.013,0.085,std({color:C('#efe6d2'),roughness:0.6},0.3),16),0,0.0425,0,g); put(cyl(0.0015,0.0015,0.012,std({color:C('#222'),roughness:0.9},0),6),0,0.09,0,g); }
+  if(id==='keyBow'){ const r=new Mesh(new THREE.TorusGeometry(0.014,0.0035,8,20),gold); r.rotation.x=PI/2; r.position.y=0.004; r.castShadow=true; g.add(r); box(0.012,0.006,0.008,gold,0.018,0.004,0,g); }
+  if(id==='keyShaft'){ box(0.055,0.006,0.007,gold,0,0.003,0,g); box(0.006,0.006,0.012,gold,0.016,0.003,0.008,g); box(0.005,0.006,0.009,gold,0.024,0.003,0.006,g); }
+  return g;
+}
+// marks obj as a pick-up of item `id` (inner: lives in the hidden room), optionally placing it in parent
+function itemProp(id,obj,inner,x,y,z,parent){
+  if(parent) put(obj,x,y,z,parent);
+  obj.userData.item=id;
+  if(inner){ obj.userData.innerAct=()=>pickUp(obj); obj.userData.noFocus=true; } else pickables.push(obj);
+  return obj;
+}
+const inv=[];               // ids held, in pick-up order
+let selItem=null, lbItem=null;
+function pickUp(obj){
+  obj.parent.remove(obj); const i=pickables.indexOf(obj); if(i>=0) pickables.splice(i,1);
+  giveItem(obj.userData.item);
+}
+function giveItem(id){ inv.push(id); renderItems(); toast(ITEMS[id].name+'を手に入れた'); }
+function drawIcon(c,id){ const g=c.getContext('2d'); g.clearRect(0,0,c.width,c.height); g.save(); g.scale(c.width/100,c.height/100); ITEMS[id].icon(g); g.restore(); }
+const SLOTS=8;
+function renderItems(){
+  const bar=$('items'); bar.textContent='';
+  for(let i=0;i<Math.max(SLOTS,inv.length);i++){
+    const id=inv[i], b=document.createElement('button'); b.type='button';
+    if(!id){ b.className='empty'; b.disabled=true; bar.appendChild(b); continue; }
+    const c=document.createElement('canvas'); c.width=c.height=104; drawIcon(c,id); b.appendChild(c);
+    b.title=ITEMS[id].name; if(id===selItem) b.className='sel';
+    b.onclick=()=>tapSlot(id); bar.appendChild(b);
+  }
+}
+// one tap selects; tapping the selected item again opens the lightbox; with the lightbox open, tapping another combines
+function tapSlot(id){
+  if(lbItem){ if(id!==lbItem) combine(lbItem,id); return; }
+  if(selItem===id) openLb(id); else selItem=id;
+  renderItems();
+}
+function combine(a,b){
+  const r=RECIPES.find(([x,y])=>(x===a&&y===b)||(x===b&&y===a));
+  if(!r){ lbMsg(ITEMS[b].name+'とは組み合わせられないようだ'); return; }
+  inv.splice(inv.indexOf(a),1); inv.splice(inv.indexOf(b),1); inv.push(r[2]); selItem=r[2];
+  openLb(r[2]); lbMsg(ITEMS[a].name+'と'+ITEMS[b].name+'を合わせて、'+ITEMS[r[2]].name+'になった'); renderItems();
+}
+const lb=$('lb');
+function openLb(id){ lbItem=id; drawIcon(lb.querySelector('canvas'),id); lb.querySelector('b').textContent=ITEMS[id].name; lb.querySelector('.desc').textContent=ITEMS[id].desc; lbMsg(''); lb.hidden=false; }
+function closeLb(){ lb.hidden=true; lbItem=null; }
+function lbMsg(t){ lb.querySelector('.msg').textContent=t; }
+lb.addEventListener('click',e=>{ if(e.target===lb||e.target.classList.contains('x')) closeLb(); });
+window.addEventListener('keydown',e=>{ if(e.key==='Escape') closeLb(); });
+let toastT=0;
+function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('on'),2200); }
+// main-room pick-up: a box of matches in the bottom drawer
+itemProp('matches',itemMesh('matches'),false,0.18,-0.083,-0.21,drawerMvs[0].obj);
+
 /* ---------- walking into the hidden room, and looking all the way round inside it ---------- */
 // Tapping the fusuma glides the camera in (roomRide); inside (roomView) drag looks round, pinch/wheel zooms,
 // two fingers walk, tapping a prop moves it and steps over to it. 部屋を出る / 位置をリセット lead back.
@@ -2279,7 +2403,7 @@ function enterInnerRoom(){
   const th0=cur.theta, th1=Math.round(th0/(PI*2))*PI*2;   // face straight into the room, turning the short way
   startRoomRide([camera.position.clone(),DOOR_FRONT.clone(),ROOM_EYE.clone()],
     [{u:0,th:th0,ph:cur.phi},{u:0.45,th:th1,ph:PI/2},{u:1,th:th1,ph:1.6}],3.4,
-    ()=>{ roomView=true; $('bExit').hidden=false; });
+    ()=>{ roomView=true; $('bExit').hidden=false; $('items').hidden=false; renderItems(); });
 }
 function exitInnerRoom(){
   if(!roomView||roomRide) return;
