@@ -1987,9 +1987,10 @@ function buildInnerInterior(z0,z1){
     customs.push(dt=>{ const e=step(scSwing,dt,3); if(e!==null) updateScrollCurl(scCurl.maxAngle*e,scCurl); });
     const plaque=box(0.18,0.24,0.006,matKeyaki.clone(),scX,1.25,z1+0.004,S);   // blank wooden plaque behind the scroll
     lockable(plaque,'plaque',()=>{ plaque.material.map=canvasTex(128,170,(g,w,h)=>{ drawWood(g,w,h,{base:'#5e3a22',dark:'30,15,6',light:'160,110,70',lines:20,wave:1});
-      g.font=`500 ${w*0.6}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle='rgba(12,9,7,.92)'; g.fillText('月',w/2,h/2); },{repeat:false});
+      g.font=`500 ${w*0.6}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle='#0a0705'; g.font=`700 ${w*0.66}px ${FONT}`; g.fillText('月',w/2,h/2); },{repeat:false});
       plaque.geometry.dispose(); plaque.geometry=new THREE.BoxGeometry(0.18,0.24,0.006);   // plain 0..1 UVs for the written face
-      plaque.material.color.set(0xffffff); plaque.material.needsUpdate=true; });
+      plaque.material.color.set(0xffffff); plaque.material.roughness=0.92; plaque.material.clearcoat=0; plaque.material.envMapIntensity=0.02;   // matte: no glare over the character
+      plaque.material.needsUpdate=true; });
     setView(plaque,S,[scX,1.25,z1],1.45,-0.15);
     // ikebana: a low black suiban with a camellia branch
     const suiban=lathe([[0,0],[0.17,0],[0.19,0.01],[0.2,0.05],[0.185,0.05],[0.175,0.015],[0,0.015]],matCeramic,48);
@@ -2296,9 +2297,9 @@ const ITEMS={
   shiori:{name:'栞',desc:'本に挟まっていた、臙脂色の薄い栞。細い隙間にも差し込めそうだ。',icon(g){
     g.translate(50,50); g.rotate(-0.5); g.fillStyle='#7a2f3a'; g.fillRect(-9,-36,18,64); g.fillStyle='#c9a24a'; g.fillRect(-9,-36,18,5);
     g.beginPath(); g.moveTo(0,28); g.lineTo(-6,44); g.lineTo(6,44); g.fill(); }},
-  keyBow:{name:'鍵の持ち手',desc:'真鍮の輪。先が折れている。何かと繋がりそうだ。',icon(g){ keyIcon(g,true,false,false); }},
+  keyBow:{name:'鍵の持ち手',desc:'四角い穴の空いた、銭形の真鍮の持ち手。先が折れている。',icon(g){ keyIcon(g,true,false,false); }},
   keyShaft:{name:'鍵の軸',desc:'歯の付いた真鍮の棒。持ち手がない。',icon(g){ keyIcon(g,false,true,false); }},
-  cellarKey:{name:'地下の鍵',desc:'持ち手と軸がぴたりと合わさった、重い真鍮の鍵。地下の扉に合いそうだ。',icon(g){ keyIcon(g,true,true,true); }},
+  cellarKey:{name:'地下の鍵',desc:'銭形の持ち手と軸がぴたりと合わさった、朱の房付きの真鍮の鍵。地下の扉に合いそうだ。',icon(g){ keyIcon(g,true,true,true); }},
 };
 // [a, b, result]: combinations (order doesn't matter)
 const RECIPES=[['matches','candle','litCandle'],['sumi','fude','fudeSumi'],['keyBow','keyShaft','cellarKey']];
@@ -2330,10 +2331,15 @@ function brushIcon(g,inked){
   if(inked){ g.beginPath(); g.arc(0,52,3,0,7); g.fill(); } g.restore();
 }
 function keyIcon(g,bow,shaft,tassel){
-  g.strokeStyle=g.fillStyle='#c9a24a'; g.lineWidth=7;
-  if(bow){ g.beginPath(); g.arc(28,50,13,0,7); g.stroke(); g.fillRect(40,46,8,8); }
-  if(shaft){ g.fillRect(bow?48:22,46,(bow?36:56),8); g.fillRect(70,54,6,12); g.fillRect(80,54,5,9); }
-  if(tassel){ g.fillStyle='#b8322a'; g.fillRect(25,63,6,10); g.beginPath(); g.moveTo(24,73); g.lineTo(32,73); g.lineTo(35,90); g.lineTo(21,90); g.fill(); }
+  // wa-modern key: a coin-shaped brass bow with a square hole, a slim shaft with a notched bit, a red cord
+  const brass='#c9a24a', dark='#8a6a2a';
+  if(tassel){ g.strokeStyle='#b8322a'; g.lineWidth=3; g.beginPath(); g.moveTo(24,52); g.quadraticCurveTo(14,66,22,78); g.stroke();
+    g.fillStyle='#b8322a'; g.fillRect(19,76,7,4); g.beginPath(); g.moveTo(18,80); g.lineTo(27,80); g.lineTo(30,96); g.lineTo(15,96); g.fill(); }
+  if(bow){ g.fillStyle=brass; g.beginPath(); g.arc(30,40,17,0,7); g.fill(); g.strokeStyle=dark; g.lineWidth=2; g.beginPath(); g.arc(30,40,13,0,7); g.stroke();
+    g.fillStyle='#1a120c'; g.fillRect(24,34,12,12); g.fillStyle=brass; g.fillRect(46,37,6,6); }
+  if(shaft){ const x0=bow?52:20; g.fillStyle=brass; g.fillRect(x0,37,86-x0,6);
+    g.fillRect(70,43,14,14); g.fillStyle='#1a120c'; g.fillRect(74,47,3,10); g.fillRect(80,51,4,6);
+    g.fillStyle=dark; g.fillRect(x0,37,86-x0,1.5); }
 }
 // small 3D stand-ins for items lying in the world
 function itemMesh(id){
@@ -2348,7 +2354,7 @@ function itemMesh(id){
     box(0.003,0.003,0.03,mat('#b8322a'),-0.006,0.003,0.022,g); }
   if(id==='shiori'){ box(0.026,0.003,0.2,mat('#b8322a'),0,0.0015,0.06,g); box(0.004,0.004,0.04,gold,0,0.002,0.18,g);   // sticks well out of the book
     const t=new Mesh(new THREE.ConeGeometry(0.01,0.03,8),gold); t.rotation.x=PI/2; t.position.set(0,0.002,0.215); g.add(t); }
-  if(id==='keyBow'){ const r=new Mesh(new THREE.TorusGeometry(0.014,0.0035,8,20),gold); r.rotation.x=PI/2; r.position.y=0.004; r.castShadow=true; g.add(r); box(0.012,0.006,0.008,gold,0.018,0.004,0,g); }
+  if(id==='keyBow'){ put(cyl(0.017,0.017,0.004,gold,28),0,0.002,0,g); box(0.012,0.0045,0.012,std({color:C('#1a120c'),roughness:0.9},0),0,0.0025,0,g); box(0.012,0.004,0.006,gold,0.022,0.002,0,g); }
   if(id==='keyShaft'){ box(0.055,0.006,0.007,gold,0,0.003,0,g); box(0.006,0.006,0.012,gold,0.016,0.003,0.008,g); box(0.005,0.006,0.009,gold,0.024,0.003,0.006,g); }
   if(id==='letter'){ box(0.09,0.006,0.13,mat('#efe6d0'),0,0.003,0,g); box(0.09,0.002,0.02,mat('#ded2b6'),0,0.007,-0.05,g); }
   return g;
