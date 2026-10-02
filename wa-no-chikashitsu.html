@@ -798,20 +798,24 @@ $('bReset').addEventListener('click',()=>{
 
 /* =====================================================================================
    空飛ぶ本棚の大書庫(段階1〜6)
-   1 本棚を増やす … 上で作った1基(ASSEMBLY + HOLLOW)を、材質ごとに1つへまとめた「型」(SHELF_T) にし、
-                    InstancedMesh で何百基も描く。近くは実物(NEAR_*)、遠くは正面の写真を貼った箱(インポスター)。
+   1 本棚を増やす … 上で作った1基(ASSEMBLY + HOLLOW)を、材質ごとに1つへまとめた「型」にし、さらに
+                    6つの面(±x, ±y, ±z)に分けておく(SHELF_PARTS)。InstancedMesh で何百基も描く。
+                    迷路の本棚は、通路に面した面だけを、椅子の光が届く範囲だけ描く(遠くは真っ暗なので描かなくても同じ)。
+                    迷路の外の装飾の本棚は、近くは実物、遠くは正面の写真を貼った箱(インポスター)。
    2 空間         … 果ての見えない暗い書庫。霧・黒漆の大柱・浮かぶ提灯。
    3 無限         … 装飾の本棚・柱・提灯は、カメラの周りの格子に「場所から決まる乱数」(hash3) で置くので、
                     どこまで行っても同じ密度で続き、離れた所は霧に溶ける。
    4 空飛ぶ椅子   … 黒漆の座椅子+朱の座布団+瑞雲+提灯。三人称(椅子の後ろ)から見る。
    5 操作         … キーボード・ゲームパッド・画面のスティック/▲▼ボタン・ドラッグで見回し。
-   6 立体迷路     … 4×3×4 部屋の迷路(MAZE)。壁はすべて本棚。当たり判定あり。
+   6 立体迷路     … 4×3×4 部屋の迷路(MAZE)。1マス=本棚1基ぶんで、本棚を隙間なく敷き詰める。
+                    外側の6面には光る障子の面。迷路の中の明かりは椅子の提灯だけ。当たり判定は本棚の6面すべて。
    ※ 謎解き(7)・出口(8)はまだ。MAZE.goal に「入口から最も遠い部屋」を計算済み。
    ===================================================================================== */
-const LIB={NEAR_R:7, NEAR_MAX:30, FAR_MAX:2000, FOG:0x0b0806, FOG_D:0.045};
+const LIB={DECOR_NEAR:9, PART_MAX:260, FAR_MAX:2000, FOG:0x0b0806, FOG_D:0.045, CHAIR_LIGHT:3.2, CHAIR_RANGE:11};
 
 // ---- 1. the shelf as one template: one geometry with a group per material ----
-function mergeToTemplate(roots){
+const ONLY_PART0=[0];
+function mergeToTemplate(roots,nParts=1,classify=null){
   const buckets=new Map(), v=new THREE.Vector3(), n=new THREE.Vector3(), nm=new THREE.Matrix3();
   for(const root of roots){ root.updateMatrixWorld(true); root.traverse(o=>{
     if(!o.isMesh||!o.visible) return;
@@ -821,27 +825,51 @@ function mergeToTemplate(roots){
     const multi=Array.isArray(o.material), groups=multi&&g.groups.length?g.groups:[{start:0,count:P.count,materialIndex:0}];
     for(const gr of groups){
       const mat=multi?o.material[gr.materialIndex]:o.material; if(!mat) continue;
-      let b=buckets.get(mat); if(!b) buckets.set(mat,b={p:[],n:[],u:[],c:[]});
       const end=Math.min(gr.start+gr.count,P.count);
-      for(let t=gr.start;t+2<end;t+=3) for(const j of order){ const i=t+j;
+      for(let t=gr.start;t+2<end;t+=3){
+        let partList=ONLY_PART0;
+        if(classify){ v.set(0,0,0); for(let j=0;j<3;j++) v.add(n.fromBufferAttribute(P,t+j)); v.divideScalar(3).applyMatrix4(M); partList=classify(v.x,v.y,v.z); }
+        for(const part of partList){
+        const key=part*100000+(mat.id|0);
+        let b=buckets.get(key); if(!b) buckets.set(key,b={part,mat,p:[],n:[],u:[],c:[]});
+        for(const j of order){ const i=t+j;
         v.fromBufferAttribute(P,i).applyMatrix4(M); b.p.push(v.x,v.y,v.z);
         if(N){ n.fromBufferAttribute(N,i).applyMatrix3(nm).normalize(); b.n.push(n.x,n.y,n.z); } else b.n.push(0,1,0);
         if(U) b.u.push(U.getX(i),U.getY(i)); else b.u.push(0,0);
         if(K) b.c.push(K.getX(i),K.getY(i),K.getZ(i)); else b.c.push(1,1,1);
+        }
+        }
       }
     }
   }); }
-  let total=0; buckets.forEach(b=>total+=b.p.length/3);
-  const P=new Float32Array(total*3), N=new Float32Array(total*3), U=new Float32Array(total*2), K=new Float32Array(total*3);
-  const geo=new THREE.BufferGeometry(), mats=[]; let off=0;
-  buckets.forEach((b,mat)=>{ const c=b.p.length/3; P.set(b.p,off*3); N.set(b.n,off*3); U.set(b.u,off*2); K.set(b.c,off*3); geo.addGroup(off,c,mats.length); mats.push(mat); off+=c; });
-  geo.setAttribute('position',new THREE.BufferAttribute(P,3)); geo.setAttribute('normal',new THREE.BufferAttribute(N,3));
-  geo.setAttribute('uv',new THREE.BufferAttribute(U,2)); geo.setAttribute('color',new THREE.BufferAttribute(K,3));
-  geo.computeBoundingSphere();
-  return {geo,mats};
+  const parts=[];
+  for(let part=0;part<nParts;part++){
+    const bs=[...buckets.values()].filter(b=>b.part===part);
+    let total=0; bs.forEach(b=>total+=b.p.length/3);
+    const P=new Float32Array(total*3), N=new Float32Array(total*3), U=new Float32Array(total*2), K=new Float32Array(total*3);
+    const geo=new THREE.BufferGeometry(), mats=[]; let off=0;
+    bs.forEach(b=>{ const c=b.p.length/3; P.set(b.p,off*3); N.set(b.n,off*3); U.set(b.u,off*2); K.set(b.c,off*3); geo.addGroup(off,c,mats.length); mats.push(b.mat); off+=c; });
+    geo.setAttribute('position',new THREE.BufferAttribute(P,3)); geo.setAttribute('normal',new THREE.BufferAttribute(N,3));
+    geo.setAttribute('uv',new THREE.BufferAttribute(U,2)); geo.setAttribute('color',new THREE.BufferAttribute(K,3));
+    geo.computeBoundingSphere();
+    parts.push({geo,mats});
+  }
+  return nParts===1?parts[0]:parts;
 }
-const SHELF_T=mergeToTemplate([ASSEMBLY,HOLLOW]);
-const SHELF_HX=(S+0.08)/2, SHELF_HY=H_TOTAL/2;   // half size of one shelf (for collisions)
+const SHELF_HX=(S+0.08)/2, SHELF_HY=H_TOTAL/2;   // half size of one shelf (= one maze voxel, for collisions)
+// faces of a shelf: 0:+x 1:-x 2:+y 3:-y 4:+z 5:-z. A face gets every triangle within SIDE_BAND of it (books, boards,
+// posts, the corner shelves...), so looking at it shows a closed wall; triangles near an edge belong to both faces.
+// The hollow centre and the top frame are seen from above (+y); the base from below (-y).
+const SIDE_DIRS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]], SIDE_BAND=0.6;
+function shelfSide(x,y,z){
+  const u=x/SHELF_HX, w=z/SHELF_HX, v=(y-SHELF_HY)/SHELF_HY, out=[];
+  if(u>SIDE_BAND) out.push(0); if(u<-SIDE_BAND) out.push(1);
+  if(w>SIDE_BAND) out.push(4); if(w<-SIDE_BAND) out.push(5);
+  if(v>0.94||Math.max(Math.abs(u),Math.abs(w))<0.7) out.push(2);
+  if(v<-0.9) out.push(3);
+  return out;
+}
+const SHELF_PARTS=mergeToTemplate([ASSEMBLY,HOLLOW],6,shelfSide);
 
 // far shelves: a box wearing a photo of the real shelf (taken once, from the lit side)
 function bakeImpostor(){
@@ -854,18 +882,22 @@ function bakeImpostor(){
   return rt.texture;
 }
 const IMP_GEO=new THREE.BoxGeometry(SHELF_HX*2,H_TOTAL,SHELF_HX*2).translate(0,H_TOTAL/2,0);
-const impSide=new THREE.MeshBasicMaterial({map:bakeImpostor(),color:C('#8a7c6a')}), impCap=new THREE.MeshBasicMaterial({color:C('#0c0a08')});
+const impSide=new THREE.MeshStandardMaterial({map:bakeImpostor(),roughness:0.9}), impCap=new THREE.MeshStandardMaterial({color:C('#0c0a08'),roughness:0.9});   // lit like the real shelves
 const IMP_MATS=[impSide,impSide,impCap,impCap,impSide,impSide];
 
 // ---- 2. the space ----
 const libScene=new THREE.Scene();
 libScene.background=new THREE.Color(LIB.FOG); libScene.fog=new THREE.FogExp2(LIB.FOG,LIB.FOG_D);
-libScene.add(new THREE.HemisphereLight(0xffdcb0,0x140d08,0.6));
+// room light: fades to nothing inside the maze, where only the chair's lantern lights the way
+const hemi2=new THREE.HemisphereLight(0xffdcb0,0x140d08,0.6); libScene.add(hemi2);
 const moon=new THREE.DirectionalLight(0xffe2bc,0.8); moon.position.set(-0.4,1,0.3); libScene.add(moon);
 
-const nearShelves=new THREE.InstancedMesh(SHELF_T.geo,SHELF_T.mats,LIB.NEAR_MAX);
+// real shelves, one InstancedMesh per face of the template; far decor shelves as photo boxes
+const shelfParts=SHELF_PARTS.map(p=>new THREE.InstancedMesh(p.geo,p.mats,LIB.PART_MAX));
 const farShelves=new THREE.InstancedMesh(IMP_GEO,IMP_MATS,LIB.FAR_MAX);
-for(const m of [nearShelves,farShelves]){ m.frustumCulled=false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); libScene.add(m); }
+// hidden maze shelves (no face toward a passage) are drawn as plain black blocks, so nothing behind them shows through the corners
+const blockers=new THREE.InstancedMesh(new THREE.BoxGeometry(SHELF_HX*2,SHELF_HY*2,SHELF_HX*2).translate(0,SHELF_HY,0),new THREE.MeshBasicMaterial({color:0x040302}),600);
+for(const m of [...shelfParts,farShelves,blockers]){ m.frustumCulled=false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); libScene.add(m); }
 
 // pillars: black lacquer with gold bands, endless upward and downward (in the fog)
 const pillarTex=canvasTex(64,256,(g,w,h)=>{ g.fillStyle='#0d0a08'; g.fillRect(0,0,w,h); g.fillStyle='#b8913f'; g.fillRect(0,18,w,10); g.fillRect(0,34,w,3); });
@@ -888,7 +920,7 @@ function hash3(a,b,c,s){ let h=Math.imul(a,73856093)^Math.imul(b,19349663)^Math.
 
 // ---- 6. the maze (cells at odd voxel coords, walls = every closed voxel = one shelf) ----
 const MAZE=(()=>{
-  const nx=4,ny=3,nz=4, X=2*nx+1,Y=2*ny+1,Z=2*nz+1, VX=2.1, VY=2.5;
+  const nx=4,ny=3,nz=4, X=2*nx+1,Y=2*ny+1,Z=2*nz+1, VX=SHELF_HX*2, VY=SHELF_HY*2;   // one voxel = one shelf, packed with no gaps
   const id=(i,j,k)=>i+X*(j+Y*k), open=new Uint8Array(X*Y*Z), mr=mulberry32(4649);
   const seen=new Uint8Array(nx*ny*nz), cid=(a,b,c)=>a+nx*(b+ny*c), stack=[[0,0,0]];
   const DIRS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
@@ -908,15 +940,40 @@ const MAZE=(()=>{
     for(const [dx,dy,dz] of DIRS){ const a=i+dx,b=j+dy,c=k+dz; if(a<0||b<0||c<0||a>=X||b>=Y||c>=Z) continue; const t=id(a,b,c); if(open[t]&&dist[t]<0){ dist[t]=d+1; q.push([a,b,c]); } } }
   const o=new THREE.Vector3(-(X-1)/2*VX,-(Y-1)/2*VY,-(Z-1)/2*VX);
   const world=(i,j,k,out=new THREE.Vector3())=>out.set(o.x+i*VX,o.y+j*VY,o.z+k*VX);
+  const isOpen=(i,j,k)=>i>=0&&j>=0&&k>=0&&i<X&&j<Y&&k<Z&&open[id(i,j,k)]===1;
   const walls=[], wallAt=new Int32Array(X*Y*Z).fill(-1);
   for(let k=0;k<Z;k++) for(let j=0;j<Y;j++) for(let i=0;i<X;i++) if(!open[id(i,j,k)]){
-    wallAt[id(i,j,k)]=walls.length; walls.push({p:world(i,j,k),rot:Math.floor(mr()*4)*Math.PI/2,ph:mr()*6.283});
+    const q=Math.floor(mr()*4), rot=q*Math.PI/2, c=Math.round(Math.cos(rot)), sn=Math.round(Math.sin(rot));
+    // which faces of this shelf look into a room or passage (only those are ever drawn)
+    const sides=[]; SIDE_DIRS.forEach(([x,y,z],s)=>{ if(isOpen(i+(x*c+z*sn),j+y,k+(-x*sn+z*c))) sides.push(s); });
+    wallAt[id(i,j,k)]=walls.length; walls.push({p:world(i,j,k),rot,sides});
   }
-  const min=world(0,0,0).subScalar(SHELF_HX), max=world(X-1,Y-1,Z-1).addScalar(SHELF_HX);
+  const half=new THREE.Vector3(SHELF_HX,SHELF_HY,SHELF_HX);
+  const min=world(0,0,0).sub(half), max=world(X-1,Y-1,Z-1).add(half);
   const voxel=p=>[Math.round((p.x-o.x)/VX),Math.round((p.y-o.y)/VY),Math.round((p.z-o.z)/VX)];
   const wallIndex=(i,j,k)=>(i<0||j<0||k<0||i>=X||j>=Y||k>=Z)?-1:wallAt[id(i,j,k)];
-  return {X,Y,Z,VX,VY,open,id,walls,world,voxel,wallIndex,entrance,goal,min,max};
+  return {X,Y,Z,VX,VY,open,id,walls,world,voxel,wallIndex,entrance,goal,min,max,isOpen};
 })();
+
+// glowing shoji panels over the six outer faces of the maze (a hole at the entrance)
+{
+  const tex=canvasTex(256,256,(g,w,h)=>{
+    g.fillStyle='#f4dcae'; g.fillRect(0,0,w,h);
+    for(let i=0;i<1500;i++){ g.fillStyle=`rgba(${rnd()<.5?'255,248,230':'150,110,60'},${R(.04,.12)})`; g.fillRect(rnd()*w,rnd()*h,R(1,3),R(1,7)); }   // washi fibres
+    g.fillStyle='#3a2414'; g.fillRect(0,0,w,8); g.fillRect(0,0,8,h); g.fillRect(0,h/2-2,w,4); g.fillRect(w/2-2,0,4,h);       // kumiko
+  });
+  tex.repeat.set(1/SHELF_HX,1/SHELF_HX);   // UVs are in metres: one pane of the lattice per half shelf
+  const mat=new THREE.MeshBasicMaterial({map:tex,color:C('#ffe6c0'),side:THREE.DoubleSide});
+  const mn=MAZE.min, mx=MAZE.max, W=mx.x-mn.x, H=mx.y-mn.y, D=mx.z-mn.z, cx=(mn.x+mx.x)/2, cy=(mn.y+mx.y)/2, cz=(mn.z+mx.z)/2, o=0.02;
+  const rect=(w,h)=>{ const sh=new THREE.Shape(); sh.moveTo(-w/2,-h/2); sh.lineTo(w/2,-h/2); sh.lineTo(w/2,h/2); sh.lineTo(-w/2,h/2); sh.closePath(); return sh; };
+  const face=(sh,x,y,z,rx,ry)=>{ const m=new THREE.Mesh(new THREE.ShapeGeometry(sh),mat); m.position.set(x,y,z); m.rotation.set(rx,ry,0); libScene.add(m); };
+  const front=rect(W,H), e=MAZE.world(...MAZE.entrance), hole=new THREE.Path();
+  hole.moveTo(e.x-cx-SHELF_HX,e.y-cy-SHELF_HY); hole.lineTo(e.x-cx-SHELF_HX,e.y-cy+SHELF_HY); hole.lineTo(e.x-cx+SHELF_HX,e.y-cy+SHELF_HY); hole.lineTo(e.x-cx+SHELF_HX,e.y-cy-SHELF_HY); hole.closePath();
+  front.holes.push(hole);
+  face(front,cx,cy,mn.z-o,0,0); face(rect(W,H),cx,cy,mx.z+o,0,0);                       // -z (entrance side), +z
+  face(rect(D,H),mn.x-o,cy,cz,0,Math.PI/2); face(rect(D,H),mx.x+o,cy,cz,0,Math.PI/2);    // -x, +x
+  face(rect(W,D),cx,mn.y-o,cz,Math.PI/2,0); face(rect(W,D),cx,mx.y+o,cz,Math.PI/2,0);    // bottom, top
+}
 
 // decorative floating shelves around the maze: one per lattice cell (or none), moving gently
 const DECOR={S:8, SY:7, RX:5, RY:3, MARGIN:3.5};
@@ -953,7 +1010,7 @@ const chairBody=new THREE.Group(); chair.add(chairBody);
   const lan=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.15,0.11),paper); lan.position.set(0.31,0.61,0.15); g.add(lan);
   box(0.13,0.015,0.13,matLacquer,0.31,0.695,0.15,g); box(0.13,0.015,0.13,matLacquer,0.31,0.525,0.15,g);
 }
-const chairLight=new THREE.PointLight(0xffb468,1.5,9,2); chairLight.position.set(0.31,0.61,0.1); chairBody.add(chairLight);
+const chairLight=new THREE.PointLight(0xffb468,LIB.CHAIR_LIGHT,LIB.CHAIR_RANGE,2); chairLight.position.set(0.31,0.61,0.1); chairBody.add(chairLight);
 // two lanterns and a light at the maze entrance
 {
   const e=MAZE.world(...MAZE.entrance);
@@ -963,7 +1020,7 @@ const chairLight=new THREE.PointLight(0xffb468,1.5,9,2); chairLight.position.set
 
 // ---- 5. player state & controls ----
 const lib={pos:MAZE.world(MAZE.entrance[0],MAZE.entrance[1],-3), vel:new THREE.Vector3(), yaw:Math.PI, pitch:-0.18, dist:3.0,
-  keys:new Set(), joy:{x:0,y:0}, ud:0, chairYaw:Math.PI, R:0.5};
+  keys:new Set(), joy:{x:0,y:0}, ud:0, chairYaw:Math.PI, R:0.62, amb:1};   // R: the chair's collision sphere (covers the whole chair)
 const libCam={pos:new THREE.Vector3(), look:new THREE.Vector3()};
 const KEYMAP={KeyW:'f',ArrowUp:'f',KeyS:'b',ArrowDown:'b',KeyA:'l',KeyD:'r',ArrowLeft:'tl',ArrowRight:'tr',Space:'u',KeyE:'u',ShiftLeft:'d',ShiftRight:'d',KeyQ:'d'};
 window.addEventListener('keydown',e=>{ if(mode!=='lib') return; const k=KEYMAP[e.code]; if(k){ lib.keys.add(k); e.preventDefault(); } });
@@ -996,7 +1053,7 @@ for(const ev of ['pointerup','pointercancel']) host.addEventListener(ev,e=>{ lib
 host.addEventListener('wheel',e=>{ if(mode!=='lib') return; e.preventDefault(); lib.dist=clamp(lib.dist*Math.exp(e.deltaY*0.0012),1.4,6); },{passive:false});
 
 // collisions: sphere against the shelves near p (maze voxels around p, and the decor cell p is in)
-const _q=new THREE.Vector3(), _c=new THREE.Vector3(), _d={x:0,y:0,z:0,rot:0};
+const _q=new THREE.Vector3(), _c=new THREE.Vector3(), _w=new THREE.Vector3(), _d={x:0,y:0,z:0,rot:0};
 function pushOutOfBox(p,cx,cy,cz,hx,hy,hz,r){
   _c.set(clamp(p.x,cx-hx,cx+hx),clamp(p.y,cy-hy,cy+hy),clamp(p.z,cz-hz,cz+hz));
   _q.subVectors(p,_c); const d=_q.length();
@@ -1021,8 +1078,8 @@ function collide(p,r,time){
   return hit;
 }
 function solidAt(p,pad,time){   // is p inside a shelf (used to stop the camera going through)
-  const [i,j,k]=MAZE.voxel(p), w=MAZE.wallIndex(i,j,k);
-  if(w>=0){ const c=MAZE.walls[w].p; if(Math.abs(p.x-c.x)<SHELF_HX+pad&&Math.abs(p.y-c.y)<SHELF_HY+pad&&Math.abs(p.z-c.z)<SHELF_HX+pad) return true; }
+  for(const sx of [-1,1]) for(const sy of [-1,1]) for(const sz of [-1,1]){   // the shelves fill whole voxels, so test the 8 corners of a small box round p
+    _w.set(p.x+sx*pad,p.y+sy*pad,p.z+sz*pad); const [i,j,k]=MAZE.voxel(_w); if(MAZE.wallIndex(i,j,k)>=0) return true; }
   if(decorAt(Math.round(p.x/DECOR.S),Math.round(p.y/DECOR.SY),Math.round(p.z/DECOR.S),time,_d)
      &&Math.hypot(p.x-_d.x,p.z-_d.z)<SHELF_HX*1.42+pad&&Math.abs(p.y-_d.y)<SHELF_HY+pad) return true;
   return false;
@@ -1030,8 +1087,8 @@ function solidAt(p,pad,time){   // is p inside a shelf (used to stop the camera 
 
 // ---- per-frame update of the library ----
 const _m=new THREE.Matrix4(), _qt=new THREE.Quaternion(), _s=new THREE.Vector3(1,1,1), _v=new THREE.Vector3(), _up=new THREE.Vector3(0,1,0);
-const candidates=[];
-function placeShelf(mesh,i,x,y,z,rot){ _qt.setFromAxisAngle(_up,rot); _v.set(x,y-SHELF_HY,z); _m.compose(_v,_qt,_s); mesh.setMatrixAt(i,_m); }
+const _fr=new THREE.Frustum(), _sp=new THREE.Sphere(new THREE.Vector3(),1.5), _p=new THREE.Vector3(), ALL_SIDES=[0,1,2,3,4,5];
+function shelfMatrix(x,y,z,rot){ _qt.setFromAxisAngle(_up,rot); _p.set(x,y-SHELF_HY,z); _m.compose(_p,_qt,_s); }
 function updateLib(dt,time){
   // input
   const K=lib.keys; let f=(K.has('f')?1:0)-(K.has('b')?1:0)-lib.joy.y, st=(K.has('r')?1:0)-(K.has('l')?1:0)+lib.joy.x, u=(K.has('u')?1:0)-(K.has('d')?1:0)+lib.ud;
@@ -1052,26 +1109,43 @@ function updateLib(dt,time){
   chairBody.position.y=-0.25+Math.sin(time*1.6)*0.04;
   chairBody.rotation.z=clamp(-st*0.12-dy*0.4,-0.35,0.35)*0.8+chairBody.rotation.z*0.2;
   chairBody.rotation.x=f*0.06;
-  chairLight.intensity=1.5+0.1*Math.sin(time*5.3)+0.06*Math.sin(time*8.1);
+  chairLight.intensity=LIB.CHAIR_LIGHT*(1+0.03*Math.sin(time*5.3)+0.02*Math.sin(time*8.1));
   // camera behind the chair; pulled in when a shelf is in the way
   const cp=Math.cos(lib.pitch);
   _v.set(-Math.sin(lib.yaw)*cp,Math.sin(lib.pitch),-Math.cos(lib.yaw)*cp);   // view direction
-  libCam.look.set(lib.pos.x,lib.pos.y+1.2,lib.pos.z);   // a little above the chair, so the chair sits low in the view
-  let t=1; for(let i=1;i<=12;i++){ const tt=i/12; _c.copy(libCam.look).addScaledVector(_v,-lib.dist*tt); _c.y+=0.15*tt; if(solidAt(_c,0.15,time)){ t=Math.max(0.15,(i-1)/12); break; } }
-  libCam.pos.copy(libCam.look).addScaledVector(_v,-lib.dist*t); libCam.pos.y+=0.15*t;
-  camera.position.copy(libCam.pos); camera.lookAt(_c.copy(libCam.pos).add(_v));
-  // shelves: maze walls + decor around the camera → near (real) or far (photo box)
-  candidates.length=0; const cam=camera.position;
-  MAZE.walls.forEach(w=>candidates.push(w.p.x,w.p.y+Math.sin(time*0.7+w.ph)*0.03,w.p.z,w.rot));
-  const ca=Math.round(cam.x/DECOR.S), cb=Math.round(cam.y/DECOR.SY), cc=Math.round(cam.z/DECOR.S);
-  for(let c=cc-DECOR.RX;c<=cc+DECOR.RX;c++) for(let b=cb-DECOR.RY;b<=cb+DECOR.RY;b++) for(let a=ca-DECOR.RX;a<=ca+DECOR.RX;a++)
-    if(decorAt(a,b,c,time,_d)) candidates.push(_d.x,_d.y,_d.z,_d.rot);
-  let nn=0, nf=0; const near=[];
-  for(let i=0;i<candidates.length;i+=4){ const d=Math.hypot(candidates[i]-cam.x,candidates[i+1]-cam.y,candidates[i+2]-cam.z); if(d<LIB.NEAR_R) near.push([d,i]); else if(nf<LIB.FAR_MAX) placeShelf(farShelves,nf++,candidates[i],candidates[i+1],candidates[i+2],candidates[i+3]); }
-  near.sort((a,b)=>a[0]-b[0]);
-  near.forEach(([d,i])=>{ const x=candidates[i],y=candidates[i+1],z=candidates[i+2],r=candidates[i+3];
-    if(nn<LIB.NEAR_MAX) placeShelf(nearShelves,nn++,x,y,z,r); else if(nf<LIB.FAR_MAX) placeShelf(farShelves,nf++,x,y,z,r); });
-  nearShelves.count=nn; farShelves.count=nf; nearShelves.instanceMatrix.needsUpdate=farShelves.instanceMatrix.needsUpdate=true;
+  // the camera never enters a shelf: it keeps CAM_PAD from every face (top and bottom included), so the view never cuts into one
+  const CAM_PAD=0.25, head=libCam.look.copy(lib.pos);
+  for(let y=0.1;y<=1.2;y+=0.05){ _c.copy(lib.pos); _c.y+=y; if(solidAt(_c,CAM_PAD,time)) break; head.y=_c.y; }   // a little above the chair, below any ceiling
+  let d=0; for(let s=0.05;s<=lib.dist;s+=0.05){ _c.copy(head).addScaledVector(_v,-s); if(solidAt(_c,CAM_PAD,time)) break; d=s; }
+  libCam.pos.copy(head).addScaledVector(_v,-d);
+  camera.position.copy(libCam.pos); camera.lookAt(_c.copy(libCam.pos).add(_v)); camera.updateMatrixWorld();
+  _fr.setFromProjectionMatrix(_m.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+  // inside the maze the room light fades out; only the chair lights the shelves
+  const inMaze=lib.pos.x>MAZE.min.x&&lib.pos.x<MAZE.max.x&&lib.pos.y>MAZE.min.y&&lib.pos.y<MAZE.max.y&&lib.pos.z>MAZE.min.z&&lib.pos.z<MAZE.max.z;
+  lib.amb+=((inMaze?0:1)-lib.amb)*(1-Math.exp(-dt*2.5)); hemi2.intensity=0.6*lib.amb; moon.intensity=0.8*lib.amb;
+  // maze shelves: only the faces that look into a passage, only within reach of the chair's light (beyond it they are pitch black
+  // anyway, so nothing pops in or out), only in view
+  const cam=camera.position, counts=[0,0,0,0,0,0];
+  const put=(x,y,z,rot,sides)=>{ shelfMatrix(x,y,z,rot); for(const s of sides) if(counts[s]<LIB.PART_MAX) shelfParts[s].setMatrixAt(counts[s]++,_m); };
+  const reach=LIB.CHAIR_RANGE+SHELF_HY*1.5;
+  let nb=0;
+  for(const w of MAZE.walls){ if(w.p.distanceTo(lib.pos)>reach) continue;
+    _sp.center.copy(w.p); if(!_fr.intersectsSphere(_sp)) continue;
+    if(w.sides.length) put(w.p.x,w.p.y,w.p.z,w.rot,w.sides); else if(nb<600){ shelfMatrix(w.p.x,w.p.y,w.p.z,0); blockers.setMatrixAt(nb++,_m); } }
+  blockers.count=nb; blockers.instanceMatrix.needsUpdate=true;
+  // decor shelves around the maze: near ones real (all six faces), far ones as photo boxes. Not needed while deep in the maze.
+  let nf=0;
+  if(!inMaze||lib.amb>0.05){
+    const ca=Math.round(cam.x/DECOR.S), cb=Math.round(cam.y/DECOR.SY), cc=Math.round(cam.z/DECOR.S);
+    for(let c=cc-DECOR.RX;c<=cc+DECOR.RX;c++) for(let b=cb-DECOR.RY;b<=cb+DECOR.RY;b++) for(let a=ca-DECOR.RX;a<=ca+DECOR.RX;a++){
+      if(!decorAt(a,b,c,time,_d)) continue;
+      _sp.center.set(_d.x,_d.y,_d.z); if(!_fr.intersectsSphere(_sp)) continue;
+      if(_sp.center.distanceTo(cam)<LIB.DECOR_NEAR) put(_d.x,_d.y,_d.z,_d.rot,ALL_SIDES);
+      else if(nf<LIB.FAR_MAX){ shelfMatrix(_d.x,_d.y,_d.z,_d.rot); farShelves.setMatrixAt(nf++,_m); }
+    }
+  }
+  shelfParts.forEach((m,s)=>{ m.count=counts[s]; m.instanceMatrix.needsUpdate=true; });
+  farShelves.count=nf; farShelves.instanceMatrix.needsUpdate=true;
   // pillars on a 26 m grid (offset so none stands in the maze), endless in height
   let np=0; const PS=26, pa=Math.round((cam.x-13)/PS), pc=Math.round((cam.z-13)/PS), py=Math.round(cam.y/20)*20;
   for(let c=pc-3;c<=pc+3;c++) for(let a=pa-3;a<=pa+3;a++){ _v.set(13+a*PS,py,13+c*PS); _m.makeTranslation(_v.x,_v.y,_v.z); pillars.setMatrixAt(np++,_m); }
