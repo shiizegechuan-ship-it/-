@@ -1059,11 +1059,11 @@ let roomView=false, roomRide=null, roomFov=60, innerVisited=false;   // innerVis
 let underScene=null;   // the stairwell under the tatami (built by openTrap)
 
 /* ---------- camera / interaction ---------- */
-const home={theta:-0.16,phi:1.47,r:4.0,target:new Vector3(0,1.08,0.15)};
+const home={theta:-0.04,phi:1.42,r:4.0,target:new Vector3(-0.05,1.0,0.4)};   // framed to take in the scroll (left) and the andon (right) as well as the shelf
 const goal={theta:home.theta,phi:home.phi,r:home.r,target:home.target.clone()};
 const cur={theta:home.theta,phi:home.phi,r:home.r+1.4,target:home.target.clone()};
-function fitRadius(){ const a=camera.aspect, t=Math.tan(THREE.MathUtils.degToRad(camera.fov/2)); return clamp(1.75/(t*a),4.0,6.6); }
-function baseFov(){ return camera.aspect<0.9?52:38; }
+function fitRadius(){ const a=camera.aspect, t=Math.tan(THREE.MathUtils.degToRad(camera.fov/2)); return clamp(2.85/(t*a),4.0,7.5); }   // 2.85: half the width to keep in view (scroll to andon)
+function baseFov(){ return camera.aspect<0.9?72:38; }   // portrait screens need a wider lens to take in the room
 function resize(){
   const w=host.clientWidth||window.innerWidth, h=host.clientHeight||window.innerHeight;
   renderer.setSize(w,h); camera.aspect=w/h; camera.fov=baseFov(); camera.updateProjectionMatrix();
@@ -1099,7 +1099,7 @@ function screenFocusPoint(clientX,clientY){
 // zoom toward the point under the cursor / pinch midpoint
 function zoomToward(clientX,clientY,scaleFactor){
   const focus=screenFocusPoint(clientX,clientY);
-  goal.r=clamp(goal.r*scaleFactor,0.7,6.6);
+  goal.r=clamp(goal.r*scaleFactor,0.7,7.5);
   if(focus) goal.target.lerp(focus,clamp(1-scaleFactor,-0.4,0.4));
   clampTarget();
 }
