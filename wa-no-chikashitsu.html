@@ -592,7 +592,7 @@ function fillShelfUnit(y,clearH){
    LIGHT_PATTERNS: {path: SVG path, vw/vh: viewBox, evenodd?, cols: tiles across the width}. cols is set so every
    pattern shows exactly 2 columns (市松 and 矢絣 already hold 2 per tile). Rows are rounded to whole tiles.
    Colour: LIGHT_COLOR (warm white). Glow: LIGHT_GLOW and the PointLight below. */
-const LIGHT_COLOR='#ffdcb0', LIGHT_GLOW=0.6, LIGHT_SPILL=2.4;   // spill: brightness of the glow cast onto nearby boards
+const LIGHT_COLOR='#f3cf9f', LIGHT_GLOW=0.45, LIGHT_SPILL=2.4;   // spill: brightness of the glow cast onto nearby boards
 const LIGHT_PATTERNS=[
   {name:'市松',path:'M0 0H1V1H0zM1 1H2V2H1z',vw:2,vh:2,cols:1},
   {name:'七宝',path:'m1 0a1 1 0 0 1 0 2 1 1 0 0 1 0-2 1 1 0 0 1-1 1 1 1 0 0 1 1 1 1 1 0 0 1 1-1 1 1 0 0 1-1-1z',vw:2,vh:2,cols:2},
@@ -607,7 +607,7 @@ function shojiLight(parent,face,cx,cy,zFace,w,h){
   });
   const tileH=(w/P.cols)*P.vh/P.vw;
   tex.repeat.set(P.cols,Math.max(1,Math.round(h/tileH)));
-  const paper=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshStandardMaterial({map:tex,alphaTest:0.5,
+  const paper=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshStandardMaterial({map:tex,color:C('#a08a6c'),alphaTest:0.5,
     emissive:C(LIGHT_COLOR),emissiveMap:tex,emissiveIntensity:LIGHT_GLOW,roughness:1}));
   paper.rotation.y=Math.PI; paper.position.set(cx,cy,zFace-0.002); parent.add(paper);   // faces outward (-z), just in front of the wood to avoid z-fighting
   // soft warm spill: three small lights just in front of the strip (bottom/middle/top), fading with distance (decay 2),
