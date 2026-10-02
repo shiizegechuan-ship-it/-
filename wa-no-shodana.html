@@ -2052,6 +2052,7 @@ function buildInnerInterior(z0,z1){
     const vase=lathe(VASE,matCeladon2,48); vase.scale.setScalar(0.9); put(vase,-0.35,ys[3]+0.014,0,g);
     put(lathe(BOWL,matRaku2,40),0.3,ys[3]+0.014,0.02,g).scale.setScalar(1.5);
     put(lathe(KORO,matPorc2,40),0.35,ys[2]+0.014,0,g);
+    itemProp('mizusashi',itemMesh('mizusashi'),true,0.08,ys[2]+0.014,0.02,g);
     let bx=-0.62;
     for(const c of ['#2a2a2a','#5a4632','#7a6a52','#3b2e2a','#1e2a3a','#6b5a40','#2f3a2c']){
       const bw=R(0.025,0.045), bh=R(0.24,0.32); box(bw,bh,0.2,matMatte(c),bx+bw/2,ys[2]+0.014+bh/2,-0.02,g); bx+=bw+0.003;
@@ -2097,10 +2098,28 @@ function buildInnerInterior(z0,z1){
       const geo=ico.clone(), p=geo.attributes.position; for(let i=0;i<p.count;i++) p.setXYZ(i,p.getX(i)*R(0.85,1.15),p.getY(i)*R(0.85,1.15),p.getZ(i)*R(0.85,1.15)); geo.computeVertexNormals();
       const pad=new Mesh(geo,matPine); pad.scale.set(s,s*0.42,s*0.8); pad.position.set(x,y,z); pad.castShadow=true; b.add(pad);
     }
-    // tea caddy and a book on the other end
-    put(cyl(0.035,0.035,0.09,matLacq,24),-0.55,0.475,0.02,b);
-    box(0.22,0.03,0.16,matMatte('#3a2d24'),-0.25,0.445,0,b).rotation.y=0.2;
-    itemProp('fude',itemMesh('fude'),true,-0.25,0.46,0.02,b).rotation.y=0.6;   // lying on the book
+    // an inkstone (suzuri) with the brush laid beside it. Ink + water ground on it fills its well; dip the brush there.
+    const sz=group(b,-0.3,0.43,-0.02,0.15), stone=std({color:C('#2b2927'),roughness:0.55},0.4);
+    box(0.2,0.012,0.12,stone,0,0.006,0,sz);                                                       // base (its top is the well's floor)
+    box(0.13,0.006,0.1,stone,-0.025,0.015,0,sz);                                                  // the grinding face (陸)
+    for(const z of [-0.055,0.055]) box(0.2,0.014,0.01,stone,0,0.019,z,sz);                       // rim
+    for(const x of [-0.095,0.095]) box(0.01,0.014,0.1,stone,x,0.019,0,sz);
+    const inkMat=new THREE.MeshStandardMaterial({color:C('#030202'),roughness:0.55,envMap:envTex,envMapIntensity:0.12});   // deep black; its wet shine comes from the glints below
+    const ink=new Group(); ink.visible=false; sz.add(ink);
+    const pool=new Mesh(new PlaneGeometry(0.06,0.1),inkMat); pool.rotation.x=-PI/2; pool.position.set(0.06,0.0165,0); ink.add(pool);
+    const film=new Mesh(new PlaneGeometry(0.128,0.098),inkMat); film.rotation.x=-PI/2; film.position.set(-0.025,0.0182,0); ink.add(film);
+    // the highlight: a soft reflected glint of the lantern on the wet ink, so it reads at a glance
+    const glintTex=canvasTex(128,64,(g,w,h)=>{ const r=g.createRadialGradient(w/2,h/2,0,w/2,h/2,w/2); r.addColorStop(0,'rgba(255,240,215,.8)'); r.addColorStop(.35,'rgba(255,225,180,.3)'); r.addColorStop(1,'rgba(255,220,170,0)'); g.fillStyle=r; g.fillRect(0,0,w,h); },{repeat:false});
+    const glint=new Mesh(new PlaneGeometry(0.045,0.018),new THREE.MeshBasicMaterial({map:glintTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+    glint.rotation.x=-PI/2; glint.rotation.z=0.4; glint.position.set(0.02,0.0187,0.012); ink.add(glint);
+    const glint2=glint.clone(); glint2.scale.set(0.5,0.6,1); glint2.position.set(0.07,0.017,-0.02); ink.add(glint2);
+    sz.userData.innerAct=()=>{
+      if(!USES.suzuri.open){ if(useAt('suzuri')) ink.visible=true; return; }
+      if(selItem==='fude'){ dropItem('fude'); toast('筆を墨汁に浸すと、穂先がたっぷりと墨を含んだ。'); setTimeout(()=>giveItem('fudeSumi'),1400); renderItems(); }
+      else toast(selItem?ITEMS[selItem].name+'は、ここでは使えないようだ。':'硯に墨汁が満ちている。');
+    };
+    setView(sz,b,[-0.3,0.44,-0.02],0.8,0.85);
+    itemProp('fude',itemMesh('fude'),true,-0.28,0.43,0.12,b).rotation.y=0.08;   // the brush, laid on the bench in front of the inkstone
   }
 
   /* centre: rug, low table, two armchairs, pendant lantern */
@@ -2330,6 +2349,8 @@ const ITEMS={
   litCandle:{name:'灯した和蝋燭',desc:'静かに揺れる炎。',pose:[0.3,0.6]},
   sumi:{name:'墨',desc:'艶のある古墨。金で雲の模様が押されている。',pose:[1.0,0.35]},
   fude:{name:'筆',desc:'竹軸の筆。穂先は乾いている。',pose:[0.8,0.55]},
+  mizusashi:{name:'水差し',desc:'青磁の小さな水差し。中に水が入っている。',pose:[0.35,0.6]},
+  sumiMizu:{name:'墨と水差し',desc:'墨と、水の入った水差し。',pose:[0.55,0.3]},
   fudeSumi:{name:'墨を含ませた筆',desc:'たっぷりと墨を含んだ筆。',pose:[0.8,0.55]},
   smallKey:{name:'小さな鍵',desc:'朱の紐が結ばれた、小ぶりな黒鉄の鍵。',pose:[1.0,0.4]},
   shiori:{name:'栞',desc:'本に挟まっていた、臙脂色の薄い栞。',pose:[1.1,0.45]},
@@ -2340,15 +2361,16 @@ const ITEMS={
   cellarKey:{name:'地下の鍵',desc:'銭形の持ち手と軸がぴたりと合わさった、朱の房付きの重い真鍮の鍵。',pose:[1.0,0.4]},
 };
 // [a, b, result]: combinations (order doesn't matter)
-const RECIPES=[['matches','candle','litCandle'],['sumi','fude','fudeSumi'],['keyBow','keyShaft','cellarKey']];
+const RECIPES=[['matches','candle','litCandle'],['sumi','mizusashi','sumiMizu','墨と水差しをそろえた。'],['keyBow','keyShaft','cellarKey']];   // optional 4th: the message
 // Places that react to an item. Select the item, then tap the place (held:true -- just carrying it is enough).
 //   consume: the item is used up   give: an item received   unlock: another USES entry this opens
 //   hint: shown while locked   msg: shown when it works   done: shown on later taps (if nothing else happens)
 // The chain: 燐寸+和蝋燭 -> 灯した和蝋燭 -> 吊り行灯 (lights the room; the ink stick under the table is found) -> 墨;
-//            墨+筆 -> 木札に塗ると彫られた「月」が浮かぶ -> 金庫の文字錠を「月」に -> 小さな鍵 -> サイドボード -> 鍵の軸;
+//            墨+水差し -> 硯に墨汁; 硯+筆 -> 墨を含ませた筆 -> 木札に塗ると彫られた「一燈照隅」が浮かぶ -> 金庫の4連文字錠を「一燈照隅」に -> 小さな鍵 -> サイドボード -> 鍵の軸;
 //            栞（座卓の本） -> 飾り棚の引き出し -> 鍵の持ち手; 持ち手+軸 -> 地下の鍵 -> 地下の扉 -> NEXT_PAGE
 const USES={
   lantern:    {item:'litCandle',consume:true,hint:'吊り行灯には灯が入っていない。下に、手が入るほどの口が開いている。',msg:'行灯に蝋燭を入れると、部屋が明るくなった。'},
+  suzuri:     {item:'sumiMizu',consume:true,hint:'窓辺の硯。乾いていて、墨の跡もない。',msg:'水を差して墨を磨ると、硯に墨汁が満ちた。'},
   plaque:     {item:'fudeSumi',consume:true,hint:'掛け軸の裏の木札。表面に浅い彫り跡があるが、読み取れない。',msg:'墨を塗ると、彫られていた字が浮かび上がった。「一燈照隅」',done:'木札には「一燈照隅」と彫られている。'},
   safe:       {hint:'金の絵の裏の小さな金庫。扉に、四文字を合わせる錠が付いている。'},
   sideboard:  {item:'smallKey',consume:true,hint:'取っ手のない扉に、小さな鍵穴がある。',msg:'小さな鍵を差し込んで回すと、扉が開いた。'},
@@ -2462,6 +2484,14 @@ function itemMesh(id){
     cordTassel(g,[[-0.009,0.0028,0],[-0.016,0.0028,-0.006],[-0.016,0.003,-0.018],[-0.012,0.003,-0.03]],M.cord,M.brass); }
   if(id==='keyBow'){ keyBowModel(g,0); mk(new CylinderGeometry(0.0024,0.0024,0.01,14),M.brass,g,0.022,0.0026,0).rotation.z=PI/2; }
   if(id==='keyShaft') keyShaftModel(g,-0.025,0.025);
+  if(id==='mizusashi'||id==='sumiMizu'){   // a small celadon water dropper (suiteki) with a spout and a knob lid
+    const w=new Group(); g.add(w); if(id==='sumiMizu') w.position.x=0.045;
+    const glaze=std({color:C('#8fb3a2'),roughness:0.15,clearcoat:0.8,clearcoatRoughness:0.08},1.4,true);
+    mk(new THREE.LatheGeometry([[0,0],[0.02,0],[0.026,0.006],[0.034,0.02],[0.032,0.034],[0.022,0.044],[0.012,0.047],[0,0.047]].map(p=>new THREE.Vector2(...p)),40),glaze,w);
+    mk(new THREE.SphereGeometry(0.008,16,10),glaze,w,0,0.05,0).scale.set(1,0.7,1);
+    const sp=mk(new CylinderGeometry(0.0035,0.0055,0.03,14),glaze,w,0.034,0.03,0); sp.rotation.z=-1.0;
+    if(id==='sumiMizu'){ const s2=new Group(); s2.position.set(-0.035,0,0); s2.rotation.y=0.5; g.add(s2);
+      mk(new THREE.BoxGeometry(0.022,0.009,0.075),[M.ink,M.ink,M.sumiTop,M.ink,M.ink,M.ink],s2,0,0.0045,0); } }
   if(id==='makimono'){   // a rolled hand-scroll: indigo silk cover, red cord, lacquered roller ends
     const silk=std({color:C('#26324a'),roughness:0.7},0.3);
     mk(new CylinderGeometry(0.014,0.014,0.13,28),silk,g,0,0.014,0).rotation.z=PI/2;
@@ -2581,7 +2611,7 @@ function combine(a,b){
   const r=RECIPES.find(([x,y])=>(x===a&&y===b)||(x===b&&y===a));
   if(!r){ lbMsg(ITEMS[b].name+'とは組み合わせられないようだ'); return; }
   dropItem(a); dropItem(b); inv.push(r[2]); selItem=r[2];
-  openLb(r[2]); lbMsg(ITEMS[a].name+'と'+ITEMS[b].name+'を合わせて、'+ITEMS[r[2]].name+'になった'); renderItems();
+  openLb(r[2]); lbMsg(r[3]||ITEMS[a].name+'と'+ITEMS[b].name+'を合わせて、'+ITEMS[r[2]].name+'になった'); renderItems();
 }
 const lb=$('lb');
 let lbAlt=false;   // showing the item's other state (e.g. the scroll unrolled)
