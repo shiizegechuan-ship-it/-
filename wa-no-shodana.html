@@ -1539,8 +1539,8 @@ function decorateStairwell(stairs,o){
     const v=lathe(VASE,matCel,40); v.scale.setScalar(0.62); v.position.set(-0.12,0.0175,0.085); g.add(v);
     const c=new THREE.CatmullRomCurve3([[-0.12,0.27,0.085],[-0.08,0.4,0.09],[0.02,0.5,0.1],[0.12,0.52,0.11]].map(p=>new Vector3(...p)));
     const br=new Mesh(new THREE.TubeGeometry(c,16,0.004,6),matBk); br.castShadow=true; g.add(br);
-    const lg=new THREE.SphereGeometry(1,10,6);
-    for(let i=0;i<6;i++){ const l=new Mesh(lg,matLf); l.scale.set(0.04,0.005,0.019); l.position.copy(c.getPoint(0.25+i*0.13)); l.rotation.set(R(-0.6,0.6),i*1.9,R(-0.4,0.4)); l.castShadow=true; g.add(l); }
+    const lg=new THREE.SphereGeometry(1,10,6).translate(1,0,0);   // leaf base at the origin: it grows out from the stem
+    for(let i=0;i<6;i++){ const l=new Mesh(lg,matLf); l.scale.set(0.022,0.005,0.019); l.position.copy(c.getPoint(0.25+i*0.13)); l.rotation.set(R(-0.6,0.6),i*1.9,R(-0.4,0.4)); l.castShadow=true; g.add(l); }
     box(0.16,0.02,0.11,std({color:C('#3a2d24'),roughness:0.85},0.2),0.18,0.028,0.085,g);
   }
   // ceiling over the stairwell (beyond the opening), a header beam at the opening's edge, and the end walls
@@ -1999,8 +1999,8 @@ function buildInnerInterior(z0,z1){
     const stem=(pts,r)=>{ const c=new THREE.CatmullRomCurve3(pts.map(p=>new Vector3(...p))); const m=new Mesh(new THREE.TubeGeometry(c,24,r,6),matBark2); m.castShadow=true; br.add(m); return c; };
     const c1=stem([[0,0,0],[-0.04,0.25,0.02],[-0.12,0.52,0.03],[-0.3,0.74,0.06],[-0.46,0.82,0.08]],0.008);
     const c2=stem([[-0.02,0.2,0.01],[0.08,0.34,0.03],[0.16,0.42,0.05]],0.005);
-    const leafG=new THREE.SphereGeometry(1,10,6);
-    const leafAt=(c,t,a,s)=>{ const p=c.getPoint(t); const l=new Mesh(leafG,matLeaf); l.scale.set(0.06*s,0.006,0.028*s); l.position.copy(p); l.rotation.set(R(-0.6,0.6),a,R(-0.5,0.5)); l.castShadow=true; br.add(l); };
+    const leafG=new THREE.SphereGeometry(1,10,6), leafB=leafG.clone().translate(1,0,0);   // leafB: base at the origin, so it sprouts from the stem
+    const leafAt=(c,t,a,s)=>{ const p=c.getPoint(t); const l=new Mesh(leafB,matLeaf); l.scale.set(0.034*s,0.006,0.028*s); l.position.copy(p); l.rotation.set(R(-0.6,0.6),a,R(-0.5,0.5)); l.castShadow=true; br.add(l); };
     for(let i=0;i<9;i++) leafAt(c1,0.3+i*0.075,i*1.9,R(0.8,1.15));
     for(let i=0;i<4;i++) leafAt(c2,0.4+i*0.18,i*2.3,R(0.7,1));
     const flower=(p,s)=>{ const f=new Group(); f.position.copy(p); f.rotation.set(R(-0.5,0.2),R(0,6),R(-0.4,0.4)); br.add(f);
@@ -2280,26 +2280,23 @@ const ITEMS={
     g.fillStyle='#1d1a17'; g.beginPath(); g.arc(50,58,8,0,7); g.fill(); g.fillStyle='#e9dfc8'; g.beginPath(); g.arc(50,58,4,0,7); g.fill();
     g.save(); g.translate(66,30); g.rotate(-0.6); g.fillStyle='#d9c8a0'; g.fillRect(0,-2,28,4); g.fillStyle='#7a1e18'; g.beginPath(); g.arc(0,0,4,0,7); g.fill(); g.restore(); }},
   candle:{name:'和蝋燭',desc:'朱塗りの和蝋燭。芯はまだ新しい。',icon(g){ candleIcon(g,false); }},
-  litCandle:{name:'灯した和蝋燭',desc:'静かに揺れる炎。何かに灯を入れられそうだ。',icon(g){ candleIcon(g,true); }},
-  letter:{name:'文',desc:'「灯を吊るせば墨を得る。墨は筆に、筆は札に月を記す。金の月の裏に鍵、鍵は戸を開け、本の栞は隙を抜く。二つを合わせて、下へ。」',icon(g){
-    g.save(); g.translate(50,52); g.rotate(-0.12); g.fillStyle='#efe6d0'; g.fillRect(-26,-34,52,68); g.fillStyle='#ded2b6'; g.fillRect(-26,-34,52,8);
-    g.fillStyle='#1d1a17'; for(const x of [14,2,-10]) g.fillRect(x,-20,3,40-(x+10)); g.fillStyle='#b8322a'; g.fillRect(-20,22,7,7); g.restore(); }},
+  litCandle:{name:'灯した和蝋燭',desc:'静かに揺れる炎。',icon(g){ candleIcon(g,true); }},
   sumi:{name:'墨',desc:'艶のある古墨。金で小さく「月」の字。',icon(g){
     g.save(); g.translate(50,50); g.rotate(-0.5); g.fillStyle='#16130f'; g.strokeStyle='#8a7d6a'; g.lineWidth=2; g.beginPath(); g.rect(-11,-36,22,72); g.fill(); g.stroke();
     g.fillStyle='#c9a24a'; g.fillRect(-5,-18,10,16); g.restore(); }},
   fude:{name:'筆',desc:'竹軸の筆。穂先は乾いている。',icon(g){ brushIcon(g,false); }},
-  fudeSumi:{name:'墨を含ませた筆',desc:'たっぷり墨を含んだ筆。何かに字が書けそうだ。',icon(g){ brushIcon(g,true); }},
-  smallKey:{name:'小さな鍵',desc:'朱の紐が結ばれた、小ぶりな黒鉄の鍵。家具の鍵穴に合いそうだ。',icon(g){
+  fudeSumi:{name:'墨を含ませた筆',desc:'たっぷりと墨を含んだ筆。',icon(g){ brushIcon(g,true); }},
+  smallKey:{name:'小さな鍵',desc:'朱の紐が結ばれた、小ぶりな黒鉄の鍵。',icon(g){
     g.strokeStyle=g.fillStyle='#2b2724'; g.lineWidth=6; g.beginPath(); g.arc(34,40,11,0,7); g.stroke();
     g.fillRect(44,37,34,6); g.fillRect(68,43,5,10); g.fillRect(76,43,4,7);
     g.strokeStyle='#b8322a'; g.lineWidth=3; g.beginPath(); g.moveTo(26,48); g.quadraticCurveTo(20,64,30,76); g.stroke();
     g.fillStyle='#b8322a'; g.beginPath(); g.moveTo(26,74); g.lineTo(34,74); g.lineTo(37,90); g.lineTo(23,90); g.fill(); }},
-  shiori:{name:'栞',desc:'本に挟まっていた、臙脂色の薄い栞。細い隙間にも差し込めそうだ。',icon(g){
+  shiori:{name:'栞',desc:'本に挟まっていた、臙脂色の薄い栞。',icon(g){
     g.translate(50,50); g.rotate(-0.5); g.fillStyle='#7a2f3a'; g.fillRect(-9,-36,18,64); g.fillStyle='#c9a24a'; g.fillRect(-9,-36,18,5);
     g.beginPath(); g.moveTo(0,28); g.lineTo(-6,44); g.lineTo(6,44); g.fill(); }},
   keyBow:{name:'鍵の持ち手',desc:'四角い穴の空いた、銭形の真鍮の持ち手。先が折れている。',icon(g){ keyIcon(g,true,false,false); }},
   keyShaft:{name:'鍵の軸',desc:'歯の付いた真鍮の棒。持ち手がない。',icon(g){ keyIcon(g,false,true,false); }},
-  cellarKey:{name:'地下の鍵',desc:'銭形の持ち手と軸がぴたりと合わさった、朱の房付きの真鍮の鍵。地下の扉に合いそうだ。',icon(g){ keyIcon(g,true,true,true); }},
+  cellarKey:{name:'地下の鍵',desc:'銭形の持ち手と軸がぴたりと合わさった、朱の房付きの重い真鍮の鍵。',icon(g){ keyIcon(g,true,true,true); }},
 };
 // [a, b, result]: combinations (order doesn't matter)
 const RECIPES=[['matches','candle','litCandle'],['sumi','fude','fudeSumi'],['keyBow','keyShaft','cellarKey']];
@@ -2356,7 +2353,6 @@ function itemMesh(id){
     const t=new Mesh(new THREE.ConeGeometry(0.01,0.03,8),gold); t.rotation.x=PI/2; t.position.set(0,0.002,0.215); g.add(t); }
   if(id==='keyBow'){ put(cyl(0.017,0.017,0.004,gold,28),0,0.002,0,g); box(0.012,0.0045,0.012,std({color:C('#1a120c'),roughness:0.9},0),0,0.0025,0,g); box(0.012,0.004,0.006,gold,0.022,0.002,0,g); }
   if(id==='keyShaft'){ box(0.055,0.006,0.007,gold,0,0.003,0,g); box(0.006,0.006,0.012,gold,0.016,0.003,0.008,g); box(0.005,0.006,0.009,gold,0.024,0.003,0.006,g); }
-  if(id==='letter'){ box(0.09,0.006,0.13,mat('#efe6d0'),0,0.003,0,g); box(0.09,0.002,0.02,mat('#ded2b6'),0,0.007,-0.05,g); }
   return g;
 }
 // Tap handler for a USES place. Returns true if it opened / was already open.
@@ -2436,7 +2432,6 @@ window.addEventListener('keydown',e=>{ if(e.key==='Escape') closeLb(); });
 let toastT=0;
 function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('on'),1600+t.length*90); }
 // main-room pick-up: a box of matches in the bottom drawer
-itemProp('letter',itemMesh('letter'),false,-0.15,-0.083,-0.2,drawerMvs[1].obj).rotation.y=0.3;
 
 /* ---------- walking into the hidden room, and looking all the way round inside it ---------- */
 // Tapping the fusuma glides the camera in (roomRide); inside (roomView) drag looks round, pinch/wheel zooms,
