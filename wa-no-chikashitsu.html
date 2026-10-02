@@ -3,20 +3,754 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>地下室</title>
+<title>地下 ― 風車組み本棚(試作)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@500;700&display=swap">
 <style>
-html,body{margin:0;height:100%;background:#000;color:#cdbd93;font-family:"Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif}
-body{display:grid;place-items:center;text-align:center;letter-spacing:.3em;animation:in 2s ease-out}
-p{margin:0 0 28px;font-size:15px;line-height:2.2}
-a{color:#e8c878;font-size:13px;letter-spacing:.2em}
-@keyframes in{from{opacity:0}to{opacity:1}}
+:root{
+  --bg:#100d0a; --panel:rgba(22,15,10,.66); --panel-hover:rgba(64,42,22,.82);
+  --line:rgba(214,176,98,.55); --ink:#f1e6cf; --muted:#cdbd93; --seal:#a8281f;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#0c0906; } }
+:root[data-theme="dark"]{ --bg:#0c0906; }
+html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;color:var(--ink);
+  font-family:"Noto Serif JP","Hiragino Mincho ProN","Yu Mincho","MS PMincho",serif;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);}
+#app{position:fixed;inset:0;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none}
+#app:active{cursor:grabbing}
+canvas{display:block}
+.hud{position:fixed;inset:0;pointer-events:none}
+.title{position:absolute;left:20px;top:calc(18px + env(safe-area-inset-top,0px));display:flex;gap:12px;align-items:center;text-shadow:0 1px 6px rgba(0,0,0,.7)}
+.seal{width:38px;height:38px;background:var(--seal);color:#f6e9d0;display:grid;place-items:center;
+  font-weight:700;font-size:20px;border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 0 1.5px rgba(246,233,208,.35)}
+.title b{display:block;font-size:18px;letter-spacing:.28em;font-weight:700}
+.title small{display:block;margin-top:3px;font-size:11px;letter-spacing:.14em;color:var(--muted)}
+.hint{position:absolute;left:20px;top:calc(70px + env(safe-area-inset-top,0px));max-width:min(82vw,460px);font-size:12px;line-height:1.9;letter-spacing:.08em;
+  color:var(--muted);text-shadow:0 1px 4px #000;transition:opacity 1.6s}
+.bar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));
+  display:flex;gap:8px;flex-wrap:wrap;justify-content:center;pointer-events:auto;padding:0 12px;width:max-content;max-width:100%;box-sizing:border-box}
+.bar button{font:inherit;font-size:13px;letter-spacing:.12em;color:var(--ink);background:var(--panel);
+  border:1px solid var(--line);padding:9px 16px;border-radius:2px;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.bar button:hover{background:var(--panel-hover)}
+.bar button:focus-visible{outline:2px solid #e8c878;outline-offset:2px}
+.bar button.on{background:rgba(168,40,31,.78);border-color:#e0b96a}
+#loading{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);color:var(--muted);
+  letter-spacing:.4em;font-size:14px;transition:opacity .9s;z-index:5}
+@media (prefers-reduced-motion: reduce){ #loading,.hint{transition:none} }
 </style>
 </head>
 <body>
-<!-- 地下の扉の向こう（wa-no-shodana.html の NEXT_PAGE から来る）。ここに次の空間を作っていく。 -->
-<div>
-  <p>扉の向こうは、まだ闇に包まれている。<br>（準備中）</p>
-  <a href="wa-no-shodana.html">書斎へ戻る</a>
+<div id="app"></div>
+<div class="hud">
+  <div class="title"><div class="seal">卍</div><div><b>風車組み本棚</b><small>直方体4棟を回転対称に組む ― 試作</small></div></div>
+  <div class="hint" id="hint">ドラッグで見回す ／ ホイール・ピンチで寄る<br>同じ直方体の本棚を4棟、90度ずつ回して噛み合わせています<br>外側に出る側を縮めてできた四隅の凹みを、そのまま浅い棚にしています</div>
+  <div class="bar">
+    <button id="bFace" type="button">次の棟へ</button>
+    <button id="bAuto" type="button">自動回転</button>
+    <button id="bReset" type="button">視点を戻す</button>
+    <button id="bBack" type="button" onclick="location.href='wa-no-shodana.html'">書斎へ戻る</button>
+  </div>
 </div>
+<div id="loading">読み込み中</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(async function(){
+'use strict';
+/* =====================================================================================
+   風車組み本棚 ― 4棟アセンブリ
+
+   考え方(丸太組み/ピンホイールと同じ):
+   一辺 S の正方形を、長さ Lu・奥行き Du (Lu = S - Du) の同じ直方体本棚 4棟で
+   ぐるりと囲む。各棟は「外周の1辺 - Du」だけの長さにして少しずつ短くしてあるので、
+   4棟を90度ずつ回転させて並べると、貫通も隙間も無くきっちり噛み合い、
+   中心には (S-2*Du) 四方 × 高さ H の空洞が自然にできる。
+   この空洞を後で和風に装飾する想定。
+
+   実装: 1棟ぶんの本棚(buildUnit)をワールド原点中心の座標で作り、
+   それを rotation.y = k*90° (k=0..3) だけ回した4つの Group に入れて配置する。
+   回転の中心と各棟の担当領域が数学的に一致するように座標を決めているので、
+   単純に4回呼び出すだけで重なりなく組み上がる。
+   ===================================================================================== */
+const loadingEl=document.getElementById('loading');
+if(!window.THREE){ loadingEl.textContent='three.js を読み込めませんでした'; return; }
+
+const FONT='"Noto Serif JP","Hiragino Mincho ProN","Yu Mincho","MS PMincho",serif';
+const TITLES=[
+ ['源氏物語','紫式部'],['枕草子','清少納言'],['徒然草','兼好'],['方丈記','長明'],['万葉集',''],['古今和歌集',''],
+ ['平家物語',''],['奥の細道','芭蕉'],['雨月物語','秋成'],['竹取物語',''],['伊勢物語',''],['土佐日記','貫之'],
+ ['風姿花伝','世阿弥'],['五輪書','武蔵'],['葉隠',''],['茶の本','天心'],['陰翳礼讃','谷崎'],['雪国','川端'],
+ ['羅生門','芥川'],['山月記','中島'],['檸檬','梶井'],['遠野物語','柳田'],['武士道','新渡戸'],['山家集','西行']
+];
+try{
+  const chars=TITLES.map(t=>t[0]+t[1]).join('');
+  await Promise.race([
+    Promise.all([document.fonts.load('700 40px "Noto Serif JP"',chars),document.fonts.load('500 40px "Noto Serif JP"',chars)]),
+    new Promise(r=>setTimeout(r,4000))
+  ]);
+}catch(e){}
+
+/* ---------- utils ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const rnd=mulberry32(20260922);
+const R=(a,b)=>a+(b-a)*rnd();
+const pick=arr=>arr[Math.floor(rnd()*arr.length)];
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const C=hex=>new THREE.Color(hex).convertSRGBToLinear();
+
+/* ---------- renderer ---------- */
+const host=document.getElementById('app');
+let renderer;
+try{ renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'}); }
+catch(e){ loadingEl.textContent='WebGL を利用できません'; return; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.05;
+host.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x0c0906);
+const camera=new THREE.PerspectiveCamera(38,1,0.05,60);
+const maxAniso=renderer.capabilities.getMaxAnisotropy();
+
+/* ---------- textures ---------- */
+function canvasTex(w,h,draw){
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const g=c.getContext('2d'); draw(g,w,h);
+  const t=new THREE.CanvasTexture(c);
+  t.encoding=THREE.sRGBEncoding; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=maxAniso;
+  return t;
+}
+function drawWood(g,w,h,o){
+  g.fillStyle=o.base; g.fillRect(0,0,w,h);
+  for(let i=0;i<70;i++){
+    const y=rnd()*h, th=R(6,60), a=R(0.04,0.14), col=rnd()<0.55?o.dark:o.light;
+    for(const off of [-h,0,h]){
+      const grd=g.createLinearGradient(0,y+off-th,0,y+off+th);
+      grd.addColorStop(0,`rgba(${col},0)`); grd.addColorStop(0.5,`rgba(${col},${a})`); grd.addColorStop(1,`rgba(${col},0)`);
+      g.fillStyle=grd; g.fillRect(0,y+off-th,w,th*2);
+    }
+  }
+  g.lineCap='round';
+  for(let i=0;i<o.lines*5;i++){
+    const y0=rnd()*h, col=rnd()<0.62?o.dark:o.light;
+    g.strokeStyle=`rgba(${col},${R(0.05,0.28)})`; g.lineWidth=R(0.4,1.8);
+    const amp=R(0.4,5)*o.wave, k=1+Math.floor(rnd()*4), ph=rnd()*6.283;
+    for(const off of [-h,0,h]){
+      g.beginPath();
+      for(let x=0;x<=w;x+=16){ const y=y0+off+Math.sin(x/w*6.283*k+ph)*amp; if(x===0)g.moveTo(x,y); else g.lineTo(x,y); }
+      g.stroke();
+    }
+  }
+  for(let i=0;i<2200;i++){ g.fillStyle=`rgba(${o.dark},${R(0.05,0.2)})`; g.fillRect(rnd()*w,rnd()*h,R(2,9),R(0.5,1.2)); }
+}
+function vtext(g,s,cx,y0,maxH,maxW,color,weight){
+  const chars=[...s]; if(!chars.length) return;
+  const size=Math.min(maxW,maxH/chars.length);
+  g.font=`${weight} ${size}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle=color;
+  let y=y0+(maxH-size*chars.length)/2+size/2;
+  for(const c of chars){ g.fillText(c,cx,y); y+=size; }
+}
+function goldGrad(g,w,silver){
+  const gr=g.createLinearGradient(0,0,w,0);
+  if(silver){ gr.addColorStop(0,'#9aa1a8'); gr.addColorStop(.5,'#f2f4f6'); gr.addColorStop(1,'#8b929a'); }
+  else { gr.addColorStop(0,'#a9812f'); gr.addColorStop(.5,'#f3d580'); gr.addColorStop(1,'#a07728'); }
+  return gr;
+}
+function drawSpine(g,w,h,st,title,author){
+  g.fillStyle=st.base; g.fillRect(0,0,w,h);
+  for(let i=0;i<900;i++){
+    g.fillStyle=rnd()<.5?`rgba(255,255,255,${R(.02,.06)})`:`rgba(0,0,0,${R(.03,.08)})`;
+    g.fillRect(rnd()*w,rnd()*h,R(1,3),R(1,4));
+  }
+  const band=(y,col)=>{ g.fillStyle=col; g.fillRect(w*0.06,y,w*0.88,3); };
+  if(st.k==='label'){
+    for(const y of [h*0.045,h*0.065,h*0.935,h*0.955]) band(y,'#d0a850');
+    const lw=w*0.62,lh=h*0.6,lx=(w-lw)/2,ly=h*0.12;
+    g.fillStyle='#efe4c8'; g.fillRect(lx,ly,lw,lh);
+    g.strokeStyle='rgba(110,80,40,.75)'; g.lineWidth=1.5; g.strokeRect(lx+3,ly+3,lw-6,lh-6);
+    vtext(g,title,w/2,ly+lh*0.06,lh*0.88,lw*0.62,st.ink,'700');
+    g.fillStyle='#d0a850'; g.beginPath(); g.moveTo(w/2,h*0.86); g.lineTo(w/2+7,h*0.885); g.lineTo(w/2,h*0.91); g.lineTo(w/2-7,h*0.885); g.fill();
+  } else if(st.k==='foil'){
+    for(const y of [h*0.05,h*0.07,h*0.93,h*0.95]) band(y,goldGrad(g,w,st.fg==='silver'));
+    g.shadowColor='rgba(0,0,0,.55)'; g.shadowBlur=3;
+    vtext(g,title,w/2,h*0.11,h*0.66,w*0.46,goldGrad(g,w,st.fg==='silver'),'700');
+    g.shadowBlur=0;
+    g.fillStyle=goldGrad(g,w,st.fg==='silver'); g.beginPath(); g.moveTo(w/2,h*0.85); g.lineTo(w/2+8,h*0.88); g.lineTo(w/2,h*0.91); g.lineTo(w/2-8,h*0.88); g.fill();
+  } else {
+    g.fillStyle=st.stripe; g.fillRect(0,0,w,h*0.09);
+    g.fillStyle='rgba(255,255,255,.55)'; g.fillRect(0,h*0.09,w,3);
+    vtext(g,title,w/2,h*0.13,h*0.6,w*0.5,'#1f1b18','700');
+    if(author) vtext(g,author,w/2,h*0.75,h*0.15,w*0.3,'#4a4038','500');
+    g.strokeStyle=st.stripe; g.lineWidth=3; g.beginPath(); g.arc(w/2,h*0.94,w*0.14,0,6.283); g.stroke();
+  }
+  const lg=g.createLinearGradient(0,0,w,0);
+  lg.addColorStop(0,'rgba(0,0,0,.42)'); lg.addColorStop(.16,'rgba(0,0,0,0)'); lg.addColorStop(.84,'rgba(0,0,0,0)'); lg.addColorStop(1,'rgba(0,0,0,.42)');
+  g.fillStyle=lg; g.fillRect(0,0,w,h);
+  const hi=g.createLinearGradient(0,0,w,0);
+  hi.addColorStop(.3,'rgba(255,255,255,0)'); hi.addColorStop(.42,'rgba(255,255,255,.10)'); hi.addColorStop(.55,'rgba(255,255,255,0)');
+  g.fillStyle=hi; g.fillRect(0,0,w,h);
+}
+function drawPages(g,w,h){
+  g.fillStyle='#eadfc2'; g.fillRect(0,0,w,h);
+  for(let x=0;x<w;x+=2){ g.fillStyle=`rgba(${rnd()<.5?'120,95,55':'255,250,235'},${R(.06,.22)})`; g.fillRect(x,0,1,h); }
+}
+function drawCover(g,w,h,title,author,base){
+  g.fillStyle=base; g.fillRect(0,0,w,h);
+  for(let i=0;i<600;i++){ g.fillStyle=`rgba(0,0,0,${R(0.015,0.05)})`; g.fillRect(rnd()*w,rnd()*h,R(2,5),R(2,5)); }
+  const bx=w*0.07,by=h*0.06;
+  g.strokeStyle='#c9a34e'; g.lineWidth=Math.max(2,w*0.014);
+  g.strokeRect(bx,by,w-bx*2,h-by*2);
+  g.strokeStyle='rgba(201,163,78,.45)'; g.lineWidth=Math.max(1,w*0.005);
+  g.strokeRect(bx+w*0.03,by+h*0.02,w-bx*2-w*0.06,h-by*2-h*0.04);
+  vtext(g,title,w*0.5,h*0.14,h*0.6,w*0.56,'#241c13','700');
+  if(author) vtext(g,'／'+author,w*0.5,h*0.8,h*0.14,w*0.3,'#4a4038','500');
+}
+
+/* ---------- materials ---------- */
+const woodTex=(base,dark,light,lines,wave)=>canvasTex(576,576,(g,w,h)=>drawWood(g,w,h,{base,dark,light,lines,wave}));
+const tDark=woodTex('#151515','0,0,0','72,72,74',70,1);
+const tMid=woodTex('#1e1e1e','0,0,0','95,95,98',60,1);
+const matDark=new THREE.MeshStandardMaterial({map:tDark,bumpMap:tDark,bumpScale:0.6,roughness:0.92});
+const matMid=new THREE.MeshStandardMaterial({map:tMid,bumpMap:tMid,bumpScale:0.5,roughness:0.9});
+matDark.userData.woodUV=0.9; matMid.userData.woodUV=0.9;
+const matLacquer=new THREE.MeshPhysicalMaterial({color:C('#0b0908'),roughness:0.18,clearcoat:1,clearcoatRoughness:0.1});
+const matGold=new THREE.MeshStandardMaterial({color:C('#d7ae55'),metalness:1,roughness:0.3});
+const matAccent=new THREE.MeshStandardMaterial({color:C('#8a2a22'),roughness:0.55});
+const matCeramic=new THREE.MeshPhysicalMaterial({color:C('#2f5c50'),roughness:0.28,clearcoat:0.6,clearcoatRoughness:0.25,side:THREE.DoubleSide});
+const matFoliage=new THREE.MeshStandardMaterial({color:C('#3a5f3a'),roughness:0.85});
+const matBronze=new THREE.MeshStandardMaterial({color:C('#5a4a2a'),metalness:0.65,roughness:0.4});
+const matCeramic2=new THREE.MeshPhysicalMaterial({color:C('#ece3cf'),roughness:0.3,clearcoat:0.5,clearcoatRoughness:0.3,side:THREE.DoubleSide});
+const tPages=canvasTex(128,128,drawPages);
+const matPages=new THREE.MeshStandardMaterial({map:tPages,roughness:0.92});
+const tFloor=woodTex('#2c1c12','12,6,2','90,58,32',80,0.6);
+tFloor.repeat.set(4,4);
+const matFloor=new THREE.MeshStandardMaterial({map:tFloor,roughness:0.85});
+
+/* ---------- geometry helpers ---------- */
+function mapBoxUV(g,w,h,d,S){
+  const pos=g.attributes.position,nor=g.attributes.normal,uv=g.attributes.uv;
+  const dims=[w,h,d]; let L=0; if(h>dims[L])L=1; if(d>dims[L])L=2;
+  const off=[rnd()*10,rnd()*10];
+  for(let i=0;i<pos.count;i++){
+    const p=[pos.getX(i),pos.getY(i),pos.getZ(i)];
+    const n=[Math.abs(nor.getX(i)),Math.abs(nor.getY(i)),Math.abs(nor.getZ(i))];
+    const na=n[0]>0.5?0:(n[1]>0.5?1:2);
+    const axes=[0,1,2].filter(a=>a!==na);
+    let ua,va;
+    if(axes.indexOf(L)>=0){ ua=L; va=axes.find(a=>a!==L); } else { ua=axes[0]; va=axes[1]; }
+    uv.setXY(i,p[ua]/S+off[0],p[va]/S+off[1]);
+  }
+  uv.needsUpdate=true;
+}
+function box(w,h,d,mat,x,y,z,parent){
+  const g=new THREE.BoxGeometry(w,h,d);
+  if(mat.userData&&mat.userData.woodUV) mapBoxUV(g,w,h,d,mat.userData.woodUV);
+  const m=new THREE.Mesh(g,mat); m.position.set(x,y,z); m.castShadow=m.receiveShadow=true;
+  parent.add(m); return m;
+}
+function regroupBox(g,order,counts){
+  const idx=g.index.array, out=new idx.constructor(idx.length); let o=0;
+  for(const f of order){ for(let k=0;k<6;k++) out[o++]=idx[f*6+k]; }
+  idx.set(out); g.index.needsUpdate=true; g.clearGroups();
+  let s=0; counts.forEach((c,i)=>{ g.addGroup(s,c*6,i); s+=c*6; });
+}
+function bookGeometry(t,h,d){
+  const g=new THREE.BoxGeometry(t,h,d);
+  regroupBox(g,[0,1,2,3,5,4],[2,3,1]); // [表紙,表紙 | 小口,小口,小口 | 背表紙]
+  return g;
+}
+function lathe(pts,mat,seg){
+  const g=new THREE.LatheGeometry(pts.map(p=>new THREE.Vector2(p[0],p[1])),seg||24);
+  const m=new THREE.Mesh(g,mat); m.castShadow=m.receiveShadow=true; return m;
+}
+const VASE=[[0,0],[0.018,0],[0.02,0.004],[0.03,0.03],[0.036,0.06],[0.032,0.09],[0.018,0.115],[0.012,0.125]]; // 最後は口の縁で終え、閉じない(開口)
+const CUP=[[0,0],[0.013,0],[0.017,0.006],[0.021,0.02],[0.019,0.034]]; // 同上
+/* 小物(置物)― どの棚にどの向きで置いても大きさを調整できるよう、
+   すべて共通の (parent,x,y,z,s) 形式にしてある。s=大きさの倍率。 */
+// 本棟(face 0-3)ごとに違う花を一輪挿しに生ける。色はいずれも和風の伝統色。
+const FLOWERS=[
+  {name:'梅',color:'#e8628c'}, // 紅梅色
+  {name:'桜',color:'#fbc8d4'}, // 桜色
+  {name:'菊',color:'#f8b500'}, // 山吹色
+  {name:'椿',color:'#d0104c'}, // 韓紅
+];
+// 花の造形: 5枚の花びらを2重(外側は大きく開き、内側は小さく立ち上がる)に重ね、中心に蕊(しべ)と萼。
+// 花びらは細かく分割した面を、付け根が細く先が丸く広がる輪郭に変形し、
+// 先端に小さな切れ込み、縁の反り上がりと全体の椀状の湾曲をつけて、薄い紙のような1枚にしている。
+// 付け根ほど白っぽく、先ほど本来の色が濃くなるよう頂点色でぼかす。全棟同じ造形で、色だけ変える。
+function petalGeometry(len,wid,cup,curl,notch,base,pale){
+  const g=new THREE.PlaneGeometry(1,1,6,10), p=g.attributes.position, col=new Float32Array(p.count*3);
+  for(let i=0;i<p.count;i++){
+    const u=p.getX(i), v=p.getY(i)+0.5;                         // u: -0.5..0.5 across, v: 0 (base) .. 1 (tip)
+    const hw=0.5*Math.pow(Math.sin(Math.PI*Math.min(1,v*0.92+0.04)),0.65)*(0.35+0.65*Math.min(1,v*1.6));
+    const tipCut=notch*Math.exp(-Math.pow(u*7,2))*Math.max(0,v-0.75)*4;   // the little notch at the tip
+    const r=(v-tipCut*0.25)*len, t=u*2*hw*wid;
+    const h=cup*len*v*v + curl*len*Math.pow(Math.abs(u*2),2.2)*v;          // bowl-shaped, edges curling up
+    p.setXYZ(i,r,h,t);
+    const k=Math.min(1,0.15+v*1.1); col[i*3]=pale.r+(base.r-pale.r)*k; col[i*3+1]=pale.g+(base.g-pale.g)*k; col[i*3+2]=pale.b+(base.b-pale.b)*k;   // paler toward the base
+  }
+  g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  g.computeVertexNormals(); return g;
+}
+function makeFlower(color,s){
+  const grp=new THREE.Group(), base=C(color), pale=base.clone().lerp(new THREE.Color(1,1,1),0.55);
+  const petalMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.55,side:THREE.DoubleSide});
+  const outer=petalGeometry(0.04*s,0.032*s,0.18,0.12,0.5,base,pale), inner=petalGeometry(0.027*s,0.025*s,0.55,0.18,0.35,base,pale);
+  for(let i=0;i<5;i++){
+    const a=i/5*Math.PI*2;
+    const po=new THREE.Mesh(outer,petalMat); po.rotation.set(0,a,0.12); po.castShadow=true; grp.add(po);
+    const pi=new THREE.Mesh(inner,petalMat); pi.rotation.set(0,a+Math.PI/5,0.38); pi.position.y=0.002*s; pi.castShadow=true; grp.add(pi);
+  }
+  const stamenMat=new THREE.MeshStandardMaterial({color:C('#e8d6a0'),roughness:0.7}), antherMat=new THREE.MeshStandardMaterial({color:C('#f4c430'),roughness:0.5});
+  for(let i=0;i<14;i++){
+    const a=i/14*Math.PI*2+R(-0.15,0.15), lean=R(0.25,0.55), L=R(0.011,0.016)*s;
+    const st=new THREE.Group(); st.rotation.set(0,a,lean); grp.add(st);
+    const f=new THREE.Mesh(new THREE.CylinderGeometry(0.0006*s,0.0008*s,L,5),stamenMat); f.position.y=L/2; st.add(f);
+    const an=new THREE.Mesh(new THREE.SphereGeometry(0.0018*s,8,6),antherMat); an.position.y=L; st.add(an);
+  }
+  const pistil=new THREE.Mesh(new THREE.CylinderGeometry(0.0009*s,0.0012*s,0.013*s,6),new THREE.MeshStandardMaterial({color:C('#c9d77a'),roughness:0.6}));
+  pistil.position.y=0.0065*s; grp.add(pistil);
+  const calyx=new THREE.Mesh(new THREE.SphereGeometry(0.008*s,12,8,0,Math.PI*2,Math.PI*0.5,Math.PI*0.5),matFoliage);   // green cup under the bloom
+  calyx.scale.y=0.7; calyx.castShadow=true; grp.add(calyx);
+  return grp;
+}
+function shapeVase(parent,x,y,z,s,face){
+  // 一輪挿し(青磁)
+  const vase=lathe(VASE,matCeramic,20);
+  vase.scale.set(1.3*s,1.3*s,1.3*s);
+  vase.position.set(x,y,z);
+  parent.add(vase);
+  const f=FLOWERS[(face||0)%FLOWERS.length];
+  const rimY=y+0.125*1.3*s; // 花器の口の高さ
+  const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.003*s,0.004*s,0.09*s,6),matFoliage);
+  stem.position.set(x,rimY+0.045*s,z);
+  stem.castShadow=true;
+  parent.add(stem);
+  const bloom=makeFlower(f.color,s);
+  bloom.position.set(x,rimY+0.09*s,z); bloom.rotation.z=0.35;   // tipped toward the open side of the shelf (-x) so the face shows
+  parent.add(bloom);
+}
+function shapeBowl(parent,x,y,z,s){
+  // 茶碗(白磁、金の見込み)
+  const bowl=lathe([[0,0],[0.016,0],[0.02,0.008],[0.05,0.03],[0.058,0.045],[0.05,0.05]],matCeramic2,24); // 最後は口の縁で終え、閉じない(開口)
+  bowl.scale.set(1.35*s,1.35*s,1.35*s);
+  bowl.position.set(x,y,z);
+  parent.add(bowl);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(0.038*s,0.003*s,8,24),matGold);
+  ring.rotation.x=Math.PI/2; ring.position.set(x,y+0.067*s,z);
+  parent.add(ring);
+}
+let FAN_PAPER=null;
+function shapeFan(parent,x,y,z,s){
+  // 扇子: 朱の扇面を山折り・谷折りの交互のジグザグ(プリーツ)にし、付け根側には黒漆の中骨がのぞく。
+  // 両端は太い親骨、要(かなめ)は金。小さな黒漆の扇子立てに立てる。ローカルでは -z が正面、
+  // グループごと y に90度回して、窪み棚の開いた側(-x)へ向ける。
+  const grp=new THREE.Group();
+  const R0=0.195*s, r0=R0*0.42, N=16, start=Math.PI*0.225, sweep=Math.PI*0.55, fold=R0*0.045, lift=0.016*s;
+  FAN_PAPER=FAN_PAPER||canvasTex(512,128,(g,w,h)=>{
+    g.fillStyle='#a32a22'; g.fillRect(0,0,w,h);
+    for(let i=0;i<500;i++){ g.fillStyle=`rgba(0,0,0,${R(.03,.08)})`; g.fillRect(rnd()*w,rnd()*h,R(1,4),R(1,4)); }
+    for(let i=0;i<260;i++){ const fx=rnd()*w, fy=h*R(0.15,0.95); g.fillStyle=`rgba(${215+rnd()*30|0},${170+rnd()*30|0},${80+rnd()*30|0},${R(.5,.95)})`;
+      g.save(); g.translate(fx,fy); g.rotate(rnd()*3); g.fillRect(-R(1,3),-R(1,3),R(2,6),R(2,5)); g.restore(); }   // gold-leaf flakes
+    g.fillStyle='#d4ad55'; g.fillRect(0,h-7,w,5);                                                                 // gold band along the top edge
+    g.strokeStyle='rgba(240,210,130,.55)'; g.lineWidth=2; for(let k=0;k<3;k++){ g.beginPath(); const yy=h*(0.35+k*0.18); for(let xx=0;xx<=w;xx+=8) g.lineTo(xx,yy+Math.sin(xx/w*Math.PI*6+k)*5); g.stroke(); }   // flowing water lines
+  });
+  FAN_PAPER.wrapS=FAN_PAPER.wrapT=THREE.ClampToEdgeWrapping;
+  const pos=[], uv=[];
+  const P=(i,r)=>{ const a=start+sweep*i/N, d=(i%2?1:-1)*fold*(r/R0); return [Math.cos(a)*r, Math.sin(a)*r+lift, d]; };
+  for(let i=0;i<N;i++){
+    const a0=P(i,r0), a1=P(i,R0), b0=P(i+1,r0), b1=P(i+1,R0), u0=i/N, u1=(i+1)/N;
+    pos.push(...a0,...b0,...b1, ...a0,...b1,...a1); uv.push(u0,0,u1,0,u1,1, u0,0,u1,1,u0,1);
+  }
+  const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+  geo.computeVertexNormals();   // non-indexed: every pleat keeps its own flat face, so the folds read crisply
+  const paper=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({map:FAN_PAPER,roughness:0.6,side:THREE.DoubleSide})); paper.castShadow=true; grp.add(paper);
+  // sticks: thin inner ribs (one behind each valley fold) from the pivot to just inside the paper; thick guards at both ends
+  for(let i=0;i<=N;i++){
+    const guard=(i===0||i===N); if(!guard&&i%2) continue;
+    const a=start+sweep*i/N, L=guard?R0*1.01:r0*1.04;
+    const rib=new THREE.Mesh(new THREE.BoxGeometry(L,guard?0.0042*s:0.0026*s,guard?0.004*s:0.0018*s),matLacquer);
+    rib.position.set(Math.cos(a)*L/2,Math.sin(a)*L/2+lift,guard?(i?1:-1)*0.0025*s:-fold*(r0/R0)*0.9);
+    rib.rotation.z=a; rib.castShadow=true; grp.add(rib);
+  }
+  const pivot=new THREE.Mesh(new THREE.CylinderGeometry(0.006*s,0.006*s,0.012*s,14),matGold); pivot.rotation.x=Math.PI/2; pivot.position.y=lift; grp.add(pivot);
+  // stand: a low black-lacquer base with a slotted block the fan's pivot rests in
+  box(0.09*s,0.008*s,0.03*s,matLacquer,0,0.004*s,0,grp);
+  box(0.03*s,0.012*s,0.022*s,matLacquer,0,0.014*s,0,grp);
+  grp.rotation.y=Math.PI/2;
+  grp.position.set(x,y,z);
+  parent.add(grp);
+}
+function shapeBonsai(parent,x,y,z,s){
+  // 盆栽(小鉢に若松、雲状の三段仕立て)。横向きに90度回して幹の傾きを見せる。
+  const grp=new THREE.Group();
+  const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.05*s,0.04*s,0.036*s,16),matBronze);
+  pot.castShadow=pot.receiveShadow=true;
+  pot.position.y=0.018*s;
+  grp.add(pot);
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.006*s,0.01*s,0.075*s,8),matDark);
+  trunk.position.y=(0.036+0.037)*s;
+  trunk.rotation.z=0.12;
+  grp.add(trunk);
+  const tiers=[[0.028,0.09,0],[0.036,0.125,0.014],[0.026,0.155,-0.01]];
+  tiers.forEach(([r,dy,dx])=>{
+    // 半径・扁平率・向きにばらつきを持たせ、葉のかたまりを不揃いにする
+    const cloud=new THREE.Mesh(new THREE.IcosahedronGeometry(r*s*R(0.85,1.15),1),matFoliage);
+    cloud.scale.set(R(0.85,1.15),R(0.45,0.65),R(0.85,1.15));
+    cloud.rotation.y=rnd()*Math.PI*2;
+    cloud.castShadow=true;
+    cloud.position.set(dx*s,0.036*s+dy*s,0);
+    grp.add(cloud);
+  });
+  grp.rotation.y=Math.PI/2;
+  grp.position.set(x,y,z);
+  parent.add(grp);
+}
+function shapeIncense(parent,x,y,z,s){
+  // 香炉(青銅、三本足に蓋)
+  const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.042*s,0.034*s,0.03*s,16),matBronze);
+  bowl.castShadow=bowl.receiveShadow=true;
+  bowl.position.set(x,y+0.015*s,z);
+  parent.add(bowl);
+  for(let i=0;i<3;i++){
+    const a=i*Math.PI*2/3;
+    const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.004*s,0.004*s,0.012*s,6),matBronze);
+    leg.position.set(x+Math.cos(a)*0.028*s,y+0.006*s,z+Math.sin(a)*0.028*s);
+    parent.add(leg);
+  }
+  const lid=new THREE.Mesh(new THREE.SphereGeometry(0.028*s,16,12,0,Math.PI*2,0,Math.PI*0.55),matBronze);
+  lid.position.set(x,y+0.03*s,z);
+  parent.add(lid);
+  const knob=new THREE.Mesh(new THREE.SphereGeometry(0.006*s,8,8),matGold);
+  knob.position.set(x,y+0.046*s,z);
+  parent.add(knob);
+}
+function shapeKokeshi(parent,x,y,z,s){
+  // 小芥子(のっぺらぼう)― 抹茶色の胴、黒髪のおかっぱ頭、ベージュの顔(目鼻は作らない)。
+  // ローカルグループ内で -z を正面に作り、グループごと y に90度回して窪み棚の開いた側(-x)へ向ける。
+  // 顔は髪の球面にぴったり沿わせた2枚の球面片: 額〜目の高さの「四角」(前髪を真っ直ぐ切りそろえた形)と、
+  // 頬〜あごの「丸」。二つが重なって、おかっぱ特有の上が平らで下が丸い顔になる。
+  const grp=new THREE.Group();
+  const bodyMat=new THREE.MeshStandardMaterial({color:C('#7a8a4a'),roughness:0.7});   // 抹茶色
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(0.024*s,0.021*s,0.08*s,24),bodyMat);
+  body.castShadow=body.receiveShadow=true; body.position.y=0.04*s; grp.add(body);
+  const band=new THREE.Mesh(new THREE.TorusGeometry(0.0225*s,0.003*s,8,24),matGold);
+  band.rotation.x=Math.PI/2; band.position.y=0.05*s; grp.add(band);
+  const hr=0.026*s, headY=0.08*s+hr;
+  const head=new THREE.Mesh(new THREE.SphereGeometry(hr,32,24),new THREE.MeshStandardMaterial({color:C('#1a1a1a'),roughness:0.45}));   // 黒髪(艶あり)
+  head.castShadow=head.receiveShadow=true; head.position.y=headY; grp.add(head);
+  const skin=new THREE.MeshStandardMaterial({color:C('#f2e0c2'),roughness:0.75,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
+  const fr=hr*1.004, FRONT=Math.PI*1.5;   // in SphereGeometry, longitude 3π/2 is the -z side
+  // 四角: 経度で横幅を、緯度で前髪の線(上)から目の下(下)までを切り出す
+  const square=new THREE.Mesh(new THREE.SphereGeometry(fr,24,16,FRONT-0.62,1.24,1.02,0.62),skin);
+  square.position.y=headY; grp.add(square);
+  // 丸: 正面やや下を中心にした球冠
+  const cap=new THREE.Mesh(new THREE.SphereGeometry(fr,28,12,0,Math.PI*2,0,0.66),skin);
+  cap.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(0,-0.32,-1).normalize());
+  cap.position.y=headY; grp.add(cap);
+  grp.rotation.y=Math.PI/2;
+  grp.position.set(x,y,z);
+  parent.add(grp);
+}
+function shapeCup(parent,x,y,z,s){
+  // ぐい呑み(白磁、金の口紅)
+  const cup=lathe(CUP,matCeramic2,20);
+  cup.scale.set(1.5*s,1.5*s,1.5*s);
+  cup.position.set(x,y,z);
+  parent.add(cup);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(0.028*s,0.0025*s,6,20),matGold);
+  rim.rotation.x=Math.PI/2; rim.position.set(x,y+0.05*s,z);
+  parent.add(rim);
+}
+// 小物ひとそろい。s=1のときの(高さ,幅,奥行き)は、置き場所に収まる最大の s を逆算するのに使う。
+const ORNAMENTS=[
+  {fn:shapeVase,   h:0.28, w:0.094,d:0.094}, // 一輪挿し(花込み)
+  {fn:shapeBowl,   h:0.09, w:0.157,d:0.157}, // 茶碗
+  {fn:shapeFan,    h:0.215,w:0.09, d:0.30, maxS:0.37}, // 扇子(y90度回転後の寸法: x=扇子立ての奥行き / z=扇の幅)。maxS: 以前の1.5倍の大きさで止める
+  {fn:shapeBonsai, h:0.23, w:0.12, d:0.12 }, // 盆栽
+  {fn:shapeIncense,h:0.09, w:0.084,d:0.084}, // 香炉
+  {fn:shapeKokeshi,h:0.14, w:0.06, d:0.06 }, // 小芥子
+  {fn:shapeCup,    h:0.055,w:0.07, d:0.07 }, // ぐい呑み
+];
+// 板・棒を貫通しないよう収まる範囲で、できるだけ大きい倍率で小物を置く(必要以上には縮めない)
+function addOrnament(idx,face,parent,x,y,z,availH,availW,availD){
+  const o=ORNAMENTS[idx];
+  const s=Math.max(0.15,Math.min(availH/o.h,availW/o.w,availD/o.d,o.maxS||1.8));
+  o.fn(parent,x,y,z,s,face);
+}
+
+// 面出し本(表紙を見せて奥へ立てかける小さな本)。既定で横(側面)を向く。
+const BOOK_ASPECT=300/440;   // 表紙テクスチャの幅:高さ
+const BOOK_MAX_H=0.20;       // 高さの目安上限
+const BOOK_OVERHANG=1.4;     // 間口(nW)に対して幅をどこまで許容するか
+function bookCoverSize(clearH,nW){
+  const h=Math.min(clearH-0.06,BOOK_MAX_H);
+  const w=Math.min(h*BOOK_ASPECT,nW*BOOK_OVERHANG);
+  return {w,h:w/BOOK_ASPECT};
+}
+function addCoverBook(title,author,baseColor,parent,x,y,z,angle,w,h){
+  const tex=canvasTex(300,440,(g,tw,th)=>drawCover(g,tw,th,title,author,baseColor));
+  const geo=new THREE.BoxGeometry(w,h,0.022);
+  const cover=new THREE.MeshStandardMaterial({map:tex,roughness:0.72});
+  const mesh=new THREE.Mesh(geo,[matPages,matPages,matPages,matPages,matPages,cover]);
+  mesh.castShadow=mesh.receiveShadow=true;
+  // 傾き(x)→向き(y)の順で回すYXZにして、傾きごと横向きにそろえる(既定で側面向き)
+  mesh.rotation.set(angle,Math.PI/2,0,'YXZ');
+  mesh.position.set(x+h/2*Math.sin(angle),y+h/2*Math.cos(angle)+0.004,z+0.01);
+  parent.add(mesh);
+}
+
+/* ---------- book styles ---------- */
+const STYLE_DEFS=[
+ {k:'label',base:'#1d2c4b',ink:'#151515',h:[0.20,0.33],t:[0.024,0.05]},
+ {k:'label',base:'#7d2a24',ink:'#151515',h:[0.20,0.33],t:[0.024,0.05]},
+ {k:'label',base:'#465732',ink:'#151515',h:[0.20,0.33],t:[0.024,0.05]},
+ {k:'foil', base:'#15110f',fg:'gold',h:[0.24,0.34],t:[0.03,0.055]},
+ {k:'foil', base:'#1e3a30',fg:'gold',h:[0.24,0.34],t:[0.03,0.055]},
+ {k:'foil', base:'#233757',fg:'silver',h:[0.24,0.34],t:[0.03,0.055]},
+ {k:'bunko',base:'#eee5d0',stripe:'#b3382c',h:[0.15,0.175],t:[0.012,0.026]},
+ {k:'bunko',base:'#ece6d6',stripe:'#2c4f7a',h:[0.15,0.175],t:[0.012,0.026]},
+];
+const shuffled=TITLES.slice().sort(()=>rnd()-0.5); let ti=0;
+const STYLES=STYLE_DEFS.map(def=>{
+  const cover=new THREE.MeshStandardMaterial({color:C(def.base),roughness:0.8});
+  const spines=[];
+  for(let k=0;k<3;k++){
+    const tt=shuffled[ti++%shuffled.length];
+    const tex=canvasTex(96,512,(g,w,h)=>drawSpine(g,w,h,def,tt[0],tt[1]));
+    spines.push(new THREE.MeshStandardMaterial({map:tex,roughness:def.k==='foil'?0.5:0.7}));
+  }
+  return {def,cover,spines};
+});
+const STYLE_WEIGHTED=[]; STYLES.forEach(s=>{ const n=s.def.k==='bunko'?1:2; for(let i=0;i<n;i++) STYLE_WEIGHTED.push(s); });
+function makeBook(st,spine,t,h,d){
+  const m=new THREE.Mesh(bookGeometry(t,h,d),[st.cover,matPages,spine]);
+  m.castShadow=m.receiveShadow=true; return m;
+}
+
+/* ---------- pinwheel geometry ----------
+   一辺 S の正方形を4棟(同じ直方体)で囲む。
+   各棟の長さ Lu = S - Du、奥行き Du。棟0を「基準棟」として、
+   世界原点(=正方形の中心)を基準にした座標で作る:
+     x0 の範囲: [-S/2, -S/2+Lu]   (長さ方向)
+     z0 の範囲: [-S/2, -S/2+Du]   (奥行き方向。-S/2側=外周=本の正面、内側=背板)
+   この座標のまま4棟を作り、rotation.y = k*90° で回すと、
+   数学的にきっちり噛み合って正方形の外形+中心の空洞ができる。
+------------------------------------------------------------------ */
+const S=1.6, DU=0.25, LU_FULL=S-DU, POST=0.045;
+const KICK_H=0.09, CAP_H=0.05, BOARD_T=0.03;
+const ROW_H=[0.34,0.30,0.40,0.30,0.34];
+
+let cursorY=KICK_H;
+const boardYs=[];
+for(const h of ROW_H){ boardYs.push(cursorY); cursorY+=BOARD_T+h; }
+boardYs.push(cursorY); // 天板を支える最後の棚板
+const topBoardY=cursorY;
+const H_TOTAL=topBoardY+BOARD_T+CAP_H;
+const postSpan=topBoardY+BOARD_T-KICK_H;
+
+// 外に出ている側(xA)だけを少し縮める。逆側(xB, 隣の棟に隠れる継ぎ目)の座標は固定のまま。
+const SHRINK=0.10;
+const xA=-S/2+SHRINK, xB=-S/2+LU_FULL;   // 棟の長さ方向の範囲(xBは固定、xAだけ内側へ)
+const LU=xB-xA;                          // 縮んだ分だけ短くなった実際の長さ
+const zOuter=-S/2, zInner=-S/2+DU;       // 棟の奥行き方向の範囲(外周側/内側)
+const cxMid=(xA+xB)/2, czMid=(zOuter+zInner)/2;
+const cxFull=-S/2+LU_FULL/2; // 上下の縁(台輪・天板)を四隅の凹みごと覆い、全体を大きな正方形にするための中心
+
+function fillShelfUnit(y,clearH){
+  const runStart=xA+POST+0.02, runEnd=xB-POST-0.02;
+  const dMax=DU-0.07;
+  let cx=runStart+R(0.005,0.02), guard=0;
+  while(cx<runEnd-0.02 && guard++<40){
+    const st=pick(STYLE_WEIGHTED), df=st.def, spine=pick(st.spines);
+    const n=rnd()<0.4?2+Math.floor(rnd()*4):1;
+    const h0=Math.min(clearH-0.03,R(df.h[0],df.h[1]));
+    const t0=R(df.t[0],df.t[1]);
+    const d0=Math.min(dMax,R(dMax*0.65,dMax));
+    for(let i=0;i<n;i++){
+      const t=t0*(n>1?R(0.96,1.04):R(0.85,1.15));
+      if(cx+t>runEnd-0.02) break;
+      const h=h0+(n>1?R(-0.002,0.002):R(-0.02,0.02));
+      const mesh=makeBook(st,spine,t,h,d0);
+      mesh.position.set(cx+t/2, y+h/2, zOuter+0.02+d0/2);
+      mesh.rotation.y=Math.PI+R(-0.01,0.01); // 表紙側の面(既定+Z)を外側(-Z)へ向ける
+      booksG.add(mesh);
+      cx+=t+R(0.001,0.004);
+    }
+    if(rnd()<0.08) cx+=R(0.01,0.03);
+  }
+}
+
+function buildUnit(parent,face){
+  // 背板(内側、空洞に面する側)
+  box(LU,postSpan,BOARD_T,matDark,cxMid,KICK_H+postSpan/2,zInner-BOARD_T/2,parent);
+  // 両端の側板(見附柱)
+  box(POST,postSpan,DU,matDark,xA+POST/2,KICK_H+postSpan/2,czMid,parent);
+  box(POST,postSpan,DU,matDark,xB-POST/2,KICK_H+postSpan/2,czMid,parent);
+  // 縮めてできた窪みを、本体と同じ棚数の浅い棚にする。真ん中の2段だけ違い棚風に段違いにし、
+  // 各段には飾り(i=0:表紙を見せる本 / i=2:面ごとの主役の小物 / それ以外:狭い幅でも収まる小物)を置く。
+  const notchCx=(-S/2+xA)/2;
+  const nD=DU-0.01, nW=SHRINK-0.006;
+  const notchBack=zInner-0.02-nD*0.31;
+  const SMALL_SHAPES=[6,4,0,5]; // ぐい呑み・香炉・一輪挿し・小芥子
+  const bases=['#efe4c8','#233757','#465732','#7d2a24'];
+  const clearance=(clearH,depth)=>[clearH-0.06,nW-0.02,depth-0.05]; // [縦,横,奥行]の余白
+  boardYs.forEach((y0,i)=>{
+    const yTop=y0+BOARD_T/2;
+    box(LU-2*POST,BOARD_T,DU,matMid,cxMid,yTop,czMid,parent); // 本体側の棚板
+    if(i===2) box(nW,BOARD_T,nD*0.62,matMid,notchCx,yTop,zOuter+0.02+nD*0.31,parent);      // 下段(手前寄り)
+    else if(i===3) box(nW,BOARD_T,nD*0.62,matMid,notchCx,yTop,zInner-0.02-nD*0.31,parent); // 上段(奥寄り)
+    else box(nW,BOARD_T,nD,matMid,notchCx,yTop,czMid,parent);
+    if(i>=ROW_H.length) return; // 天板直下の支え板には飾りを置かない
+    const clearH=ROW_H[i], y=y0+BOARD_T;
+    if(i===2){ addOrnament(face,face,parent,notchCx,y,zOuter+0.02+nD*0.31,...clearance(clearH,nD*0.62)); return; }
+    if(i===0){
+      const tt=TITLES[face];
+      const {w,h}=bookCoverSize(clearH,nW);
+      addCoverBook(tt[0],tt[1],bases[face],parent,notchCx,y,czMid,0.28,w,h);
+      return;
+    }
+    const depth=(i===3)?nD*0.62:nD, z=(i===3)?notchBack:czMid;
+    const shapeIdx=SMALL_SHAPES[(face+i)%SMALL_SHAPES.length];
+    addOrnament(shapeIdx,face,parent,notchCx,y,z,...clearance(clearH,depth));
+  });
+  // 段違いにした2段の両端(左右)を、細い棒で上下につなぐ
+  {
+    const rodY0=boardYs[2]+BOARD_T, rodY1=boardYs[3];
+    [notchCx-nW/2+0.008, notchCx+nW/2-0.008].forEach(rx=>{
+      box(0.012,rodY1-rodY0,0.012,matDark,rx,(rodY0+rodY1)/2,czMid,parent);
+    });
+  }
+  // 窪みの短辺側(手前)に板を設け、独立した小さな棚として見えるようにする(金縁で額装)
+  {
+    const panelW=nW, panelCY=KICK_H+postSpan/2, panelZ=zOuter+BOARD_T+0.003, fm=0.01;
+    box(panelW,postSpan,BOARD_T,matDark,notchCx,panelCY,zOuter+BOARD_T/2,parent);
+    box(panelW-2*fm,0.006,0.004,matGold,notchCx,panelCY+postSpan/2-fm-0.003,panelZ,parent);
+    box(panelW-2*fm,0.006,0.004,matGold,notchCx,panelCY-postSpan/2+fm+0.003,panelZ,parent);
+    box(0.006,postSpan-2*fm,0.004,matGold,notchCx-panelW/2+fm+0.003,panelCY,panelZ,parent);
+    box(0.006,postSpan-2*fm,0.004,matGold,notchCx+panelW/2-fm-0.003,panelCY,panelZ,parent);
+  }
+  // 台輪(黒漆)・金帯・天板 ― 四隅の凹みごと覆い、上下の縁は大きな正方形にする
+  box(LU_FULL+0.06,KICK_H,DU+0.06,matLacquer,cxFull,KICK_H/2,czMid,parent);
+  box(LU_FULL+0.02,0.005,DU+0.02,matGold,cxFull,KICK_H+0.0025,czMid,parent);
+  box(LU_FULL+0.015,0.004,DU+0.015,matGold,cxFull,topBoardY+BOARD_T+0.002,czMid,parent);
+  box(LU_FULL+0.06,0.004,DU+0.06,matGold,cxFull,H_TOTAL-CAP_H+0.002,czMid,parent);
+  // 本
+  ROW_H.forEach((h,i)=>fillShelfUnit(boardYs[i]+BOARD_T,h));
+}
+
+const ASSEMBLY=new THREE.Group(); scene.add(ASSEMBLY);
+let booksG;
+for(let k=0;k<4;k++){
+  const wrap=new THREE.Group();
+  wrap.rotation.y=k*Math.PI/2;
+  ASSEMBLY.add(wrap);
+  booksG=new THREE.Group(); wrap.add(booksG); // 棟ごとに新しいグループ(本の乱数配置に多様性を持たせる)
+  buildUnit(wrap,k);
+}
+
+// 天板は4棟分をひとつの一枚板(額縁状)にまとめ、重なりによる干渉(ちらつき)を無くす。中心は空洞のまま。
+{
+  const FRAME_OUT=S+0.08, FRAME_HOLE=S-2*DU;
+  const bw=(FRAME_OUT-FRAME_HOLE)/2, mid=(FRAME_HOLE+FRAME_OUT)/4;
+  box(FRAME_OUT,CAP_H,bw,matDark,0,H_TOTAL-CAP_H/2, mid,ASSEMBLY);
+  box(FRAME_OUT,CAP_H,bw,matDark,0,H_TOTAL-CAP_H/2,-mid,ASSEMBLY);
+  box(bw,CAP_H,FRAME_HOLE,matDark, mid,H_TOTAL-CAP_H/2,0,ASSEMBLY);
+  box(bw,CAP_H,FRAME_HOLE,matDark,-mid,H_TOTAL-CAP_H/2,0,ASSEMBLY);
+}
+
+/* ---------- floor ---------- */
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(9,9),matFloor);
+floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+
+/* ---------- lights ---------- */
+const hemi=new THREE.HemisphereLight(0xffe9cf,0x2a2013,0.55); scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xfff0dc,2.0);
+sun.position.set(-2.6,3.4,3.0); sun.target.position.set(0,H_TOTAL*0.45,0);
+sun.castShadow=true; sun.shadow.mapSize.set(1536,1536);
+Object.assign(sun.shadow.camera,{left:-1.6,right:1.6,top:2.2,bottom:-0.3,near:0.5,far:10});
+sun.shadow.camera.updateProjectionMatrix(); sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.012; sun.shadow.radius=3;
+scene.add(sun,sun.target);
+const fill=new THREE.DirectionalLight(0xd8e2ff,0.35); fill.position.set(2.4,1.8,-2.2); fill.target.position.set(0,H_TOTAL*0.4,0); scene.add(fill,fill.target);
+const warm=new THREE.PointLight(0xffb15a,0.5,4,2); warm.position.set(0,H_TOTAL*0.5,0); scene.add(warm); // 空洞の中を仄かに照らす
+
+/* ---------- camera rig ---------- */
+const home={theta:-0.55,phi:1.35,r:0};
+function fitRadius(){
+  const t=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+  return clamp((S*1.05)/(t*Math.min(camera.aspect,1.1)),3.0,7.0);
+}
+const target=new THREE.Vector3(0,H_TOTAL*0.42,0);
+const goal={theta:home.theta,phi:home.phi,r:3.0,target:target.clone()};
+const cur={theta:home.theta,phi:home.phi,r:4.4,target:target.clone()};
+let autoRotate=false;
+function resize(){
+  const w=host.clientWidth||window.innerWidth, h=host.clientHeight||window.innerHeight;
+  renderer.setSize(w,h); camera.aspect=w/h; camera.fov=camera.aspect<0.9?50:38; camera.updateProjectionMatrix();
+  home.r=fitRadius(); if(!moved) goal.r=home.r;
+}
+let moved=false;
+window.addEventListener('resize',resize); resize(); goal.r=home.r; cur.r=home.r+1.2;
+
+const $=id=>document.getElementById(id);
+const bAuto=$('bAuto');
+function setAuto(v){ autoRotate=v; bAuto.classList.toggle('on',v); }
+const pointers=new Map(); let pinchPrev=0;
+host.addEventListener('pointerdown',e=>{
+  try{ host.setPointerCapture(e.pointerId); }catch(_){}
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size===2){ const [a,b]=[...pointers.values()]; pinchPrev=Math.hypot(a.x-b.x,a.y-b.y); }
+});
+host.addEventListener('pointermove',e=>{
+  const p=pointers.get(e.pointerId); if(!p) return;
+  const dx=e.clientX-p.x, dy=e.clientY-p.y; p.x=e.clientX; p.y=e.clientY;
+  if(pointers.size===1){
+    if(Math.abs(dx)+Math.abs(dy)>1){ moved=true;
+      goal.theta=goal.theta-dx*0.0055; goal.phi=clamp(goal.phi-dy*0.004,0.75,1.6); setAuto(false);
+    }
+  } else if(pointers.size===2){
+    const [a,b]=[...pointers.values()], d=Math.hypot(a.x-b.x,a.y-b.y);
+    if(pinchPrev>0){ goal.r=clamp(goal.r*pinchPrev/d,1.8,8); moved=true; }
+    pinchPrev=d;
+  }
+});
+function endPointer(e){ pointers.delete(e.pointerId); pinchPrev=0; }
+host.addEventListener('pointerup',endPointer);
+host.addEventListener('pointercancel',endPointer);
+host.addEventListener('wheel',e=>{ e.preventDefault(); goal.r=clamp(goal.r*Math.exp(e.deltaY*0.0012),1.8,8); moved=true; },{passive:false});
+
+let faceIdx=0;
+const FACE_ANGLES=[0,Math.PI/2,Math.PI,-Math.PI/2];
+$('bFace').addEventListener('click',()=>{
+  faceIdx=(faceIdx+1)%4; goal.theta=FACE_ANGLES[faceIdx]; goal.phi=1.35; setAuto(false); moved=true;
+});
+bAuto.addEventListener('click',()=>setAuto(!autoRotate));
+$('bReset').addEventListener('click',()=>{
+  goal.theta=home.theta; goal.phi=home.phi; goal.r=home.r; goal.target.copy(target); setAuto(false); moved=false;
+});
+setTimeout(()=>{ $('hint').style.opacity='0'; },12000);
+
+/* ---------- loop ---------- */
+const clock=new THREE.Clock(); let first=true;
+function tick(){
+  requestAnimationFrame(tick);
+  const dt=Math.min(clock.getDelta(),0.05), time=clock.elapsedTime;
+  if(autoRotate) goal.theta+=dt*0.28;
+  const k=1-Math.exp(-dt*6);
+  cur.theta+=(goal.theta-cur.theta)*k; cur.phi+=(goal.phi-cur.phi)*k; cur.r+=(goal.r-cur.r)*k; cur.target.lerp(goal.target,k);
+  const sp=Math.sin(cur.phi);
+  camera.position.set(cur.target.x+cur.r*sp*Math.sin(cur.theta),cur.target.y+cur.r*Math.cos(cur.phi),cur.target.z+cur.r*sp*Math.cos(cur.theta));
+  camera.lookAt(cur.target);
+  warm.intensity=0.5+0.03*Math.sin(time*3.1);
+  renderer.render(scene,camera);
+  if(first){ first=false; loadingEl.style.opacity='0'; setTimeout(()=>loadingEl.remove(),1000); }
+}
+tick();
+})();
+</script>
 </body>
 </html>
