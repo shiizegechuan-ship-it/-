@@ -39,7 +39,7 @@ canvas{display:block}
 #lb{position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.62);pointer-events:auto;z-index:6}
 #lb[hidden]{display:none}
 #lb .card{width:min(86vw,340px);padding:18px 18px 16px;background:rgba(24,16,10,.94);border:1px solid var(--line);border-radius:3px;text-align:center}
-#lb canvas{width:220px;height:220px;max-width:100%}
+#lb canvas{display:block;margin:0 auto;width:240px;height:240px;max-width:100%}
 #lb b{display:block;margin-top:6px;font-size:17px;letter-spacing:.2em}
 #lb p{margin:8px 0 0;font-size:13px;line-height:1.8;color:var(--muted)}
 #lb .msg{min-height:1.8em;color:#e8c878}
@@ -2018,15 +2018,17 @@ function buildInnerInterior(z0,z1){
     box(0.04,h,d,matWal,-w/2+0.02,h/2,0,g); box(0.04,h,d,matWal,w/2-0.02,h/2,0,g);
     box(w,0.04,d,matWal,0,h-0.02,0,g);
     // plinth with a drawer (tap: it slides out)
-    box(w-0.08,0.012,d-0.02,matLacq,0,0.074,0,g); box(w-0.08,0.01,d-0.02,matLacq,0,0.005,0,g); box(w-0.08,0.07,0.01,matLacq,0,0.04,-(d/2-0.015),g);
+    const DH=0.16;   // drawer height
+    box(w-0.08,0.012,d-0.02,matLacq,0,DH-0.006,0,g); box(w-0.08,0.01,d-0.02,matLacq,0,0.005,0,g); box(w-0.08,DH-0.01,0.01,matLacq,0,DH/2,-(d/2-0.015),g);
     const dg=new Group(); g.add(dg);
-    box(w-0.1,0.062,0.02,matLacq,0,0.04,d/2-0.01,dg); box(0.16,0.01,0.012,matBrass2,0,0.025,d/2+0.006,dg);
-    box(0.09,0.03,0.004,matBrass2,0,0.055,d/2+0.002,dg); box(0.05,0.003,0.006,matIron,0,0.058,d/2+0.003,dg);   // brass plate with a thin slit
-    box(w-0.14,0.006,d-0.07,matWal,0,0.013,-0.01,dg); box(w-0.14,0.05,0.008,matWal,0,0.04,-(d/2-0.04),dg);
-    for(const sx of [-1,1]) box(0.008,0.05,d-0.07,matWal,sx*(w/2-0.075),0.04,-0.01,dg);
-    itemProp('keyBow',itemMesh('keyBow'),true,0.25,0.016,0,dg);
-    movable(dg,'position','z',0.26); lockable(dg,'shelfDrawer'); setView(dg,g,[0.12,0.05,0.22],0.9,0.65);
-    const ys=[0.08,0.55,1.05,1.55];
+    box(w-0.1,DH-0.018,0.02,matLacq,0,DH/2,d/2-0.01,dg); box(0.2,0.012,0.014,matBrass2,0,DH*0.32,d/2+0.007,dg);
+    box(0.11,0.04,0.004,matBrass2,0,DH*0.68,d/2+0.002,dg); box(0.06,0.004,0.006,matIron,0,DH*0.68,d/2+0.003,dg);   // brass plate with a thin slit
+    box(w-0.14,0.006,d-0.07,matWal,0,0.013,-0.01,dg); box(w-0.14,DH-0.05,0.008,matWal,0,DH/2,-(d/2-0.04),dg);
+    for(const sx of [-1,1]) box(0.008,DH-0.05,d-0.07,matWal,sx*(w/2-0.075),DH/2,-0.01,dg);
+    { const hb=new Mesh(new THREE.BoxGeometry(w-0.04,DH+0.08,0.1),HIT_MAT); hb.position.set(0,DH/2+0.02,d/2); dg.add(hb); }   // generous hit area over the front
+    itemProp('keyBow',itemMesh('keyBow'),true,0.2,0.016,0.03,dg).scale.setScalar(2.2);
+    movable(dg,'position','z',0.26); lockable(dg,'shelfDrawer'); setView(dg,g,[0.2,0.02,0.29],0.8,1.15);
+    const ys=[DH,0.55,1.05,1.55];
     for(const y of ys.slice(1)) box(w-0.08,0.028,d,matWal,0,y,0,g);
     const vase=lathe(VASE,matCeladon2,48); vase.scale.setScalar(0.9); put(vase,-0.35,ys[3]+0.014,0,g);
     put(lathe(BOWL,matRaku2,40),0.3,ys[3]+0.014,0.02,g).scale.setScalar(1.5);
@@ -2078,7 +2080,7 @@ function buildInnerInterior(z0,z1){
     // tea caddy and a book on the other end
     put(cyl(0.035,0.035,0.09,matLacq,24),-0.55,0.475,0.02,b);
     box(0.22,0.03,0.16,matMatte('#3a2d24'),-0.25,0.445,0,b).rotation.y=0.2;
-    itemProp('fude',itemMesh('fude'),true,-0.25,0.468,0.02,b).rotation.y=0.6;   // lying on the book
+    itemProp('fude',itemMesh('fude'),true,-0.25,0.46,0.02,b).rotation.y=0.6;   // lying on the book
   }
 
   /* centre: rug, low table, two armchairs, pendant lantern */
@@ -2099,7 +2101,7 @@ function buildInnerInterior(z0,z1){
     const handle=new Mesh(new THREE.TorusGeometry(0.07,0.005,8,24,PI),matIron); handle.castShadow=true; put(handle,-0.26,0.53,0.04,g);
     for(const [x,z] of [[-0.08,0.1],[-0.1,-0.03]]) put(lathe([[0,0],[0.022,0],[0.03,0.01],[0.034,0.05],[0.031,0.05],[0.027,0.012],[0,0.012]],matCeladon2,32),x,0.419,z,g);
     for(let i=0;i<2;i++) box(0.24-i*0.02,0.03,0.17-i*0.01,matMatte(['#1f2630','#7a6a52'][i]),0.32,0.422+i*0.03,-0.08,g).rotation.y=0.15-i*0.3;
-    itemProp('shiori',itemMesh('shiori'),true,0.32,0.452,-0.08,g).rotation.y=-0.15;   // tucked into the top book, tassel hanging out
+    itemProp('shiori',itemMesh('shiori'),true,0.32,0.452,-0.11,g).rotation.y=-0.15;   // tucked into the top book, tassel hanging out
   }
   const chair=(x,ry)=>{
     const g=group(S,x,0,gz,ry);
@@ -2121,7 +2123,7 @@ function buildInnerInterior(z0,z1){
   const lanternY=2.15;
   {
     // the shade is open at the bottom (an iron-rimmed hole), so the candle can be set in from below onto a wire holder
-    const inside=cyl(0.015,0.011,0.09,std({color:C('#b8322a'),roughness:0.5},0.3),16); inside.visible=false;   // the candle, once put in
+    const inside=itemMesh('candle'); inside.visible=false;   // the candle, once put in
     const g=group(S,gx,lanternY,gz); g.userData.innerAct=()=>toggleLamp('pend'); lockable(g,'lantern',()=>{ inside.visible=true; lampOn.pend=true; applyLamps(); },false);
     const T0=0.16, prof=[]; for(let i=0;i<=20;i++){ const t=T0+(1-T0)*i/20; prof.push([0.012+0.25*Math.pow(Math.sin(PI*t),0.75),-0.26+0.52*t]); }
     const shade=lathe(prof,matShade,48); shade.castShadow=false; g.add(shade);
@@ -2130,7 +2132,7 @@ function buildInnerInterior(z0,z1){
     const rim=new Mesh(new THREE.TorusGeometry(r0,0.004,6,40),matIron); rim.rotation.x=PI/2; rim.position.y=y0; g.add(rim);
     for(const a of [0,PI/2]){ const w=box(r0*2,0.003,0.003,matIron,0,y0+0.03,0,g); w.rotation.y=a; w.castShadow=false; }   // cross-wire holder
     put(cyl(0.022,0.022,0.008,matIron,16),0,y0+0.034,0,g);   // its little dish
-    put(inside,0,y0+0.083,0,g);
+    put(inside,0,y0+0.038-0.012,0,g);
     put(cyl(0.03,0.03,0.02,matIron,16),0,0.27,0,g);
     put(cyl(0.004,0.004,ROOM_H-lanternY-0.28,matIron,6),0,(ROOM_H-lanternY+0.28)/2,0,g).castShadow=false;
     put(cyl(0.05,0.05,0.02,matIron,20),0,ROOM_H-lanternY-0.01,0,g);
@@ -2209,7 +2211,7 @@ function buildInnerInterior(z0,z1){
     box(0.44,0.34,0.006,std({color:C('#5a2a22'),roughness:0.9},0.2),0,AY,-0.245,g);   // safe: lined back, sides, top, bottom
     for(const sx of [-1,1]) box(0.012,0.34,0.05,matIron,sx*0.214,AY,-0.222,g);
     for(const sy of [-1,1]) box(0.44,0.012,0.05,matIron,0,AY+sy*0.164,-0.222,g);
-    { const k=itemProp('smallKey',itemMesh('smallKey'),true,0.02,AY-0.02,-0.236,g); k.rotation.x=-PI/2; k.scale.setScalar(1.8); }   // hung upright on the back
+    { const k=itemProp('smallKey',itemMesh('smallKey'),true,0.0,AY+0.03,-0.24,g); k.rotation.x=-PI/2; k.scale.setScalar(1.6); }   // hung upright on the back
     const sd=group(g,-0.22,AY,-0.197);                                                 // its door, hinged on the left
     box(0.44,0.34,0.012,matIron,0.22,0,0.006,sd);
     const dial=cyl(0.045,0.045,0.02,matBrass2,32); dial.rotation.x=PI/2; put(dial,0.28,0.02,0.02,sd);
@@ -2282,28 +2284,17 @@ function buildInnerRoom(){
 // RECIPES: [a, b, result] -- with a in the lightbox, tapping b in the item box combines them (either order).
 // To add an item: an ITEMS entry (+ itemMesh() case for its 3D look), then itemProp(id, mesh, ...) where it lies.
 const ITEMS={
-  matches:{name:'燐寸',desc:'古い燐寸箱。中に数本だけ残っている。',icon(g){
-    g.fillStyle='#e9dfc8'; g.fillRect(18,36,64,34); g.fillStyle='#b8322a'; g.fillRect(18,36,64,9);
-    g.fillStyle='#1d1a17'; g.beginPath(); g.arc(50,58,8,0,7); g.fill(); g.fillStyle='#e9dfc8'; g.beginPath(); g.arc(50,58,4,0,7); g.fill();
-    g.save(); g.translate(66,30); g.rotate(-0.6); g.fillStyle='#d9c8a0'; g.fillRect(0,-2,28,4); g.fillStyle='#7a1e18'; g.beginPath(); g.arc(0,0,4,0,7); g.fill(); g.restore(); }},
-  candle:{name:'和蝋燭',desc:'朱塗りの和蝋燭。芯はまだ新しい。',icon(g){ candleIcon(g,false); }},
-  litCandle:{name:'灯した和蝋燭',desc:'静かに揺れる炎。',icon(g){ candleIcon(g,true); }},
-  sumi:{name:'墨',desc:'艶のある古墨。金で小さく「月」の字。',icon(g){
-    g.save(); g.translate(50,50); g.rotate(-0.5); g.fillStyle='#16130f'; g.strokeStyle='#8a7d6a'; g.lineWidth=2; g.beginPath(); g.rect(-11,-36,22,72); g.fill(); g.stroke();
-    g.fillStyle='#c9a24a'; g.fillRect(-5,-18,10,16); g.restore(); }},
-  fude:{name:'筆',desc:'竹軸の筆。穂先は乾いている。',icon(g){ brushIcon(g,false); }},
-  fudeSumi:{name:'墨を含ませた筆',desc:'たっぷりと墨を含んだ筆。',icon(g){ brushIcon(g,true); }},
-  smallKey:{name:'小さな鍵',desc:'朱の紐が結ばれた、小ぶりな黒鉄の鍵。',icon(g){
-    g.strokeStyle=g.fillStyle='#2b2724'; g.lineWidth=6; g.beginPath(); g.arc(34,40,11,0,7); g.stroke();
-    g.fillRect(44,37,34,6); g.fillRect(68,43,5,10); g.fillRect(76,43,4,7);
-    g.strokeStyle='#b8322a'; g.lineWidth=3; g.beginPath(); g.moveTo(26,48); g.quadraticCurveTo(20,64,30,76); g.stroke();
-    g.fillStyle='#b8322a'; g.beginPath(); g.moveTo(26,74); g.lineTo(34,74); g.lineTo(37,90); g.lineTo(23,90); g.fill(); }},
-  shiori:{name:'栞',desc:'本に挟まっていた、臙脂色の薄い栞。',icon(g){
-    g.translate(50,50); g.rotate(-0.5); g.fillStyle='#7a2f3a'; g.fillRect(-9,-36,18,64); g.fillStyle='#c9a24a'; g.fillRect(-9,-36,18,5);
-    g.beginPath(); g.moveTo(0,28); g.lineTo(-6,44); g.lineTo(6,44); g.fill(); }},
-  keyBow:{name:'鍵の持ち手',desc:'四角い穴の空いた、銭形の真鍮の持ち手。先が折れている。',icon(g){ keyIcon(g,true,false,false); }},
-  keyShaft:{name:'鍵の軸',desc:'歯の付いた真鍮の棒。持ち手がない。',icon(g){ keyIcon(g,false,true,false); }},
-  cellarKey:{name:'地下の鍵',desc:'銭形の持ち手と軸がぴたりと合わさった、朱の房付きの重い真鍮の鍵。',icon(g){ keyIcon(g,true,true,true); }},
+  matches:{name:'燐寸',desc:'古い燐寸箱。中に数本だけ残っている。',pose:[0.75,0.5]},
+  candle:{name:'和蝋燭',desc:'朱塗りの和蝋燭。芯はまだ新しい。',pose:[0.3,0.6]},
+  litCandle:{name:'灯した和蝋燭',desc:'静かに揺れる炎。',pose:[0.3,0.6]},
+  sumi:{name:'墨',desc:'艶のある古墨。金で小さく「月」の字。',pose:[1.0,0.35]},
+  fude:{name:'筆',desc:'竹軸の筆。穂先は乾いている。',pose:[0.8,0.55]},
+  fudeSumi:{name:'墨を含ませた筆',desc:'たっぷりと墨を含んだ筆。',pose:[0.8,0.55]},
+  smallKey:{name:'小さな鍵',desc:'朱の紐が結ばれた、小ぶりな黒鉄の鍵。',pose:[1.0,0.4]},
+  shiori:{name:'栞',desc:'本に挟まっていた、臙脂色の薄い栞。',pose:[1.1,0.45]},
+  keyBow:{name:'鍵の持ち手',desc:'四角い穴の空いた、銭形の真鍮の持ち手。先が折れている。',pose:[1.0,0.4]},
+  keyShaft:{name:'鍵の軸',desc:'歯の付いた真鍮の棒。持ち手がない。',pose:[0.95,0.4]},
+  cellarKey:{name:'地下の鍵',desc:'銭形の持ち手と軸がぴたりと合わさった、朱の房付きの重い真鍮の鍵。',pose:[1.0,0.4]},
 };
 // [a, b, result]: combinations (order doesn't matter)
 const RECIPES=[['matches','candle','litCandle'],['sumi','fude','fudeSumi'],['keyBow','keyShaft','cellarKey']];
@@ -2321,46 +2312,145 @@ const USES={
   cellarDoor: {item:'cellarKey',held:true,hint:'重い扉には鍵がかかっている。',msg:'鍵が回り、扉が開いた……'},
 };
 const NEXT_PAGE='wa-no-chikashitsu.html';   // the space beyond the cellar door (a separate file)
-function candleIcon(g,lit){
-  g.fillStyle='#b8322a'; g.beginPath(); g.moveTo(37,36); g.lineTo(63,36); g.lineTo(58,86); g.lineTo(42,86); g.fill();
-  g.fillStyle='#efe6d0'; g.fillRect(40,52,20,6); g.fillStyle='#1d1a17'; g.fillRect(38,84,24,5);
-  g.strokeStyle='#1d1a17'; g.lineWidth=2; g.beginPath(); g.moveTo(50,36); g.lineTo(50,29); g.stroke();
-  if(lit){ const f=g.createRadialGradient(50,19,1,50,21,14); f.addColorStop(0,'#fff6c8'); f.addColorStop(.5,'#ffb43c'); f.addColorStop(1,'rgba(255,120,20,0)');
-    g.fillStyle=f; g.beginPath(); g.ellipse(50,19,8,14,0,0,7); g.fill(); }
+// ---- item models: real-scale 3D, resting on y=0, also used (rendered as stills) for the item box and lightbox ----
+let IM=null;   // shared item materials, made on first use
+function itemMats(){
+  if(IM) return IM;
+  const tx=(w,h,f)=>canvasTex(w,h,f,{repeat:false});
+  const label=tx(256,176,(g,w,h)=>{ drawPaper(g,w,h,{base:'#ebe1c9',fibers:500}); g.fillStyle='#b8322a'; g.fillRect(0,0,w,h*0.24);
+    g.fillStyle='#1d1a17'; g.beginPath(); g.arc(w*0.5,h*0.6,h*0.2,0,7); g.fill(); g.fillStyle='#ebe1c9'; g.beginPath(); g.arc(w*0.5,h*0.6,h*0.1,0,7); g.fill();
+    g.strokeStyle='rgba(29,26,23,.6)'; g.lineWidth=3; g.strokeRect(6,6,w-12,h-12); });
+  const grit=tx(128,64,(g,w,h)=>{ g.fillStyle='#4a3424'; g.fillRect(0,0,w,h); for(let i=0;i<1600;i++){ g.fillStyle=rnd()<.5?'rgba(0,0,0,.35)':'rgba(160,120,80,.25)'; g.fillRect(rnd()*w,rnd()*h,1.5,1.5); } });
+  const bamboo=tx(256,32,(g,w,h)=>{ g.fillStyle='#c8a46a'; g.fillRect(0,0,w,h); for(let y=0;y<h;y+=2){ g.fillStyle=`rgba(${rnd()<.5?'120,85,40':'250,230,190'},${R(.08,.2)})`; g.fillRect(0,y,w,1); }
+    for(const x of [w*0.3,w*0.68]){ g.fillStyle='rgba(90,60,25,.55)'; g.fillRect(x,0,3,h); g.fillStyle='rgba(255,240,200,.35)'; g.fillRect(x+3,0,2,h); } });
+  const hair=tx(64,64,(g,w,h)=>{ g.fillStyle='#e9dfc8'; g.fillRect(0,0,w,h); for(let x=0;x<w;x+=1){ g.fillStyle=`rgba(${rnd()<.5?'140,120,90':'255,250,235'},${R(.1,.35)})`; g.fillRect(x,0,1,h); } });
+  const sumiTop=tx(96,320,(g,w,h)=>{ g.fillStyle='#14110e'; g.fillRect(0,0,w,h); for(let i=0;i<900;i++){ g.fillStyle=`rgba(255,255,255,${R(.01,.05)})`; g.fillRect(rnd()*w,rnd()*h,1,1); }
+    g.strokeStyle='#c9a24a'; g.lineWidth=2; g.strokeRect(w*0.22,h*0.18,w*0.56,h*0.4);
+    g.fillStyle='#d4ad55'; g.font=`700 ${w*0.42}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillText('月',w/2,h*0.38); });
+  const shiori=tx(64,320,(g,w,h)=>{ g.fillStyle='#8e2a2e'; g.fillRect(0,0,w,h); for(let i=0;i<500;i++){ g.strokeStyle=`rgba(255,220,200,${R(.03,.1)})`; g.beginPath(); const x=rnd()*w,y=rnd()*h; g.moveTo(x,y); g.lineTo(x+R(-6,6),y+R(4,14)); g.stroke(); }
+    g.fillStyle='rgba(212,173,85,.9)'; for(const [x,y,s] of [[.3,.22,9],[.68,.34,7],[.42,.5,6]]){ g.beginPath(); for(let k=0;k<5;k++){ const a=k/5*6.283; g.ellipse(x*w+Math.cos(a)*s*0.6,y*h+Math.sin(a)*s*0.6,s*0.5,s*0.28,a,0,6.283); } g.fill(); }
+    g.strokeStyle='#d4ad55'; g.lineWidth=2; g.strokeRect(4,4,w-8,h-8); });
+  IM={
+    brass:std({color:C('#c9a24a'),metalness:1,roughness:0.3,emissive:C('#4a3410'),emissiveIntensity:0.55},2.2),   // a little self-glow so it reads in dark drawers
+    iron:std({color:C('#3a3430'),metalness:0.75,roughness:0.42,emissive:C('#140f0c'),emissiveIntensity:1},1.6),
+    hole:std({color:C('#120c08'),roughness:0.9},0),
+    vermilion:std({color:C('#b8322a'),roughness:0.38,clearcoat:0.55,clearcoatRoughness:0.25},1.2,true),
+    cream:std({color:C('#efe6d0'),roughness:0.6},0.4),
+    lacquer:std({color:C('#141110'),roughness:0.18,clearcoat:1,clearcoatRoughness:0.08},1.6,true),
+    wick:std({color:C('#1d1a17'),roughness:0.95},0),
+    label:std({map:label,roughness:0.75},0.3), grit:std({map:grit,roughness:1},0.1), card:std({color:C('#d8c49a'),roughness:0.85},0.3),
+    stick:std({color:C('#e0c48e'),roughness:0.8},0.3), head:std({color:C('#7a1e18'),roughness:0.7},0.3),
+    bamboo:std({map:bamboo,roughness:0.45,clearcoat:0.4,clearcoatRoughness:0.3},0.9,true),
+    hair:std({map:hair,roughness:0.85},0.2), inkHair:std({color:C('#070605'),roughness:0.2,clearcoat:0.9,clearcoatRoughness:0.1},1.4,true),
+    ink:std({color:C('#16130f'),roughness:0.4,clearcoat:0.35,clearcoatRoughness:0.35},1.0,true), sumiTop:std({map:sumiTop,roughness:0.4,clearcoat:0.35},1.0,true),
+    shiori:std({map:shiori,roughness:0.7},0.4), cord:std({color:C('#b8322a'),roughness:0.75},0.3),
+    flameCore:new THREE.MeshBasicMaterial({color:new THREE.Color(1,0.95,0.75)}),
+    flame:new THREE.MeshBasicMaterial({color:new THREE.Color(1,0.55,0.15),transparent:true,opacity:0.55,blending:THREE.AdditiveBlending,depthWrite:false}),
+  };
+  return IM;
 }
-function brushIcon(g,inked){
-  g.save(); g.translate(50,50); g.rotate(0.7); g.fillStyle='#c8a46a'; g.fillRect(-4,-40,8,56);
-  g.fillStyle='#8a6a3a'; for(const y of [-28,-8]) g.fillRect(-4,y,8,2); g.fillStyle='#1d1a17'; g.fillRect(-5,14,10,4);
-  g.fillStyle=inked?'#0c0a09':'#e9dfc8'; g.beginPath(); g.moveTo(-5,18); g.quadraticCurveTo(-6,34,0,44); g.quadraticCurveTo(6,34,5,18); g.fill();
-  if(inked){ g.beginPath(); g.arc(0,52,3,0,7); g.fill(); } g.restore();
+const mk=(geo,mat,parent,x,y,z)=>{ const m=new Mesh(geo,mat); m.position.set(x||0,y||0,z||0); m.castShadow=m.receiveShadow=true; parent.add(m); return m; };
+// a cord from points pts (y-up), ending in a tassel at its last point
+function cordTassel(g,pts,cordMat,capMat){
+  const c=new THREE.CatmullRomCurve3(pts.map(p=>new Vector3(...p)));
+  mk(new THREE.TubeGeometry(c,24,0.0011,6),cordMat,g);
+  const e=pts[pts.length-1], d=c.getTangentAt(1);
+  const t=new Group(); t.position.set(...e); t.quaternion.setFromUnitVectors(new Vector3(0,-1,0),d); g.add(t);
+  mk(new CylinderGeometry(0.0022,0.0022,0.004,12),capMat,t,0,-0.002,0);
+  mk(new THREE.ConeGeometry(0.0042,0.018,14,1,true).rotateX(PI),cordMat,t,0,-0.013,0).material.side=DoubleSide;
 }
-function keyIcon(g,bow,shaft,tassel){
-  // wa-modern key: a coin-shaped brass bow with a square hole, a slim shaft with a notched bit, a red cord
-  const brass='#c9a24a', dark='#8a6a2a';
-  if(tassel){ g.strokeStyle='#b8322a'; g.lineWidth=3; g.beginPath(); g.moveTo(24,52); g.quadraticCurveTo(14,66,22,78); g.stroke();
-    g.fillStyle='#b8322a'; g.fillRect(19,76,7,4); g.beginPath(); g.moveTo(18,80); g.lineTo(27,80); g.lineTo(30,96); g.lineTo(15,96); g.fill(); }
-  if(bow){ g.fillStyle=brass; g.beginPath(); g.arc(30,40,17,0,7); g.fill(); g.strokeStyle=dark; g.lineWidth=2; g.beginPath(); g.arc(30,40,13,0,7); g.stroke();
-    g.fillStyle='#1a120c'; g.fillRect(24,34,12,12); g.fillStyle=brass; g.fillRect(46,37,6,6); }
-  if(shaft){ const x0=bow?52:20; g.fillStyle=brass; g.fillRect(x0,37,86-x0,6);
-    g.fillRect(70,43,14,14); g.fillStyle='#1a120c'; g.fillRect(74,47,3,10); g.fillRect(80,51,4,6);
-    g.fillStyle=dark; g.fillRect(x0,37,86-x0,1.5); }
+function candleModel(g,lit){
+  const M=itemMats(), prof=[[0,0],[0.0095,0],[0.0102,0.004],[0.0108,0.03],[0.0128,0.072],[0.0138,0.082],[0.0128,0.085],[0.004,0.086],[0,0.086]];
+  mk(new THREE.LatheGeometry(prof.map(p=>new THREE.Vector2(...p)),40),M.vermilion,g,0,0.012,0);
+  mk(new CylinderGeometry(0.0124,0.0117,0.006,40),M.cream,g,0,0.012+0.05,0);   // painted band
+  mk(new THREE.LatheGeometry([[0,0],[0.022,0],[0.024,0.003],[0.02,0.007],[0.007,0.009],[0.007,0.012],[0,0.012]].map(p=>new THREE.Vector2(...p)),40),M.lacquer,g);   // lacquer stand
+  mk(new CylinderGeometry(0.0011,0.0013,0.01,8),M.wick,g,0,0.012+0.091,0);
+  if(lit){ const f=new Group(); f.position.y=0.012+0.106; g.add(f);
+    const core=new Mesh(new THREE.SphereGeometry(1,16,12),M.flameCore); core.scale.set(0.0028,0.008,0.0028); f.add(core);
+    const outer=new Mesh(new THREE.SphereGeometry(1,16,12),M.flame); outer.scale.set(0.0055,0.0155,0.0055); outer.position.y=0.003; f.add(outer); }
 }
-// small 3D stand-ins for items lying in the world
+function brushModel(g,inked){
+  const M=itemMats(), L=0.15, y=0.0048, x0=-0.05;
+  const shaft=mk(new CylinderGeometry(0.0042,0.0042,L,20),M.bamboo,g,x0+L/2,y,0); shaft.rotation.z=PI/2;
+  mk(new CylinderGeometry(0.0047,0.0047,0.009,20),M.lacquer,g,x0,y,0).rotation.z=PI/2;               // ferrule
+  mk(new CylinderGeometry(0.0045,0.0045,0.006,20),M.lacquer,g,x0+L,y,0).rotation.z=PI/2;             // end cap
+  const loop=mk(new THREE.TorusGeometry(0.004,0.0009,6,16),M.cord,g,x0+L+0.007,y,0); loop.rotation.y=PI/2;
+  const tip=mk(new THREE.LatheGeometry([[0,0],[0.0043,0],[0.0052,0.006],[0.0048,0.014],[0.0032,0.022],[0.0012,0.028],[0,0.031]].map(p=>new THREE.Vector2(...p)),24),inked?M.inkHair:M.hair,g,x0-0.0045,y,0);
+  tip.rotation.z=PI/2;
+}
+function keyBowModel(g,x){
+  const M=itemMats(), s=new THREE.Shape(); s.absarc(0,0,0.017,0,PI*2,false);
+  const h=new THREE.Path(); h.moveTo(-0.0055,-0.0055); h.lineTo(0.0055,-0.0055); h.lineTo(0.0055,0.0055); h.lineTo(-0.0055,0.0055); h.lineTo(-0.0055,-0.0055); s.holes.push(h);
+  const coin=mk(new THREE.ExtrudeGeometry(s,{depth:0.003,bevelEnabled:true,bevelThickness:0.0007,bevelSize:0.0007,bevelSegments:2,curveSegments:40}),M.brass,g,x,0.0037,0);
+  coin.rotation.x=PI/2;
+  const rim=mk(new THREE.TorusGeometry(0.0125,0.0006,6,40),M.brass,g,x,0.0045,0); rim.rotation.x=PI/2;    // raised inner ring, like a mon coin
+  return coin;
+}
+function keyShaftModel(g,x0,x1){
+  const M=itemMats(), y=0.0026;
+  mk(new CylinderGeometry(0.0024,0.0024,x1-x0,18),M.brass,g,(x0+x1)/2,y,0).rotation.z=PI/2;
+  const bit=new Group(); bit.position.set(x1-0.007,y,0.0075); g.add(bit);   // the bit, with two notches
+  for(const [bx,bz,w,d] of [[-0.004,0,0.004,0.012],[0.001,-0.002,0.004,0.008],[0.0055,0,0.003,0.012]]) mk(new THREE.BoxGeometry(w,0.004,d),M.brass,bit,bx,0,bz);
+}
 function itemMesh(id){
-  const g=new Group(), gold=std({color:C('#c9a24a'),metalness:1,roughness:0.3},1.2), mat=c=>std({color:C(c),roughness:0.8},0.2);
-  if(id==='matches'){ box(0.075,0.02,0.05,mat('#e9dfc8'),0,0.01,0,g); box(0.076,0.021,0.014,mat('#b8322a'),0,0.01,-0.018,g); box(0.018,0.002,0.018,mat('#1d1a17'),0.01,0.021,0.008,g); }
-  if(id==='candle'){ put(cyl(0.015,0.011,0.09,std({color:C('#b8322a'),roughness:0.5},0.3),16),0,0.045,0,g); put(cyl(0.0015,0.0015,0.012,mat('#222'),6),0,0.096,0,g); }
-  if(id==='fude'){ const s=cyl(0.005,0.005,0.17,mat('#c8a46a'),10); s.rotation.z=PI/2; put(s,0,0.005,0,g);
-    const t=new Mesh(new THREE.ConeGeometry(0.006,0.03,10),mat('#e9dfc8')); t.rotation.z=PI/2; t.position.set(-0.1,0.005,0); g.add(t); }
-  if(id==='smallKey'){ const iron=std({color:C('#2b2724'),metalness:0.7,roughness:0.45},0.6);
-    const r=new Mesh(new THREE.TorusGeometry(0.011,0.003,8,18),iron); r.rotation.x=PI/2; r.position.y=0.003; g.add(r);
-    box(0.034,0.005,0.005,iron,0.027,0.003,0,g); box(0.004,0.005,0.008,iron,0.04,0.003,0.006,g);
-    box(0.003,0.003,0.03,mat('#b8322a'),-0.006,0.003,0.022,g); }
-  if(id==='shiori'){ box(0.026,0.003,0.2,mat('#b8322a'),0,0.0015,0.06,g); box(0.004,0.004,0.04,gold,0,0.002,0.18,g);   // sticks well out of the book
-    const t=new Mesh(new THREE.ConeGeometry(0.01,0.03,8),gold); t.rotation.x=PI/2; t.position.set(0,0.002,0.215); g.add(t); }
-  if(id==='keyBow'){ put(cyl(0.017,0.017,0.004,gold,28),0,0.002,0,g); box(0.012,0.0045,0.012,std({color:C('#1a120c'),roughness:0.9},0),0,0.0025,0,g); box(0.012,0.004,0.006,gold,0.022,0.002,0,g); }
-  if(id==='keyShaft'){ box(0.055,0.006,0.007,gold,0,0.003,0,g); box(0.006,0.006,0.012,gold,0.016,0.003,0.008,g); box(0.005,0.006,0.009,gold,0.024,0.003,0.006,g); }
+  const g=new Group(), M=itemMats();
+  if(id==='matches'){
+    const sleeve=mk(new THREE.BoxGeometry(0.056,0.016,0.038),[M.card,M.card,M.label,M.card,M.grit,M.grit],g,-0.008,0.008,0);
+    const tray=new Group(); tray.position.set(0.014,0.0015,0); g.add(tray);   // slid half out
+    mk(new THREE.BoxGeometry(0.052,0.0012,0.034),M.card,tray,0,0,0);
+    for(const z of [-0.0165,0.0165]) mk(new THREE.BoxGeometry(0.052,0.011,0.0012),M.card,tray,0,0.0055,z);
+    mk(new THREE.BoxGeometry(0.0012,0.011,0.034),M.card,tray,0.0254,0.0055,0);
+    for(let i=0;i<6;i++){ const z=-0.012+i*0.0048, st=mk(new CylinderGeometry(0.0011,0.0011,0.046,8),M.stick,tray,0.0,0.0028+(i%2)*0.0012,z); st.rotation.z=PI/2+R(-0.03,0.03);
+      mk(new THREE.SphereGeometry(0.0021,10,8),M.head,tray,0.0235,0.0028+(i%2)*0.0012,z).scale.set(1.25,1,1); }
+    void sleeve;
+  }
+  if(id==='candle'||id==='litCandle') candleModel(g,id==='litCandle');
+  if(id==='fude'||id==='fudeSumi') brushModel(g,id==='fudeSumi');
+  if(id==='sumi'){ mk(new THREE.BoxGeometry(0.022,0.009,0.075),[M.ink,M.ink,M.sumiTop,M.ink,M.ink,M.ink],g,0,0.0045,0); }
+  if(id==='shiori'){ mk(new THREE.BoxGeometry(0.028,0.0012,0.15),M.shiori,g,0,0.0006,0.06);
+    mk(new THREE.TorusGeometry(0.0022,0.0007,6,14),M.brass,g,0,0.0012,0.13).rotation.x=PI/2;   // eyelet
+    cordTassel(g,[[0,0.0012,0.13],[0.002,0.0015,0.15],[-0.003,0.0016,0.168],[0.001,0.0016,0.182]],M.cord,M.brass); }
+  if(id==='smallKey'){
+    const r=mk(new THREE.TorusGeometry(0.009,0.0028,12,28),M.iron,g,0,0.0028,0); r.rotation.x=PI/2;
+    mk(new CylinderGeometry(0.0021,0.0021,0.032,14),M.iron,g,0.0255,0.0028,0).rotation.z=PI/2;
+    for(const [bx,w,d] of [[0.036,0.004,0.011],[0.0405,0.003,0.007]]) mk(new THREE.BoxGeometry(w,0.004,d),M.iron,g,bx,0.0028,0.005);
+    cordTassel(g,[[-0.009,0.0028,0],[-0.016,0.0028,-0.006],[-0.016,0.003,-0.018],[-0.012,0.003,-0.03]],M.cord,M.brass); }
+  if(id==='keyBow'){ keyBowModel(g,0); mk(new CylinderGeometry(0.0024,0.0024,0.01,14),M.brass,g,0.022,0.0026,0).rotation.z=PI/2; }
+  if(id==='keyShaft') keyShaftModel(g,-0.025,0.025);
+  if(id==='cellarKey'){ keyBowModel(g,-0.028); keyShaftModel(g,-0.011,0.045);
+    cordTassel(g,[[-0.044,0.004,0],[-0.054,0.004,0.006],[-0.058,0.004,0.02],[-0.054,0.004,0.034]],M.cord,M.brass); }
   return g;
+}
+// still 3D render of an item (cached), drawn into any canvas -- the item box and the lightbox use these
+const ICON_PX=640, iconCache={};
+let iconRT=null;
+function itemStill(id){
+  if(iconCache[id]) return iconCache[id];
+  if(!iconRT){ iconRT=new THREE.WebGLRenderTarget(ICON_PX,ICON_PX); iconRT.texture.encoding=THREE.sRGBEncoding; }
+  const sc=new THREE.Scene(), m=itemMesh(id); sc.add(m);
+  m.traverse(o=>{ if(o.material&&!Array.isArray(o.material)&&o.material.envMap){ o.material=o.material.clone(); o.material.envMapIntensity*=2; } });
+  sc.add(new THREE.HemisphereLight(0xfff2e0,0x2a2018,0.35));
+  const key=new THREE.DirectionalLight(0xfff0dc,1.25); key.position.set(-1,2,1.4); sc.add(key);
+  const rim=new THREE.DirectionalLight(0xffd9a8,0.8); rim.position.set(1.2,1,-1.5); sc.add(rim);
+  const fl=new THREE.DirectionalLight(0xc8d4ff,0.2); fl.position.set(1.5,0.3,1); sc.add(fl);
+  m.updateMatrixWorld(true); const bb=new THREE.Box3().setFromObject(m), c=bb.getCenter(new Vector3()), r=bb.getBoundingSphere(new THREE.Sphere()).radius;
+  const [el,az]=ITEMS[id].pose, cam=new THREE.PerspectiveCamera(26,1,0.001,10), d=r/Math.sin(THREE.MathUtils.degToRad(13))*1.08;
+  cam.position.set(c.x+d*Math.cos(el)*Math.sin(az),c.y+d*Math.sin(el),c.z+d*Math.cos(el)*Math.cos(az)); cam.lookAt(c);
+  const prevBg=sc.background; const ex=renderer.toneMappingExposure; renderer.toneMappingExposure=1; renderer.setRenderTarget(iconRT); renderer.setClearColor(0x000000,0); renderer.clear(); renderer.render(sc,cam);
+  const px=new Uint8Array(ICON_PX*ICON_PX*4); renderer.readRenderTargetPixels(iconRT,0,0,ICON_PX,ICON_PX,px);
+  renderer.setRenderTarget(null); renderer.setClearColor(0x000000,1); renderer.toneMappingExposure=ex; void prevBg;
+  const cv=document.createElement('canvas'); cv.width=cv.height=ICON_PX; const g2=cv.getContext('2d'), img=g2.createImageData(ICON_PX,ICON_PX);
+  for(let y=0;y<ICON_PX;y++) img.data.set(px.subarray((ICON_PX-1-y)*ICON_PX*4,(ICON_PX-y)*ICON_PX*4),y*ICON_PX*4);   // flip rows
+  g2.putImageData(img,0,0);
+  m.traverse(o=>{ if(o.geometry) o.geometry.dispose(); });
+  // crop to the item's pixels and centre it with a margin
+  let x0=ICON_PX,y0=ICON_PX,x1=0,y1=0; const pd=img.data;
+  for(let y=0;y<ICON_PX;y++) for(let x=0;x<ICON_PX;x++) if(pd[(y*ICON_PX+x)*4+3]>8){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; }
+  if(x1<=x0) return iconCache[id]=cv;
+  const side=Math.max(x1-x0,y1-y0)*1.14, out=document.createElement('canvas'); out.width=out.height=ICON_PX;
+  const k=ICON_PX/side, g3=out.getContext('2d'); g3.imageSmoothingQuality='high';
+  g3.drawImage(cv,x0,y0,x1-x0,y1-y0,(ICON_PX-(x1-x0)*k)/2,(ICON_PX-(y1-y0)*k)/2,(x1-x0)*k,(y1-y0)*k);
+  return iconCache[id]=out;
 }
 // Tap handler for a USES place. Returns true if it opened / was already open.
 function useAt(key){
@@ -2406,14 +2496,14 @@ function pickUp(obj){
   giveItem(obj.userData.item);
 }
 function giveItem(id){ inv.push(id); renderItems(); toast(ITEMS[id].name+'を手に入れた'); }
-function drawIcon(c,id){ const g=c.getContext('2d'); g.clearRect(0,0,c.width,c.height); g.save(); g.scale(c.width/100,c.height/100); ITEMS[id].icon(g); g.restore(); }
+function drawIcon(c,id){ const g=c.getContext('2d'); g.clearRect(0,0,c.width,c.height); g.imageSmoothingQuality='high'; g.drawImage(itemStill(id),0,0,c.width,c.height); }
 const SLOTS=8;
 function renderItems(){
   const bar=$('items'); bar.textContent='';
   for(let i=0;i<Math.max(SLOTS,inv.length);i++){
     const id=inv[i], b=document.createElement('button'); b.type='button';
     if(!id){ b.className='empty'; b.disabled=true; bar.appendChild(b); continue; }
-    const c=document.createElement('canvas'); c.width=c.height=104; drawIcon(c,id); b.appendChild(c);
+    const c=document.createElement('canvas'); c.width=c.height=128; drawIcon(c,id); b.appendChild(c);
     b.title=ITEMS[id].name; if(id===selItem) b.className='sel';
     b.onclick=()=>tapSlot(id); bar.appendChild(b);
   }
