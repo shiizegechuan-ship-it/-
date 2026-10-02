@@ -1,0 +1,6 @@
+{
+  "name": "wa-no-shodana",
+  "private": true,
+  "scripts": { "build": "node tools/build.js" },
+  "devDependencies": { "html-minifier-terser": "^7.2.0" }
+}

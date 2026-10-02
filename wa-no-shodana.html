@@ -129,8 +129,8 @@ const ease=t=>t*t*(3-2*t);
 // Moves a.t (0..1) toward a.goal at rate k; returns the eased value while moving, or null once settled.
 function step(a,dt,k){ if(Math.abs(a.goal-a.t)<=0.0004) return null; a.t+=(a.goal-a.t)*(1-Math.exp(-dt*k)); return ease(clamp(a.t,0,1)); }
 const lerp=(a,b,t)=>a+(b-a)*t;
-const C=hex=>new THREE.Color(hex).convertSRGBToLinear();
-const {Mesh,Group,Vector3,PlaneGeometry,CylinderGeometry,DoubleSide}=THREE, PI=Math.PI;
+const C=hex=>new Color(hex).convertSRGBToLinear();
+const {Mesh,Group,Vector3,PlaneGeometry,CylinderGeometry,DoubleSide,BoxGeometry,SphereGeometry,TorusGeometry,Color,MeshBasicMaterial,PointLight,CatmullRomCurve3,TubeGeometry,LatheGeometry,Vector2,Scene,SpotLight,HemisphereLight,ConeGeometry}=THREE, PI=Math.PI;
 // a new Group at (x,y,z), turned ry about y, added to parent
 function group(parent,x,y,z,ry){ const g=new Group(); g.position.set(x,y,z); if(ry) g.rotation.y=ry; parent.add(g); return g; }
 
@@ -147,15 +147,15 @@ renderer.outputEncoding=THREE.sRGBEncoding;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.25;
 host.appendChild(renderer.domElement);
-const scene=new THREE.Scene();
-scene.background=new THREE.Color(0x0d0a08);
+const scene=new Scene();
+scene.background=new Color(0x0d0a08);
 const camera=new THREE.PerspectiveCamera(38,1,0.05,60);
 const maxAniso=renderer.capabilities.getMaxAnisotropy();
 
 /* ---------- environment (reflections) ---------- */
 function buildEnv(){
-  const es=new THREE.Scene();
-  const sg=new THREE.SphereGeometry(20,32,16);
+  const es=new Scene();
+  const sg=new SphereGeometry(20,32,16);
   const p=sg.attributes.position, cols=new Float32Array(p.count*3);
   const top=[0.20,0.16,0.12], hor=[0.50,0.38,0.27], bot=[0.22,0.22,0.10];
   for(let i=0;i<p.count;i++){
@@ -163,9 +163,9 @@ function buildEnv(){
     cols[i*3]=hor[0]+(a[0]-hor[0])*k; cols[i*3+1]=hor[1]+(a[1]-hor[1])*k; cols[i*3+2]=hor[2]+(a[2]-hor[2])*k;
   }
   sg.setAttribute('color',new THREE.BufferAttribute(cols,3));
-  es.add(new Mesh(sg,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.BackSide})));
+  es.add(new Mesh(sg,new MeshBasicMaterial({vertexColors:true,side:THREE.BackSide})));
   const win=(w,h,pos,c)=>{
-    const m=new Mesh(new PlaneGeometry(w,h),new THREE.MeshBasicMaterial({color:new THREE.Color(c[0],c[1],c[2]),side:DoubleSide}));
+    const m=new Mesh(new PlaneGeometry(w,h),new MeshBasicMaterial({color:new Color(c[0],c[1],c[2]),side:DoubleSide}));
     m.position.set(pos[0],pos[1],pos[2]); m.lookAt(0,1,0); es.add(m);
   };
   win(10,6,[-14,6,8],[6,5.4,4.4]);
@@ -406,11 +406,12 @@ function drawScrollBack(g,w,h){
 }
 
 /* ---------- materials ---------- */
-// std(options, env reflection strength, physical?) -- every lit material goes through here
+// std(options, env reflection strength, physical?) -- every lit material goes through here; mat(hex,options,...) adds a colour
 function std(o,env,phys){
   const m=phys?new THREE.MeshPhysicalMaterial(o):new THREE.MeshStandardMaterial(o);
   m.envMap=envTex; m.envMapIntensity=env*0.28; return m;
 }
+const mat=(hex,o,env,phys)=>std(Object.assign({color:C(hex)},o),env,phys);
 const woodTex=(base,dark,light,lines,wave)=>canvasTex(576,576,(g,w,h)=>drawWood(g,w,h,{base,dark,light,lines,wave}));
 const tDark=woodTex('#4a2b18','20,10,4','150,95,55',70,1);
 const tMid=woodTex('#6d4526','35,18,8','190,135,80',60,1);
@@ -419,8 +420,8 @@ const matDark=std({map:tDark,bumpMap:tDark,bumpScale:0.6,roughness:0.5,clearcoat
 const matMid=std({map:tMid,bumpMap:tMid,bumpScale:0.5,roughness:0.55},0.8);
 const matLight=std({map:tLight,bumpMap:tLight,bumpScale:0.35,roughness:0.6},0.7);
 matDark.userData.woodUV=0.9; matMid.userData.woodUV=0.9; matLight.userData.woodUV=0.7;
-const matLacquer=std({color:C('#0b0908'),roughness:0.16,clearcoat:1,clearcoatRoughness:0.08},1.6,true);
-const matGold=std({color:C('#d7ae55'),metalness:1,roughness:0.28},1.6);
+const matLacquer=mat('#0b0908',{roughness:0.16,clearcoat:1,clearcoatRoughness:0.08},1.6,true);
+const matGold=mat('#d7ae55',{metalness:1,roughness:0.28},1.6);
 const tPaper=canvasTex(384,384,(g,w,h)=>drawPaper(g,w,h,{base:'#f3ead4',fibers:1500}));
 const matPaper=std({map:tPaper,emissive:C('#ffc98a'),emissiveMap:tPaper,emissiveIntensity:0.95,roughness:0.95,transparent:true,opacity:0.88,side:DoubleSide},0.1);
 const matLampPaper=std({map:tPaper,emissive:C('#ffb060'),emissiveMap:tPaper,emissiveIntensity:2.6,roughness:0.9},0.05);
@@ -435,13 +436,13 @@ const tPages=canvasTex(128,128,(g,w,h)=>{
   for(let x=0;x<w;x+=2){ g.fillStyle=`rgba(${rnd()<.5?'120,95,55':'255,250,235'},${R(.06,.22)})`; g.fillRect(x,0,1,h); }
 });
 const matPages=std({map:tPages,roughness:0.92},0.3);
-const matBark=std({color:C('#2e2018'),roughness:0.9},0.3);
-const matPink=std({color:C('#f2b6c6'),roughness:0.6,emissive:C('#8a3a50'),emissiveIntensity:0.12},0.3);
-const matWhiteBlossom=std({color:C('#f7ece6'),roughness:0.6},0.3);
-const matCeladon=std({color:C('#9dbfae'),roughness:0.18,clearcoat:0.6,clearcoatRoughness:0.1,side:DoubleSide},1.2,true);
-const matPorcelain=std({color:C('#e9e6dc'),roughness:0.15,clearcoat:0.7,clearcoatRoughness:0.08,side:DoubleSide},1.2,true);
-const matRaku=std({color:C('#2a1a14'),roughness:0.3,clearcoat:0.5,side:DoubleSide},1.0,true);
-const matRed=std({color:C('#8a3a24'),roughness:0.35,clearcoat:0.5,side:DoubleSide},1.0,true);
+const matBark=mat('#2e2018',{roughness:0.9},0.3);
+const matPink=mat('#f2b6c6',{roughness:0.6,emissive:C('#8a3a50'),emissiveIntensity:0.12},0.3);
+const matWhiteBlossom=mat('#f7ece6',{roughness:0.6},0.3);
+const matCeladon=mat('#9dbfae',{roughness:0.18,clearcoat:0.6,clearcoatRoughness:0.1,side:DoubleSide},1.2,true);
+const matPorcelain=mat('#e9e6dc',{roughness:0.15,clearcoat:0.7,clearcoatRoughness:0.08,side:DoubleSide},1.2,true);
+const matRaku=mat('#2a1a14',{roughness:0.3,clearcoat:0.5,side:DoubleSide},1.0,true);
+const matRed=mat('#8a3a24',{roughness:0.35,clearcoat:0.5,side:DoubleSide},1.0,true);
 
 /* ---------- geometry helpers ---------- */
 function mapBoxUV(g,w,h,d,S){
@@ -495,7 +496,7 @@ function updateScrollCurl(A,sc){
   sc.bottomRod.rotation.x=-A;
 }
 function box(w,h,d,mat,x,y,z,parent){
-  const g=new THREE.BoxGeometry(w,h,d);
+  const g=new BoxGeometry(w,h,d);
   if(mat.userData.woodUV) mapBoxUV(g,w,h,d,mat.userData.woodUV);
   const m=new Mesh(g,mat); m.position.set(x,y,z); m.castShadow=m.receiveShadow=true;
   (parent||shelf).add(m); return m;
@@ -507,7 +508,7 @@ function regroupBox(g,order,counts){
   let s=0; counts.forEach((c,i)=>{ g.addGroup(s,c*6,i); s+=c*6; });
 }
 function lathe(pts,mat,seg){
-  const g=new THREE.LatheGeometry(pts.map(p=>new THREE.Vector2(p[0],p[1])),seg||56);
+  const g=new LatheGeometry(pts.map(p=>new Vector2(p[0],p[1])),seg||56);
   const m=new Mesh(g,mat); m.castShadow=m.receiveShadow=true; return m;
 }
 const VASE=[[0,0],[0.052,0],[0.058,0.008],[0.085,0.07],[0.104,0.17],[0.092,0.26],[0.05,0.33],[0.03,0.365],[0.028,0.4],[0.034,0.418],[0.03,0.42],[0.022,0.405],[0.022,0.3],[0,0.28]];
@@ -551,12 +552,12 @@ let tatamiInst=null;   // the trapdoor hides one tile
   for(let i=0;i<rows;i++)for(let k=0;k<cols;k++){
     dummy.position.set(-ROOM_W/2+0.9+1.8*k-(i%2)*0.9+0.0,0,0.45+0.9*i);
     dummy.rotation.set(-PI/2,0,0); dummy.updateMatrix(); inst.setMatrixAt(n,dummy.matrix);
-    const v=R(0.9,1.06); inst.setColorAt(n,new THREE.Color(v,v,v*0.98)); n++;
+    const v=R(0.9,1.06); inst.setColorAt(n,new Color(v,v,v*0.98)); n++;
   }
   inst.receiveShadow=true; scene.add(inst); tatamiInst=inst;
 }
 // shoji window (left wall)
-const winMat=new THREE.MeshBasicMaterial({color:new THREE.Color(0.55,0.5,0.42),map:tPaper});   // shoji lit by moonlight (also used in the hidden room)
+const winMat=new MeshBasicMaterial({color:new Color(0.55,0.5,0.42),map:tPaper});   // shoji lit by moonlight (also used in the hidden room)
 {
   const g=group(scene,-ROOM_W/2+0.01,1.6,2.0,PI/2);
   const p=new Mesh(new PlaneGeometry(2.2,1.7),winMat); p.position.z=0.005; g.add(p);
@@ -582,7 +583,7 @@ const winMat=new THREE.MeshBasicMaterial({color:new THREE.Color(0.55,0.5,0.42),m
   const hg=new Group(); g.add(hg);   // the part that spins
   const shaft=new Mesh(new CylinderGeometry(0.006,0.006,0.003,12),matGold);   // connects the plate to the ring
   shaft.rotation.x=PI/2; shaft.position.set(0,0,nz0+0.0035); shaft.castShadow=true; hg.add(shaft);
-  const ring=new Mesh(new THREE.TorusGeometry(0.025,0.0045,10,24),matGold);
+  const ring=new Mesh(new TorusGeometry(0.025,0.0045,10,24),matGold);
   ring.position.set(0,0,nz0+0.005); ring.castShadow=true; hg.add(ring);
   const spokeIn=0.007, spokeOut=0.0205, spokeMid=(spokeIn+spokeOut)/2;   // 3 spokes, evenly spaced, bridging shaft to ring
   for(let k=0;k<3;k++){
@@ -736,7 +737,7 @@ const drawerMvs=[];
 
 /* ---------- books ---------- */
 function bookGeometry(t,h,d){
-  const g=new THREE.BoxGeometry(t,h,d);
+  const g=new BoxGeometry(t,h,d);
   regroupBox(g,[0,1,2,3,5,4],[2,3,1]);
   return g;
 }
@@ -827,7 +828,7 @@ function wasoStack(x,y,z,n,rot){
   let yy=y;
   for(let i=0;i<n;i++){
     const th=R(0.02,0.032), wv=pick(WASO);
-    const g=new THREE.BoxGeometry(0.18,th,0.26);
+    const g=new BoxGeometry(0.18,th,0.26);
     regroupBox(g,[0,2,1,3,4,5],[1,1,4]);
     const m=new Mesh(g,[wv.side,wv.top,matPages]);
     m.position.set(x+R(-0.008,0.008),yy+th/2,z+R(-0.008,0.008)); m.rotation.y=(rot||0)+R(-0.1,0.1);
@@ -930,7 +931,7 @@ function cordGeometry(T,H,D,kx){
   }
   return mergeGeos(segs.map(sg=>cylSeg(sg[0],sg[1],r)));
 }
-const matCord=std({color:C('#6b4a2a'),roughness:0.85},0.25);
+const matCord=mat('#6b4a2a',{roughness:0.85},0.25);
 const waBooks=[];
 const WA_MATS=WA_COLORS.map(c=>({
   front:std({map:canvasTex(256,344,(g,w,h)=>drawWaCover(g,w,h,c.hex,c.title,true),{repeat:false}),roughness:0.78},0.3),
@@ -939,7 +940,7 @@ const WA_MATS=WA_COLORS.map(c=>({
 }));
 const WA_GEO=WA_SIZES.map(sz=>{
   const D=230*PXM*sz.kx, H=310*PXM*sz.ky, T=19*PXM*sz.kz;
-  const body=new THREE.BoxGeometry(T,H,D);
+  const body=new BoxGeometry(T,H,D);
   regroupBox(body,[0,1,2,3,5,4],[1,1,3,1]);   // groups: +x back cover, -x front cover, pages, spine
   return {D,H,T,body,cord:cordGeometry(T,H,D,sz.kx)};
 });
@@ -989,8 +990,8 @@ wasoStack(-0.55,2.18,0.17,4,0.12);
   const g=group(shelf,0.95,2.18,0.17);
   const v=lathe(VASE,matPorcelain); v.scale.setScalar(0.72); g.add(v);
   const branch=(pts,r,blossoms)=>{
-    const curve=new THREE.CatmullRomCurve3(pts.map(p=>new Vector3(p[0],p[1],p[2])));
-    const tube=new Mesh(new THREE.TubeGeometry(curve,24,r,6,false),matBark); tube.castShadow=true; g.add(tube);
+    const curve=new CatmullRomCurve3(pts.map(p=>new Vector3(p[0],p[1],p[2])));
+    const tube=new Mesh(new TubeGeometry(curve,24,r,6,false),matBark); tube.castShadow=true; g.add(tube);
     for(let i=0;i<blossoms;i++){
       const p=curve.getPoint(R(0.25,1)), s=R(0.010,0.016);
       const b=new Mesh(new THREE.IcosahedronGeometry(s,1),rnd()<0.7?matPink:matWhiteBlossom);
@@ -1041,16 +1042,16 @@ wallShade(1.54,ROOM_W/2,
   ' return max(edge,1.0-glow); }');
 
 /* ---------- lights ---------- */
-scene.add(new THREE.HemisphereLight(0x5c6a94,0x5d4a2e,0.12));
+scene.add(new HemisphereLight(0x5c6a94,0x5d4a2e,0.12));
 const sun=new THREE.DirectionalLight(0x8aa0d8,0.32);   // moonlight through the shoji
 sun.position.set(-3.2,3.6,3.6); sun.target.position.set(0,1.0,0.2);
 sun.castShadow=true; sun.shadow.mapSize.set(1536,1536);
 Object.assign(sun.shadow.camera,{left:-2.6,right:2.6,top:2.4,bottom:-2.4,near:1,far:12});
 sun.shadow.camera.updateProjectionMatrix(); sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.012; sun.shadow.radius=3;
 scene.add(sun,sun.target);
-const lampLight=new THREE.PointLight(0xffb15a,1.9,9,1.4); lampLight.position.set(lampPos.x,0.4,lampPos.z); scene.add(lampLight);
+const lampLight=new PointLight(0xffb15a,1.9,9,1.4); lampLight.position.set(lampPos.x,0.4,lampPos.z); scene.add(lampLight);
 const inner=[
-  new THREE.PointLight(0xffc27a,1.4,0.35,3), new THREE.PointLight(0xffc27a,1.4,0.35,3), new THREE.PointLight(0xffc27a,1.4,0.35,3)
+  new PointLight(0xffc27a,1.4,0.35,3), new PointLight(0xffc27a,1.4,0.35,3), new PointLight(0xffc27a,1.4,0.35,3)
 ];   // short reach: stays inside the shelf
 inner[0].position.set(-0.88,1.5,0.2); inner[1].position.set(0,1.5,0.18); inner[2].position.set(0.9,1.5,0.22);
 inner.forEach(l=>shelf.add(l));   // move with the shelf
@@ -1072,7 +1073,7 @@ function resize(){
 window.addEventListener('resize',resize); resize(); goal.r=home.r; cur.r=home.r+1.4;
 
 const $=id=>document.getElementById(id);
-const raycaster=new THREE.Raycaster(), ndc=new THREE.Vector2();
+const raycaster=new THREE.Raycaster(), ndc=new Vector2();
 function setNdc(e){ const r=host.getBoundingClientRect(); ndc.set((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1); raycaster.setFromCamera(ndc,camera); }
 // user pans/zooms keep the orbit target inside this box (above ground) -- see clampTarget()
 const TARGET_MIN=new Vector3(-2.1,0.25,-0.15), TARGET_MAX=new Vector3(2.1,2.35,2.5);
@@ -1198,7 +1199,7 @@ host.addEventListener('dblclick',e=>{
 
 /* ---------- showcase: tap a book -> it floats out, spins 180 degrees, then opens ---------- */
 const scRoot=new Group(); scRoot.visible=false; scene.add(scRoot);
-const showLight=new THREE.PointLight(0xffe6bd,0,4.5,2); scene.add(showLight);
+const showLight=new PointLight(0xffe6bd,0,4.5,2); scene.add(showLight);
 const SC={rig:null,wa:null,u:0,goal:0,th:0,scale:1,start:new Vector3(),P:new Vector3(),right:new Vector3(),toCam:new Vector3()};
 function findWa(o){ const f=findUp(o,x=>x.userData.wa!==undefined); return f&&waBooks[f.userData.wa]; }
 const WA_TEXT_A='つれづれなるままに、日暮らし、硯にむかひて、心にうつりゆくよしなし事を、そこはかとなく書きつくれば、あやしうこそものぐるほしけれ。';
@@ -1278,7 +1279,7 @@ function buildRig(wa){
     if(i===5){ bB=mats.back; sB=mats.back; }   // outer back cover
     const ed=(i===0||i===5)?E:P;
     const bodyMat=[bB,bF,ed,ed,ed,ed], stripMat=[sB,sF,ed,ed,ed,ed];
-    const bgeo=new THREE.BoxGeometry(th,H,211*sx), sgeo=new THREE.BoxGeometry(th,H,21*sx);
+    const bgeo=new BoxGeometry(th,H,211*sx), sgeo=new BoxGeometry(th,H,21*sx);
     const s0=209-L.sr, s1=230-L.sr;
     if(i===0){ setFaceU(bgeo,1,0,211/230); setFaceU(sgeo,1,s0/230,s1/230); }
     if(i===5){ setFaceU(bgeo,0,19/230,1); setFaceU(sgeo,0,(230-s1)/230,(230-s0)/230); }
@@ -1301,7 +1302,7 @@ function buildRig(wa){
     }
   });
   const T=19.5*sz;
-  const sp=new Mesh(new THREE.BoxGeometry(T,H,ts),[E,E,E,E,wa.grp.userData.spine,E]);   // spine panel
+  const sp=new Mesh(new BoxGeometry(T,H,ts),[E,E,E,E,wa.grp.userData.spine,E]);   // spine panel
   sp.position.set(0,0,Z(230)+ts/2); rig.add(sp);
   const cp=cordParts(T,H,D,sz0.kx);
   const mk=(geo,xEnd)=>{   // shortenable cord group, pivot at the back
@@ -1419,9 +1420,9 @@ function drawWavePrint(g,w,h){
 function buildHeavyDoor(hinge,H,Wd){
   const tD=woodTex('#2b170d','12,6,3','110,70,40',70,0.7);
   const matCore=std({map:tD,color:C('#6e5e54'),bumpMap:tD,bumpScale:0.4,roughness:0.5,clearcoat:0.25,clearcoatRoughness:0.3},0.2,true); matCore.userData.woodUV=0.7;
-  const matFrameL=std({color:C('#0c0a09'),roughness:0.25,clearcoat:0.9,clearcoatRoughness:0.12},0.3,true);
-  const matBronze=std({color:C('#8a6a3a'),metalness:1,roughness:0.32},0.6);
-  const matIronD=std({color:C('#1b1816'),metalness:0.7,roughness:0.45},0.4);
+  const matFrameL=mat('#0c0a09',{roughness:0.25,clearcoat:0.9,clearcoatRoughness:0.12},0.3,true);
+  const matBronze=mat('#8a6a3a',{metalness:1,roughness:0.32},0.6);
+  const matIronD=mat('#1b1816',{metalness:0.7,roughness:0.45},0.4);
   const T=0.08, fx=T/2, st=0.085, fz=fx+0.009, midY=H*0.42;
   box(T,H,Wd,matCore,0,H/2,Wd/2,hinge);
   box(0.018,H,st,matFrameL,fz,H/2,st/2,hinge); box(0.018,H,st,matFrameL,fz,H/2,Wd-st/2,hinge);
@@ -1429,7 +1430,7 @@ function buildHeavyDoor(hinge,H,Wd){
   const fw=Wd-2*st-0.03, lowH=midY-st/2-st-0.03, upH=H-st-midY-st/2-0.03;   // raised fields inside the frame
   box(0.014,lowH,fw,matCore,fx+0.007,st+0.015+lowH/2,Wd/2,hinge);
   box(0.014,upH,fw,matCore,fx+0.007,midY+st/2+0.015+upH/2,Wd/2,hinge);
-  const studG=new THREE.SphereGeometry(0.011,12,8,0,PI*2,0,PI/2); studG.rotateZ(-PI/2);   // domes facing +x
+  const studG=new SphereGeometry(0.011,12,8,0,PI*2,0,PI/2); studG.rotateZ(-PI/2);   // domes facing +x
   const sp=[];
   for(let i=0;i<9;i++){ const y=0.07+i*(H-0.14)/8; sp.push([y,st/2],[y,Wd-st/2]); }
   for(const y of [H-st/2,midY]) for(let k=1;k<6;k++) sp.push([y,st+k*(Wd-2*st)/6]);
@@ -1444,7 +1445,7 @@ function buildHeavyDoor(hinge,H,Wd){
   const hz=Wd-0.13, hy=H*0.55;   // ring pull + keyhole plate
   const esc=cyl(0.05,0.05,0.01,matBronze,32); esc.rotation.z=PI/2; esc.position.set(fz+0.014,hy,hz); hinge.add(esc);
   const boss=cyl(0.016,0.016,0.03,matBronze,16); boss.rotation.z=PI/2; boss.position.set(fz+0.03,hy,hz); hinge.add(boss);
-  const ring=new Mesh(new THREE.TorusGeometry(0.048,0.0075,12,40),matBronze); ring.rotation.y=PI/2; ring.position.set(fz+0.03,hy-0.05,hz); ring.castShadow=true; hinge.add(ring);
+  const ring=new Mesh(new TorusGeometry(0.048,0.0075,12,40),matBronze); ring.rotation.y=PI/2; ring.position.set(fz+0.03,hy-0.05,hz); ring.castShadow=true; hinge.add(ring);
   box(0.008,0.1,0.046,matBronze,fz+0.013,hy-0.17,hz,hinge);
   box(0.004,0.026,0.008,std({color:0x050403,roughness:0.9},0),fz+0.0175,hy-0.165,hz,hinge);
 }
@@ -1460,12 +1461,12 @@ function decorateStairwell(stairs,o){
   const matWn=std({map:tWainscot,bumpMap:tWainscot,bumpScale:0.4,roughness:0.6,side:DoubleSide},0.15);
   const matWal=std({map:tWalnut,bumpMap:tWalnut,bumpScale:0.3,roughness:0.45,clearcoat:0.3,clearcoatRoughness:0.3},0.3,true); matWal.userData.woodUV=0.8;
   const matStr=std({map:tDark,color:C('#8a7a70'),roughness:0.5,side:DoubleSide},0.15);   // closed stringer: dark-stained wood
-  const matRail=std({color:C('#3a2316'),roughness:0.35,clearcoat:0.5,clearcoatRoughness:0.2},0.3,true);
-  const matBr=std({color:C('#a8833a'),metalness:1,roughness:0.3},1.3);
+  const matRail=mat('#3a2316',{roughness:0.35,clearcoat:0.5,clearcoatRoughness:0.2},0.3,true);
+  const matBr=mat('#a8833a',{metalness:1,roughness:0.3},1.3);
   const matSh=std({map:tPaper,emissive:C('#ffbe78'),emissiveMap:tPaper,emissiveIntensity:1.5,roughness:0.9,side:DoubleSide},0.05);
   const matCel=matCeladon.clone(), matBk=matBark.clone();
-  const matLf=std({color:C('#34502a'),roughness:0.55,side:DoubleSide},0.4);
-  const matMat=std({color:C('#ddd5c4'),roughness:0.9},0.2);
+  const matLf=mat('#34502a',{roughness:0.55,side:DoubleSide},0.4);
+  const matMat=mat('#ddd5c4',{roughness:0.9},0.2);
   const art=(fn,w,h)=>std({map:canvasTex(w,h,fn,{repeat:false}),roughness:0.8},0.15);
   const matPine=art(drawSumiPine,384,480), matWave=art(drawWavePrint,480,384);
   // a flat band between two curves of x (for the wainscot and stringers that follow the pitch)
@@ -1493,7 +1494,7 @@ function decorateStairwell(stairs,o){
     // closed stringer, black lacquer, covering the treads' ends
     const st=new Mesh(strGeo,matStr); st.position.z=sz>0?-(halfW-o.w/2):0; st.castShadow=st.receiveShadow=true; side.add(st);
     // dado rail along the wainscot's top edge
-    railAlong(side,0.9,xTop,xEnd,len=>{ const m=new Mesh(new THREE.BoxGeometry(len,0.035,0.028),matDarkU); m.castShadow=true; return m; },-sz*0.018);
+    railAlong(side,0.9,xTop,xEnd,len=>{ const m=new Mesh(new BoxGeometry(len,0.035,0.028),matDarkU); m.castShadow=true; return m; },-sz*0.018);
   }
   // handrail on the right-hand side going down (+z): walnut rail on brass brackets, level along the landing
   {
@@ -1506,7 +1507,7 @@ function decorateStairwell(stairs,o){
       const rose=cyl(0.03,0.03,0.01,matBr,20); rose.rotation.x=PI/2; rose.position.set(x,y-0.03,-0.005); side.add(rose);
       const cup=cyl(0.012,0.012,0.03,matBr,10); cup.position.set(x,y-0.017,out); side.add(cup);
     }
-    for(const x of [Math.min(-1.15,(-0.03-H+0.0475)/slope),doorX+0.45]){ const f=new Mesh(new THREE.SphereGeometry(0.027,16,12),matBr); f.position.set(x,noseY(x)+H,out); f.castShadow=true; side.add(f); }
+    for(const x of [Math.min(-1.15,(-0.03-H+0.0475)/slope),doorX+0.45]){ const f=new Mesh(new SphereGeometry(0.027,16,12),matBr); f.position.set(x,noseY(x)+H,out); f.castShadow=true; side.add(f); }
   }
   // paper bracket lamps -- the stairwell's own light
   const sconce=(x,sz)=>{
@@ -1517,7 +1518,7 @@ function decorateStairwell(stairs,o){
     const sh=box(0.12,0.17,0.12,matSh,0,0,0.13,g); sh.castShadow=false;
     for(const cx of [-1,1])for(const cz of [-1,1]){ const p=box(0.012,0.19,0.012,matDarkU,cx*0.062,0,0.13+cz*0.062,g); p.castShadow=false; }
     box(0.14,0.012,0.14,matDarkU,0,0.095,0.13,g).castShadow=false; box(0.14,0.012,0.14,matDarkU,0,-0.095,0.13,g).castShadow=false;
-    const L=new THREE.PointLight(0xffb870,0.95,2.8,2); L.position.set(0,0,0.13); g.add(L);
+    const L=new PointLight(0xffb870,0.95,2.8,2); L.position.set(0,0,0.13); g.add(L);
   };
   sconce(-2.3,-1); sconce(-3.55,1); sconce(-4.75,-1); sconce(-5.65,1);
   // framed prints
@@ -1537,11 +1538,11 @@ function decorateStairwell(stairs,o){
     box(0.62,0.035,0.17,matWal,0,0,0.085,g);
     for(const sx of [-1,1]) box(0.02,0.06,0.02,matBr,sx*0.24,-0.045,0.02,g);
     const v=lathe(VASE,matCel,40); v.scale.setScalar(0.62); v.position.set(-0.12,0.0175,0.085); g.add(v);
-    const c=new THREE.CatmullRomCurve3([[-0.12,0.27,0.085],[-0.08,0.4,0.09],[0.02,0.5,0.1],[0.12,0.52,0.11]].map(p=>new Vector3(...p)));
-    const br=new Mesh(new THREE.TubeGeometry(c,16,0.004,6),matBk); br.castShadow=true; g.add(br);
-    const lg=new THREE.SphereGeometry(1,10,6).translate(1,0,0);   // leaf base at the origin: it grows out from the stem
+    const c=new CatmullRomCurve3([[-0.12,0.27,0.085],[-0.08,0.4,0.09],[0.02,0.5,0.1],[0.12,0.52,0.11]].map(p=>new Vector3(...p)));
+    const br=new Mesh(new TubeGeometry(c,16,0.004,6),matBk); br.castShadow=true; g.add(br);
+    const lg=new SphereGeometry(1,10,6).translate(1,0,0);   // leaf base at the origin: it grows out from the stem
     for(let i=0;i<6;i++){ const l=new Mesh(lg,matLf); l.scale.set(0.022,0.005,0.019); l.position.copy(c.getPoint(0.25+i*0.13)); l.rotation.set(R(-0.6,0.6),i*1.9,R(-0.4,0.4)); l.castShadow=true; g.add(l); }
-    box(0.16,0.02,0.11,std({color:C('#3a2d24'),roughness:0.85},0.2),0.18,0.028,0.085,g);
+    box(0.16,0.02,0.11,mat('#3a2d24',{roughness:0.85},0.2),0.18,0.028,0.085,g);
   }
   // ceiling over the stairwell (beyond the opening), a header beam at the opening's edge, and the end walls
   battenCeiling(stairs,xEnd,openX0,-halfW,halfW,CEIL,matDarkU,false).castShadow=true;   // keeps the spill light to the opening
@@ -1553,15 +1554,15 @@ function decorateStairwell(stairs,o){
   endWall(dx,PI/2,doorY,dTop,-halfW,-jw); endWall(dx,PI/2,doorY,dTop,jw,halfW);   // either side of it
   // a deep, heavy casing: lacquered lintel and posts with bronze caps, and a dark stone threshold
   const matCase=std({map:tDark,color:C('#5a4c44'),bumpMap:tDark,bumpScale:0.3,roughness:0.5,clearcoat:0.2,clearcoatRoughness:0.3},0.2,true); matCase.userData.woodUV=0.9;
-  const matCap=std({color:C('#8a6a3a'),metalness:1,roughness:0.32},0.6);
+  const matCap=mat('#8a6a3a',{metalness:1,roughness:0.32},0.6);
   box(0.12,0.17,o.w+0.34,matCase,doorX+0.06,dTop+0.085,0,stairs);
   box(0.14,0.03,o.w+0.4,matCase,doorX+0.07,dTop+0.185,0,stairs);
   for(const s of [-1,1]){ box(0.12,doorH,0.085,matCase,doorX+0.06,doorY+doorH/2,s*(jw+0.0425),stairs);
     box(0.125,0.02,0.09,matCap,doorX+0.06,doorY+0.01,s*(jw+0.0425),stairs); box(0.125,0.02,0.09,matCap,doorX+0.06,dTop-0.01,s*(jw+0.0425),stairs); }
-  box(0.15,0.02,o.w+0.17,std({color:C('#2b2927'),roughness:0.55},0.3),doorX+0.125,doorY+0.01,0,stairs);
+  box(0.15,0.02,o.w+0.17,mat('#2b2927',{roughness:0.55},0.3),doorX+0.125,doorY+0.01,0,stairs);
   // lights: the bracket lamps, faint fill, and daylight/lamplight spilling down through the opening
-  const hemiU=new THREE.HemisphereLight(0xffe2c4,0x1e1610,0.1); underScene.add(hemiU);
-  const spill=new THREE.SpotLight(0xffc488,0.4,7,0.62,0.9,1.2); spill.position.set(-0.6,1.3,0); spill.target.position.set(-2.8,-2.6,0);
+  const hemiU=new HemisphereLight(0xffe2c4,0x1e1610,0.1); underScene.add(hemiU);
+  const spill=new SpotLight(0xffc488,0.4,7,0.62,0.9,1.2); spill.position.set(-0.6,1.3,0); spill.target.position.set(-2.8,-2.6,0);
   spill.castShadow=true; spill.shadow.mapSize.set(512,512); spill.shadow.bias=-0.002; spill.shadow.radius=4; stairs.add(spill,spill.target);
 }
 function openTrap(){
@@ -1580,9 +1581,9 @@ function openTrap(){
     const z0=zF, z1=zN;
     const N=18, rise=0.19, run=0.24, w=TRAP_D-0.14;
     // The stairwell has its own scene (underScene), drawn only through the opening; its materials are copies.
-    underScene=new THREE.Scene();
+    underScene=new Scene();
     const uMat=m=>{ const c=m.clone(); c.envMapIntensity*=0.4; return c; };
-    const matMidU=uMat(matMid), matDarkU=uMat(matDark), matGoldU=uMat(matGold);
+    const matMidU=uMat(matMid), matDarkU=uMat(matDark);
     const stairs=group(underScene,TRAP_X+TRAP_W/2-0.14,0,(z0+z1)/2);
     for(let i=0;i<N;i++){
       const y=-0.07-rise*i, x=-run*i;
@@ -1600,7 +1601,7 @@ function openTrap(){
     pickables.push(doorHinge);   // any part of the door counts
     STAIR_G.lastTreadFarX=lastTreadFarX; STAIR_G.doorX=doorX; STAIR_G.doorY=doorY; STAIR_G.doorH=doorH;
     trapHinge=group(scene,TRAP_X,0,TRAP_ZF);
-    const trapTile=new Mesh(new THREE.BoxGeometry(TRAP_W,TRAP_THICK,TRAP_D),
+    const trapTile=new Mesh(new BoxGeometry(TRAP_W,TRAP_THICK,TRAP_D),
       [matTatami,matTatami,matTatami,matMid,matTatami,matTatami]);   // +x,-x,+y(top),-y(underside),+z,-z
     trapTile.position.set(0,-TRAP_THICK/2,TRAP_D/2);
     trapTile.castShadow=trapTile.receiveShadow=true;
@@ -1814,7 +1815,7 @@ function drawGardenView(g,w,h){
 // soft rounded box (a cushion): a sphere whose vertices are pushed out onto a rounded box, so the
 // normals stay smooth. `bulge` puffs the top face up slightly. UVs are projected in metres.
 function softBox(w,h,d,r,mat,bulge){
-  const g=new THREE.SphereGeometry(1,28,18), p=g.attributes.position, uv=g.attributes.uv, v=new Vector3();
+  const g=new SphereGeometry(1,28,18), p=g.attributes.position, uv=g.attributes.uv, v=new Vector3();
   const hx=w/2-r, hy=h/2-r, hz=d/2-r;
   for(let i=0;i<p.count;i++){
     v.fromBufferAttribute(p,i);
@@ -1848,7 +1849,7 @@ function battenCeiling(parent,x0,x1,z0,z1,y,trim,cornice){
 }
 
 function buildInnerInterior(z0,z1){
-  const S=new THREE.Scene();
+  const S=new Scene();
   const RW=ROOM_W, RD=z0-z1, zc=(z0+z1)/2, cx=(doorX0+doorX1)/2;
 
   /* materials */
@@ -1862,8 +1863,8 @@ function buildInnerInterior(z0,z1){
   const tPost=woodTex('#8a6a4a','70,45,25','200,170,130',30,0.4);
   const matPost=std({map:tPost,roughness:0.35,clearcoat:0.5,clearcoatRoughness:0.2},0.8,true);
   const matTrim=matDark.clone();
-  const matIron=std({color:C('#1b1a19'),metalness:0.65,roughness:0.42},0.9);
-  const matBrass2=std({color:C('#a8833a'),metalness:1,roughness:0.3},1.3);
+  const matIron=mat('#1b1a19',{metalness:0.65,roughness:0.42},0.9);
+  const matBrass2=mat('#a8833a',{metalness:1,roughness:0.3},1.3);
   const matLacq=matLacquer.clone();
   const tLea=canvasTex(512,512,(g,w,h)=>drawLeather(g,w,h,'#6a361c')); tLea.repeat.set(1.6,1.6);
   const matLeather=std({map:tLea,bumpMap:tLea,bumpScale:0.12,roughness:0.48,clearcoat:0.25,clearcoatRoughness:0.45},0.7,true);
@@ -1876,20 +1877,19 @@ function buildInnerInterior(z0,z1){
   const tRug=canvasTex(1024,768,drawRug,{repeat:false});
   const matRug=std({map:tRug,bumpMap:tRug,bumpScale:0.9,roughness:1},0.1);
   const matShade=std({map:tPaper,emissive:C('#ffbf7a'),emissiveMap:tPaper,emissiveIntensity:1.4,roughness:0.9,side:DoubleSide},0.05);
-  const matRib=std({color:C('#6b5a44'),roughness:0.8,emissive:C('#3a2410'),emissiveIntensity:0.6},0.1);
-  const matCeramic=std({color:C('#171513'),roughness:0.32,clearcoat:0.7,clearcoatRoughness:0.1,side:DoubleSide},1.1,true);
+  const matRib=mat('#6b5a44',{roughness:0.8,emissive:C('#3a2410'),emissiveIntensity:0.6},0.1);
+  const matCeramic=mat('#171513',{roughness:0.32,clearcoat:0.7,clearcoatRoughness:0.1,side:DoubleSide},1.1,true);
   // own copies of the main room's ceramics/bark (separate scene, separate light setup)
   const matCeladon2=matCeladon.clone(), matPorc2=matPorcelain.clone(), matRaku2=matRaku.clone(), matBark2=matBark.clone();
-  const matLeaf=std({color:C('#34502a'),roughness:0.55,side:DoubleSide},0.4);
-  const matPine=std({color:C('#2c3d22'),roughness:0.9,flatShading:true},0.3);
-  const matCamellia=std({color:C('#9b1c22'),roughness:0.5,side:DoubleSide},0.4);
-  const matStamen=std({color:C('#e0b84a'),roughness:0.6},0.3);
-  const matPaperBook=std({color:C('#d9cfb8'),roughness:0.9},0.2);
+  const matLeaf=mat('#34502a',{roughness:0.55,side:DoubleSide},0.4);
+  const matPine=mat('#2c3d22',{roughness:0.9,flatShading:true},0.3);
+  const matCamellia=mat('#9b1c22',{roughness:0.5,side:DoubleSide},0.4);
+  const matStamen=mat('#e0b84a',{roughness:0.6},0.3);
   const tScroll=canvasTex(256,640,drawEnsoScroll,{repeat:false});
   const matScroll=std({map:tScroll,roughness:0.85},0.1);
   const tArt=canvasTex(768,512,drawGoldArt,{repeat:false});
   const matArt=std({map:tArt,roughness:0.45,metalness:0.25},1.0);
-  const matView=new THREE.MeshBasicMaterial({map:canvasTex(512,320,drawGardenView,{repeat:false}),color:new THREE.Color(0.16,0.2,0.32)});   // the garden by moonlight
+  const matView=new MeshBasicMaterial({map:canvasTex(512,320,drawGardenView,{repeat:false}),color:new Color(0.16,0.2,0.32)});   // the garden by moonlight
   const matMatte=c=>std({color:C(c),roughness:0.85},0.2);
   const matShadeF=matShade.clone(), matShadeT=matShade.clone();   // each lamp switches on/off on its own
 
@@ -1921,7 +1921,7 @@ function buildInnerInterior(z0,z1){
   function revealSumi(){
     const P=sumiOnFloor.getWorldPosition(new Vector3());
     const crouch=P.clone().add(new Vector3(0.04,0.32,0.48));   // down low in front of the table, looking underneath
-    const glint=new THREE.PointLight(0xffc890,0,0.7,2); glint.position.copy(P).add(new Vector3(0,0.07,0.12)); S.add(glint);   // lantern light now reaching under the table
+    const glint=new PointLight(0xffc890,0,0.7,2); glint.position.copy(P).add(new Vector3(0,0.07,0.12)); S.add(glint);   // lantern light now reaching under the table
     setTimeout(()=>lookRide(ROOM_EYE.clone(),P,2.0,()=>{ toast('座卓の下に、何か落ちている……');
       setTimeout(()=>lookRide(crouch,P,1.6,()=>setTimeout(()=>{ sumiOnFloor.parent.remove(sumiOnFloor); S.remove(glint); giveItem('sumi'); },1800)),900); }),1200);
     setTimeout(()=>{ glint.intensity=0.9; },1200);
@@ -2000,24 +2000,24 @@ function buildInnerInterior(z0,z1){
     const plank=(g,w,h)=>drawWood(g,w,h,{base:'#7a5232',dark:'40,22,10',light:'190,140,90',lines:20,wave:1});
     const carved=(g,w,h,fill)=>vtext(g,SAFE_CODE,w/2,h*0.06,h*0.88,w*0.62,fill,'700');   // the four characters, top to bottom
     const plaqueMat=std({map:canvasTex(120,330,(g,w,h)=>{ plank(g,w,h); carved(g,w,h,'rgba(20,10,4,.035)'); },{repeat:false}),roughness:0.9},0.1);
-    const plaque=new Mesh(new THREE.BoxGeometry(0.13,0.36,0.006),plaqueMat); plaque.position.set(scX,1.2,z1+0.004); plaque.receiveShadow=true; S.add(plaque);
+    const plaque=new Mesh(new BoxGeometry(0.13,0.36,0.006),plaqueMat); plaque.position.set(scX,1.2,z1+0.004); plaque.receiveShadow=true; S.add(plaque);
     lockable(plaque,'plaque',()=>{ plaqueMat.map=canvasTex(120,330,(g,w,h)=>{
         const t=document.createElement('canvas'); t.width=w; t.height=h; const tg=t.getContext('2d'); plank(tg,w,h);
         const mask=document.createElement('canvas'); mask.width=w; mask.height=h; carved(mask.getContext('2d'),w,h,'#000');
         tg.globalCompositeOperation='destination-in'; tg.drawImage(mask,0,0);                            // the bare wood, only where carved (all four strokes at once)
         g.fillStyle='#0b0907'; g.fillRect(0,0,w,h); for(let i=0;i<40;i++){ g.fillStyle=`rgba(40,30,24,${R(.1,.3)})`; g.fillRect(0,rnd()*h,w,R(1,3)); }   // inked, with brush streaks
         g.drawImage(t,0,0); g.globalCompositeOperation='lighter'; g.globalAlpha=0.55; g.drawImage(t,0,0); g.globalAlpha=1; },{repeat:false});   // freshly bared wood reads pale
-      plaqueMat.emissive=new THREE.Color(0xffffff); plaqueMat.emissiveMap=plaqueMat.map; plaqueMat.emissiveIntensity=0.35;   // so the strokes stay legible in the scroll's shadow
+      plaqueMat.emissive=new Color(0xffffff); plaqueMat.emissiveMap=plaqueMat.map; plaqueMat.emissiveIntensity=0.35;   // so the strokes stay legible in the scroll's shadow
       plaqueMat.needsUpdate=true; });
     setView(plaque,S,[scX,1.2,z1],1.45,-0.15);
     // ikebana: a low black suiban with a camellia branch
     const suiban=lathe([[0,0],[0.17,0],[0.19,0.01],[0.2,0.05],[0.185,0.05],[0.175,0.015],[0,0.015]],matCeramic,48);
     put(suiban,cx+0.48,0.15,z1+0.36,S);
     const br=group(S,cx+0.48,0.165,z1+0.36);
-    const stem=(pts,r)=>{ const c=new THREE.CatmullRomCurve3(pts.map(p=>new Vector3(...p))); const m=new Mesh(new THREE.TubeGeometry(c,24,r,6),matBark2); m.castShadow=true; br.add(m); return c; };
+    const stem=(pts,r)=>{ const c=new CatmullRomCurve3(pts.map(p=>new Vector3(...p))); const m=new Mesh(new TubeGeometry(c,24,r,6),matBark2); m.castShadow=true; br.add(m); return c; };
     const c1=stem([[0,0,0],[-0.04,0.25,0.02],[-0.12,0.52,0.03],[-0.3,0.74,0.06],[-0.46,0.82,0.08]],0.008);
     const c2=stem([[-0.02,0.2,0.01],[0.08,0.34,0.03],[0.16,0.42,0.05]],0.005);
-    const leafG=new THREE.SphereGeometry(1,10,6), leafB=leafG.clone().translate(1,0,0);   // leafB: base at the origin, so it sprouts from the stem
+    const leafG=new SphereGeometry(1,10,6), leafB=leafG.clone().translate(1,0,0);   // leafB: base at the origin, so it sprouts from the stem
     const leafAt=(c,t,a,s)=>{ const p=c.getPoint(t); const l=new Mesh(leafB,matLeaf); l.scale.set(0.034*s,0.006,0.028*s); l.position.copy(p); l.rotation.set(R(-0.6,0.6),a,R(-0.5,0.5)); l.castShadow=true; br.add(l); };
     for(let i=0;i<9;i++) leafAt(c1,0.3+i*0.075,i*1.9,R(0.8,1.15));
     for(let i=0;i<4;i++) leafAt(c2,0.4+i*0.18,i*2.3,R(0.7,1));
@@ -2043,7 +2043,7 @@ function buildInnerInterior(z0,z1){
     box(0.11,0.04,0.004,matBrass2,0,DH*0.68,d/2+0.002,dg); box(0.06,0.004,0.006,matIron,0,DH*0.68,d/2+0.003,dg);   // brass plate with a thin slit
     box(w-0.14,0.006,d-0.07,matWal,0,0.013,-0.01,dg); box(w-0.14,DH-0.05,0.008,matWal,0,DH/2,-(d/2-0.04),dg);
     for(const sx of [-1,1]) box(0.008,DH-0.05,d-0.07,matWal,sx*(w/2-0.075),DH/2,-0.01,dg);
-    { const hb=new Mesh(new THREE.BoxGeometry(w-0.04,DH+0.08,0.1),HIT_MAT); hb.position.set(0,DH/2+0.02,d/2); dg.add(hb); }   // generous hit area over the front
+    { const hb=new Mesh(new BoxGeometry(w-0.04,DH+0.08,0.1),HIT_MAT); hb.position.set(0,DH/2+0.02,d/2); dg.add(hb); }   // generous hit area over the front
     itemProp('keyBow',itemMesh('keyBow'),true,0.2,0.016,0.03,dg).scale.setScalar(2.2);
     itemProp('makimono',itemMesh('makimono'),true,-0.1,0.016,0.02,dg).rotation.y=0.15;   // the hint to the trapdoor
     movable(dg,'position','z',0.26); lockable(dg,'shelfDrawer'); setView(dg,g,[0.2,0.02,0.29],0.8,1.15);
@@ -2091,27 +2091,27 @@ function buildInnerInterior(z0,z1){
     box(1.6,0.03,0.05,matWal,0,0.12,0,b);
     // bonsai pine in a black rectangular pot
     const pot=box(0.36,0.08,0.24,matCeramic,0.45,0.47,0,b); void pot;
-    const tr=new THREE.CatmullRomCurve3([[0.45,0.5,0],[0.42,0.6,0.01],[0.5,0.7,0.0],[0.4,0.8,-0.02],[0.32,0.86,0.0]].map(p=>new Vector3(...p)));
-    const trunk=new Mesh(new THREE.TubeGeometry(tr,20,0.018,8),matBark2); trunk.castShadow=true; b.add(trunk);
+    const tr=new CatmullRomCurve3([[0.45,0.5,0],[0.42,0.6,0.01],[0.5,0.7,0.0],[0.4,0.8,-0.02],[0.32,0.86,0.0]].map(p=>new Vector3(...p)));
+    const trunk=new Mesh(new TubeGeometry(tr,20,0.018,8),matBark2); trunk.castShadow=true; b.add(trunk);
     const ico=new THREE.IcosahedronGeometry(1,1);
     for(const [x,y,z,s] of [[0.32,0.9,0,0.11],[0.52,0.74,0.02,0.08],[0.38,0.79,-0.05,0.07],[0.2,0.86,0.03,0.07]]){
       const geo=ico.clone(), p=geo.attributes.position; for(let i=0;i<p.count;i++) p.setXYZ(i,p.getX(i)*R(0.85,1.15),p.getY(i)*R(0.85,1.15),p.getZ(i)*R(0.85,1.15)); geo.computeVertexNormals();
       const pad=new Mesh(geo,matPine); pad.scale.set(s,s*0.42,s*0.8); pad.position.set(x,y,z); pad.castShadow=true; b.add(pad);
     }
     // an inkstone (suzuri) with the brush laid beside it. Ink + water ground on it fills its well; dip the brush there.
-    const sz=group(b,-0.3,0.43,-0.02,0.15), stone=std({color:C('#2b2927'),roughness:0.55},0.4);
+    const sz=group(b,-0.3,0.43,-0.02,0.15), stone=mat('#2b2927',{roughness:0.55},0.4);
     box(0.2,0.012,0.12,stone,0,0.006,0,sz);                                                       // base (its top is the well's floor)
     box(0.13,0.006,0.1,stone,-0.025,0.015,0,sz);                                                  // the grinding face (陸)
     for(const z of [-0.055,0.055]) box(0.2,0.014,0.01,stone,0,0.019,z,sz);                       // rim
     for(const x of [-0.095,0.095]) box(0.01,0.014,0.1,stone,x,0.019,0,sz);
-    const inkMat=new THREE.MeshBasicMaterial({color:new THREE.Color(0.012,0.01,0.008)});   // ink is black: unlit, so no light greys it -- the wet look comes from the edge highlights
+    const inkMat=new MeshBasicMaterial({color:new Color(0.012,0.01,0.008)});   // ink is black: unlit, so no light greys it -- the wet look comes from the edge highlights
     const ink=new Group(); ink.visible=false; sz.add(ink);
     const pool=new Mesh(new PlaneGeometry(0.05,0.1),inkMat); pool.rotation.x=-PI/2; pool.position.set(0.065,0.0165,0); ink.add(pool);   // the well (海) only
     // highlights: ink climbs the well's walls (surface tension), so light catches in thin lines just inside two adjacent edges
     const lineTex=canvasTex(128,8,(g,w,h)=>{ const r=g.createLinearGradient(0,0,w,0); r.addColorStop(0,'rgba(255,235,205,0)'); r.addColorStop(.2,'rgba(255,235,205,.85)'); r.addColorStop(.8,'rgba(255,235,205,.85)'); r.addColorStop(1,'rgba(255,235,205,0)');
       g.fillStyle=r; g.fillRect(0,0,w,h); const v=g.createLinearGradient(0,0,0,h); v.addColorStop(0,'rgba(0,0,0,1)'); v.addColorStop(.5,'rgba(0,0,0,0)'); v.addColorStop(1,'rgba(0,0,0,1)');
       g.globalCompositeOperation='destination-out'; g.fillStyle=v; g.fillRect(0,0,w,h); },{repeat:false});
-    const lineMat=new THREE.MeshBasicMaterial({map:lineTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});
+    const lineMat=new MeshBasicMaterial({map:lineTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});
     const hl1=new Mesh(new PlaneGeometry(0.044,0.0022),lineMat); hl1.rotation.x=-PI/2; hl1.position.set(0.065,0.0168,-0.0455); ink.add(hl1);   // along the far edge
     const hl2=new Mesh(new PlaneGeometry(0.092,0.0022),lineMat); hl2.rotation.x=-PI/2; hl2.rotation.z=PI/2; hl2.position.set(0.0865,0.0168,0); ink.add(hl2);   // along the end edge
     sz.userData.innerAct=()=>{
@@ -2137,9 +2137,9 @@ function buildInnerInterior(z0,z1){
     // tetsubin iron kettle on a small tray, two cups
     box(0.34,0.012,0.24,matKeyaki,-0.22,0.413,0.04,g);
     const pot=lathe([[0,0],[0.05,0],[0.075,0.02],[0.085,0.05],[0.08,0.08],[0.06,0.1],[0.036,0.11],[0.036,0.118],[0,0.118]],matIron,40); put(pot,-0.26,0.419,0.04,g);
-    const knob=new Mesh(new THREE.SphereGeometry(0.012,12,8),matIron); put(knob,-0.26,0.54,0.04,g);
+    const knob=new Mesh(new SphereGeometry(0.012,12,8),matIron); put(knob,-0.26,0.54,0.04,g);
     const spout=cyl(0.008,0.013,0.08,matIron,10); spout.rotation.z=-0.9; put(spout,-0.19,0.49,0.04,g);
-    const handle=new Mesh(new THREE.TorusGeometry(0.07,0.005,8,24,PI),matIron); handle.castShadow=true; put(handle,-0.26,0.53,0.04,g);
+    const handle=new Mesh(new TorusGeometry(0.07,0.005,8,24,PI),matIron); handle.castShadow=true; put(handle,-0.26,0.53,0.04,g);
     for(const [x,z] of [[-0.08,0.1],[-0.1,-0.03]]) put(lathe([[0,0],[0.022,0],[0.03,0.01],[0.034,0.05],[0.031,0.05],[0.027,0.012],[0,0.012]],matCeladon2,32),x,0.419,z,g);
     for(let i=0;i<2;i++) box(0.24-i*0.02,0.03,0.17-i*0.01,matMatte(['#1f2630','#7a6a52'][i]),0.32,0.422+i*0.03,-0.08,g).rotation.y=0.15-i*0.3;
     itemProp('shiori',itemMesh('shiori'),true,0.32,0.452,-0.11,g).rotation.y=-0.15;   // tucked into the top book, tassel hanging out
@@ -2168,9 +2168,9 @@ function buildInnerInterior(z0,z1){
     const g=group(S,gx,lanternY,gz); g.userData.innerAct=()=>toggleLamp('pend'); lockable(g,'lantern',()=>{ inside.visible=true; lampOn.pend=true; applyLamps(); revealSumi(); },false);
     const T0=0.16, prof=[]; for(let i=0;i<=20;i++){ const t=T0+(1-T0)*i/20; prof.push([0.012+0.25*Math.pow(Math.sin(PI*t),0.75),-0.26+0.52*t]); }
     const shade=lathe(prof,matShade,48); shade.castShadow=false; g.add(shade);
-    for(let i=1;i<20;i++){ const [r,y]=prof[i]; const rib=new Mesh(new THREE.TorusGeometry(r+0.002,0.0018,4,48),matRib); rib.rotation.x=PI/2; rib.position.y=y; g.add(rib); }
+    for(let i=1;i<20;i++){ const [r,y]=prof[i]; const rib=new Mesh(new TorusGeometry(r+0.002,0.0018,4,48),matRib); rib.rotation.x=PI/2; rib.position.y=y; g.add(rib); }
     const [r0,y0]=prof[0];
-    const rim=new Mesh(new THREE.TorusGeometry(r0,0.004,6,40),matIron); rim.rotation.x=PI/2; rim.position.y=y0; g.add(rim);
+    const rim=new Mesh(new TorusGeometry(r0,0.004,6,40),matIron); rim.rotation.x=PI/2; rim.position.y=y0; g.add(rim);
     for(const a of [0,PI/2]){ const w=box(r0*2,0.003,0.003,matIron,0,y0+0.03,0,g); w.rotation.y=a; w.castShadow=false; }   // cross-wire holder
     put(cyl(0.022,0.022,0.008,matIron,16),0,y0+0.034,0,g);   // its little dish
     put(inside,0,y0+0.038-0.012,0,g);
@@ -2243,13 +2243,12 @@ function buildInnerInterior(z0,z1){
     put(cyl(0.006,0.006,0.12,matBrass2,8),-0.6,0.98,0,tl);
     const vase=lathe(VASE,matPorc2,48); vase.scale.set(1.1,1.3,1.1); put(vase,0.55,0.675,0,g);
     for(let i=0;i<3;i++) box(0.26-i*0.02,0.03,0.2-i*0.015,matMatte(['#2a2a2a','#5a4632','#1e2a3a'][i]),0.05,0.69+i*0.03,0.02,g).rotation.y=i*0.12;
-    // framed art
     // framed art -- tap: it swings out on its left edge, showing a small safe set into the wall
     const AY=1.72;   // painting/safe height: the painting's lower edge must clear the lamp and vase as it swings
     const ah=group(g,-0.67,AY,-0.165);
     const af=group(ah,0.67,0,0);
     const artA=movable(ah,'rotation','y',-1.25,2.4);
-    box(0.44,0.34,0.006,std({color:C('#5a2a22'),roughness:0.9},0.2),0,AY,-0.245,g);   // safe: lined back, sides, top, bottom
+    box(0.44,0.34,0.006,mat('#5a2a22',{roughness:0.9},0.2),0,AY,-0.245,g);   // safe: lined back, sides, top, bottom
     for(const sx of [-1,1]) box(0.012,0.34,0.05,matIron,sx*0.214,AY,-0.222,g);
     for(const sy of [-1,1]) box(0.44,0.012,0.05,matIron,0,AY+sy*0.164,-0.222,g);
     { const k=itemProp('smallKey',itemMesh('smallKey'),true,0.0,AY+0.03,-0.24,g); k.rotation.x=-PI/2; k.scale.setScalar(1.6); }   // hung upright on the back
@@ -2258,7 +2257,7 @@ function buildInnerInterior(z0,z1){
     box(0.014,0.09,0.02,matBrass2,0.09,0,0.02,sd);
     // 文字錠: four brass windows in a row, each showing one character on its own drum; a tap turns that drum to the
     // next. Only when the four read SAFE_CODE does the bolt draw back (8 characters each: 4096 combinations).
-    const dials=[], dialAt=[1,0,1,0];   // start positions (not the answer)
+    const dialAt=[1,0,1,0];   // start positions (not the answer)
     const plate=group(sd,0.28,0.02,0.012); box(0.29,0.1,0.006,matBrass2,0,0,0.003,plate);
     for(let k=0;k<4;k++){
       const tex=canvasTex(128,128,()=>{},{repeat:false});
@@ -2268,7 +2267,7 @@ function buildInnerInterior(z0,z1){
         g2.fillStyle=sh; g2.fillRect(0,0,128,128); tex.needsUpdate=true; };
       draw();
       const d=group(plate,(k-1.5)*0.066,0,0);
-      const win=new Mesh(new PlaneGeometry(0.052,0.052),new THREE.MeshBasicMaterial({map:tex,color:new THREE.Color(0.75,0.72,0.66)})); win.position.z=0.0065; d.add(win);
+      const win=new Mesh(new PlaneGeometry(0.052,0.052),new MeshBasicMaterial({map:tex,color:new Color(0.75,0.72,0.66)})); win.position.z=0.0065; d.add(win);
       for(const y of [-0.04,0.04]) box(0.024,0.006,0.012,matBrass2,0,y,0.009,d);   // the drum's turning tabs
       d.userData.noFocus=true;
       d.userData.innerAct=()=>{
@@ -2286,18 +2285,18 @@ function buildInnerInterior(z0,z1){
   }
 
   /* lights */
-  const hemi2=new THREE.HemisphereLight(0xfff1e0,0x3a2c20,0.12); S.add(hemi2);
-  const pend=new THREE.PointLight(0xffb978,1.4,7.5,1.6); pend.position.set(gx,lanternY,gz);
+  const hemi2=new HemisphereLight(0xfff1e0,0x3a2c20,0.12); S.add(hemi2);
+  const pend=new PointLight(0xffb978,1.4,7.5,1.6); pend.position.set(gx,lanternY,gz);
   S.add(pend);   // no shadow (a point-light shadow costs six passes)
   // its shadows come from one spot under it, aimed at what faces you on entering
-  const pendSpot=new THREE.SpotLight(0xffb978,1,7.5,1.0,1.0,1.6); pendSpot.position.set(gx,lanternY-0.29,gz); pendSpot.target.position.set(gx,0,gz-1.6);
+  const pendSpot=new SpotLight(0xffb978,1,7.5,1.0,1.0,1.6); pendSpot.position.set(gx,lanternY-0.29,gz); pendSpot.target.position.set(gx,0,gz-1.6);
   pendSpot.castShadow=true; pendSpot.shadow.mapSize.set(1024,1024); pendSpot.shadow.bias=-0.002; pendSpot.shadow.radius=4; pendSpot.shadow.camera.near=0.2; S.add(pendSpot,pendSpot.target);
-  const toko=new THREE.SpotLight(0xffd6a0,2.1,4,0.62,0.75,1.4); toko.position.set(cx,1.98,z1+0.6); toko.target.position.set(cx,0.8,z1+0.05);
+  const toko=new SpotLight(0xffd6a0,2.1,4,0.62,0.75,1.4); toko.position.set(cx,1.98,z1+0.6); toko.target.position.set(cx,0.8,z1+0.05);
   toko.castShadow=true; toko.shadow.mapSize.set(512,512); toko.shadow.bias=-0.002; toko.shadow.radius=4; S.add(toko,toko.target);
-  const win=new THREE.SpotLight(0x9fb4e0,0.35,12,0.8,1.0,1); win.position.set(winX,2.4,z1-1.6); win.target.position.set(winX-1.2,0,zc);   // moonlight through the shoji
+  const win=new SpotLight(0x9fb4e0,0.35,12,0.8,1.0,1); win.position.set(winX,2.4,z1-1.6); win.target.position.set(winX-1.2,0,zc);   // moonlight through the shoji
   win.castShadow=true; win.shadow.mapSize.set(1024,1024); win.shadow.bias=-0.0015; win.shadow.radius=3; win.shadow.camera.near=0.8; S.add(win,win.target);
-  const flamp=new THREE.PointLight(0xffc690,0.7,4,2); flamp.position.set(-RW/2+0.42,1.48,floorLampZ); S.add(flamp);
-  const tlamp=new THREE.PointLight(0xffc690,0.5,3.5,2); tlamp.position.set(RW/2-0.25,1.06,sbLampZ); S.add(tlamp);
+  const flamp=new PointLight(0xffc690,0.7,4,2); flamp.position.set(-RW/2+0.42,1.48,floorLampZ); S.add(flamp);
+  const tlamp=new PointLight(0xffc690,0.5,3.5,2); tlamp.position.set(RW/2-0.25,1.06,sbLampZ); S.add(tlamp);
 
   // the three lamps can be switched off by tapping them (lampOn)
   function applyLamps(){
@@ -2341,9 +2340,9 @@ function buildInnerRoom(){
 }
 
 /* ---------- items: pick-ups, the item box and the lightbox ---------- */
-// ITEMS: everything that can be carried. icon(g) paints it in a 100x100 box (item box + lightbox).
+// ITEMS: everything that can be carried: name, description, pose ([elevation, azimuth] of its still render), alt (lightbox tap shows that id).
 // RECIPES: [a, b, result] -- with a in the lightbox, tapping b in the item box combines them (either order).
-// To add an item: an ITEMS entry (+ itemMesh() case for its 3D look), then itemProp(id, mesh, ...) where it lies.
+// To add an item: an ITEMS entry + an itemMesh() case for its 3D model, then itemProp(id, itemMesh(id), ...) where it lies.
 const ITEMS={
   matches:{name:'燐寸',desc:'古い燐寸箱。中に数本だけ残っている。',pose:[0.75,0.5]},
   candle:{name:'和蝋燭',desc:'朱塗りの和蝋燭。芯はまだ新しい。',pose:[0.3,0.6]},
@@ -2399,51 +2398,51 @@ function itemMats(){
     g.fillStyle='rgba(212,173,85,.9)'; for(const [x,y,s] of [[.3,.22,9],[.68,.34,7],[.42,.5,6]]){ g.beginPath(); for(let k=0;k<5;k++){ const a=k/5*6.283; g.ellipse(x*w+Math.cos(a)*s*0.6,y*h+Math.sin(a)*s*0.6,s*0.5,s*0.28,a,0,6.283); } g.fill(); }
     g.strokeStyle='#d4ad55'; g.lineWidth=2; g.strokeRect(4,4,w-8,h-8); });
   IM={
-    brass:std({color:C('#c9a24a'),metalness:1,roughness:0.3,emissive:C('#4a3410'),emissiveIntensity:0.55},2.2),   // a little self-glow so it reads in dark drawers
-    iron:std({color:C('#3a3430'),metalness:0.75,roughness:0.42,emissive:C('#140f0c'),emissiveIntensity:1},1.6),
-    hole:std({color:C('#120c08'),roughness:0.9},0),
-    vermilion:std({color:C('#b8322a'),roughness:0.38,clearcoat:0.55,clearcoatRoughness:0.25},1.2,true),
-    cream:std({color:C('#efe6d0'),roughness:0.6},0.4),
-    lacquer:std({color:C('#141110'),roughness:0.18,clearcoat:1,clearcoatRoughness:0.08},1.6,true),
-    wick:std({color:C('#1d1a17'),roughness:0.95},0),
-    label:std({map:label,roughness:0.75},0.3), grit:std({map:grit,roughness:1},0.1), card:std({color:C('#d8c49a'),roughness:0.85},0.3),
-    stick:std({color:C('#e0c48e'),roughness:0.8},0.3), head:std({color:C('#7a1e18'),roughness:0.7},0.3),
+    brass:mat('#c9a24a',{metalness:1,roughness:0.3,emissive:C('#4a3410'),emissiveIntensity:0.55},2.2),   // a little self-glow so it reads in dark drawers
+    iron:mat('#3a3430',{metalness:0.75,roughness:0.42,emissive:C('#140f0c'),emissiveIntensity:1},1.6),
+    hole:mat('#120c08',{roughness:0.9},0),
+    vermilion:mat('#b8322a',{roughness:0.38,clearcoat:0.55,clearcoatRoughness:0.25},1.2,true),
+    cream:mat('#efe6d0',{roughness:0.6},0.4),
+    lacquer:mat('#141110',{roughness:0.18,clearcoat:1,clearcoatRoughness:0.08},1.6,true),
+    wick:mat('#1d1a17',{roughness:0.95},0),
+    label:std({map:label,roughness:0.75},0.3), grit:std({map:grit,roughness:1},0.1), card:mat('#d8c49a',{roughness:0.85},0.3),
+    stick:mat('#e0c48e',{roughness:0.8},0.3), head:mat('#7a1e18',{roughness:0.7},0.3),
     bamboo:std({map:bamboo,roughness:0.45,clearcoat:0.4,clearcoatRoughness:0.3},0.9,true),
-    hair:std({map:hair,roughness:0.85},0.2), inkHair:std({color:C('#070605'),roughness:0.2,clearcoat:0.9,clearcoatRoughness:0.1},1.4,true),
-    ink:std({color:C('#16130f'),roughness:0.4,clearcoat:0.35,clearcoatRoughness:0.35},1.0,true), sumiTop:std({map:sumiTop,roughness:0.4,clearcoat:0.35},1.0,true),
-    shiori:std({map:shiori,roughness:0.7},0.4), cord:std({color:C('#b8322a'),roughness:0.75},0.3),
-    flameCore:new THREE.MeshBasicMaterial({color:new THREE.Color(1,0.95,0.75)}),
-    flame:new THREE.MeshBasicMaterial({color:new THREE.Color(1,0.55,0.15),transparent:true,opacity:0.55,blending:THREE.AdditiveBlending,depthWrite:false}),
+    hair:std({map:hair,roughness:0.85},0.2), inkHair:mat('#070605',{roughness:0.2,clearcoat:0.9,clearcoatRoughness:0.1},1.4,true),
+    ink:mat('#16130f',{roughness:0.4,clearcoat:0.35,clearcoatRoughness:0.35},1.0,true), sumiTop:std({map:sumiTop,roughness:0.4,clearcoat:0.35},1.0,true),
+    shiori:std({map:shiori,roughness:0.7},0.4), cord:mat('#b8322a',{roughness:0.75},0.3),
+    flameCore:new MeshBasicMaterial({color:new Color(1,0.95,0.75)}),
+    flame:new MeshBasicMaterial({color:new Color(1,0.55,0.15),transparent:true,opacity:0.55,blending:THREE.AdditiveBlending,depthWrite:false}),
   };
   return IM;
 }
 const mk=(geo,mat,parent,x,y,z)=>{ const m=new Mesh(geo,mat); m.position.set(x||0,y||0,z||0); m.castShadow=m.receiveShadow=true; parent.add(m); return m; };
 // a cord from points pts (y-up), ending in a tassel at its last point
 function cordTassel(g,pts,cordMat,capMat){
-  const c=new THREE.CatmullRomCurve3(pts.map(p=>new Vector3(...p)));
-  mk(new THREE.TubeGeometry(c,24,0.0011,6),cordMat,g);
+  const c=new CatmullRomCurve3(pts.map(p=>new Vector3(...p)));
+  mk(new TubeGeometry(c,24,0.0011,6),cordMat,g);
   const e=pts[pts.length-1], d=c.getTangentAt(1);
   const t=new Group(); t.position.set(...e); t.quaternion.setFromUnitVectors(new Vector3(0,-1,0),d); g.add(t);
   mk(new CylinderGeometry(0.0022,0.0022,0.004,12),capMat,t,0,-0.002,0);
-  mk(new THREE.ConeGeometry(0.0042,0.018,14,1,true).rotateX(PI),cordMat,t,0,-0.013,0).material.side=DoubleSide;
+  mk(new ConeGeometry(0.0042,0.018,14,1,true).rotateX(PI),cordMat,t,0,-0.013,0).material.side=DoubleSide;
 }
 function candleModel(g,lit){
   const M=itemMats(), prof=[[0,0],[0.0095,0],[0.0102,0.004],[0.0108,0.03],[0.0128,0.072],[0.0138,0.082],[0.0128,0.085],[0.004,0.086],[0,0.086]];
-  mk(new THREE.LatheGeometry(prof.map(p=>new THREE.Vector2(...p)),40),M.vermilion,g,0,0.012,0);
+  mk(new LatheGeometry(prof.map(p=>new Vector2(...p)),40),M.vermilion,g,0,0.012,0);
   mk(new CylinderGeometry(0.0124,0.0117,0.006,40),M.cream,g,0,0.012+0.05,0);   // painted band
-  mk(new THREE.LatheGeometry([[0,0],[0.022,0],[0.024,0.003],[0.02,0.007],[0.007,0.009],[0.007,0.012],[0,0.012]].map(p=>new THREE.Vector2(...p)),40),M.lacquer,g);   // lacquer stand
+  mk(new LatheGeometry([[0,0],[0.022,0],[0.024,0.003],[0.02,0.007],[0.007,0.009],[0.007,0.012],[0,0.012]].map(p=>new Vector2(...p)),40),M.lacquer,g);   // lacquer stand
   mk(new CylinderGeometry(0.0011,0.0013,0.01,8),M.wick,g,0,0.012+0.091,0);
   if(lit){ const f=new Group(); f.position.y=0.012+0.106; g.add(f);
-    const core=new Mesh(new THREE.SphereGeometry(1,16,12),M.flameCore); core.scale.set(0.0028,0.008,0.0028); f.add(core);
-    const outer=new Mesh(new THREE.SphereGeometry(1,16,12),M.flame); outer.scale.set(0.0055,0.0155,0.0055); outer.position.y=0.003; f.add(outer); }
+    const core=new Mesh(new SphereGeometry(1,16,12),M.flameCore); core.scale.set(0.0028,0.008,0.0028); f.add(core);
+    const outer=new Mesh(new SphereGeometry(1,16,12),M.flame); outer.scale.set(0.0055,0.0155,0.0055); outer.position.y=0.003; f.add(outer); }
 }
 function brushModel(g,inked){
   const M=itemMats(), L=0.15, y=0.0048, x0=-0.05;
   const shaft=mk(new CylinderGeometry(0.0042,0.0042,L,20),M.bamboo,g,x0+L/2,y,0); shaft.rotation.z=PI/2;
   mk(new CylinderGeometry(0.0047,0.0047,0.009,20),M.lacquer,g,x0,y,0).rotation.z=PI/2;               // ferrule
   mk(new CylinderGeometry(0.0045,0.0045,0.006,20),M.lacquer,g,x0+L,y,0).rotation.z=PI/2;             // end cap
-  const loop=mk(new THREE.TorusGeometry(0.004,0.0009,6,16),M.cord,g,x0+L+0.007,y,0); loop.rotation.y=PI/2;
-  const tip=mk(new THREE.LatheGeometry([[0,0],[0.0043,0],[0.0052,0.006],[0.0048,0.014],[0.0032,0.022],[0.0012,0.028],[0,0.031]].map(p=>new THREE.Vector2(...p)),24),inked?M.inkHair:M.hair,g,x0-0.0045,y,0);
+  const loop=mk(new TorusGeometry(0.004,0.0009,6,16),M.cord,g,x0+L+0.007,y,0); loop.rotation.y=PI/2;
+  const tip=mk(new LatheGeometry([[0,0],[0.0043,0],[0.0052,0.006],[0.0048,0.014],[0.0032,0.022],[0.0012,0.028],[0,0.031]].map(p=>new Vector2(...p)),24),inked?M.inkHair:M.hair,g,x0-0.0045,y,0);
   tip.rotation.z=PI/2;
 }
 function keyBowModel(g,x){
@@ -2451,56 +2450,56 @@ function keyBowModel(g,x){
   const h=new THREE.Path(); h.moveTo(-0.0055,-0.0055); h.lineTo(0.0055,-0.0055); h.lineTo(0.0055,0.0055); h.lineTo(-0.0055,0.0055); h.lineTo(-0.0055,-0.0055); s.holes.push(h);
   const coin=mk(new THREE.ExtrudeGeometry(s,{depth:0.003,bevelEnabled:true,bevelThickness:0.0007,bevelSize:0.0007,bevelSegments:2,curveSegments:40}),M.brass,g,x,0.0037,0);
   coin.rotation.x=PI/2;
-  const rim=mk(new THREE.TorusGeometry(0.0125,0.0006,6,40),M.brass,g,x,0.0045,0); rim.rotation.x=PI/2;    // raised inner ring, like a mon coin
+  const rim=mk(new TorusGeometry(0.0125,0.0006,6,40),M.brass,g,x,0.0045,0); rim.rotation.x=PI/2;    // raised inner ring, like a mon coin
   return coin;
 }
 function keyShaftModel(g,x0,x1){
   const M=itemMats(), y=0.0026;
   mk(new CylinderGeometry(0.0024,0.0024,x1-x0,18),M.brass,g,(x0+x1)/2,y,0).rotation.z=PI/2;
   const bit=new Group(); bit.position.set(x1-0.007,y,0.0075); g.add(bit);   // the bit, with two notches
-  for(const [bx,bz,w,d] of [[-0.004,0,0.004,0.012],[0.001,-0.002,0.004,0.008],[0.0055,0,0.003,0.012]]) mk(new THREE.BoxGeometry(w,0.004,d),M.brass,bit,bx,0,bz);
+  for(const [bx,bz,w,d] of [[-0.004,0,0.004,0.012],[0.001,-0.002,0.004,0.008],[0.0055,0,0.003,0.012]]) mk(new BoxGeometry(w,0.004,d),M.brass,bit,bx,0,bz);
 }
 function itemMesh(id){
   const g=new Group(), M=itemMats();
   if(id==='matches'){
-    const sleeve=mk(new THREE.BoxGeometry(0.056,0.016,0.038),[M.card,M.card,M.label,M.card,M.grit,M.grit],g,-0.008,0.008,0);
+    const sleeve=mk(new BoxGeometry(0.056,0.016,0.038),[M.card,M.card,M.label,M.card,M.grit,M.grit],g,-0.008,0.008,0);
     const tray=new Group(); tray.position.set(0.014,0.0015,0); g.add(tray);   // slid half out
-    mk(new THREE.BoxGeometry(0.052,0.0012,0.034),M.card,tray,0,0,0);
-    for(const z of [-0.0165,0.0165]) mk(new THREE.BoxGeometry(0.052,0.011,0.0012),M.card,tray,0,0.0055,z);
-    mk(new THREE.BoxGeometry(0.0012,0.011,0.034),M.card,tray,0.0254,0.0055,0);
+    mk(new BoxGeometry(0.052,0.0012,0.034),M.card,tray,0,0,0);
+    for(const z of [-0.0165,0.0165]) mk(new BoxGeometry(0.052,0.011,0.0012),M.card,tray,0,0.0055,z);
+    mk(new BoxGeometry(0.0012,0.011,0.034),M.card,tray,0.0254,0.0055,0);
     for(let i=0;i<6;i++){ const z=-0.012+i*0.0048, st=mk(new CylinderGeometry(0.0011,0.0011,0.046,8),M.stick,tray,0.0,0.0028+(i%2)*0.0012,z); st.rotation.z=PI/2+R(-0.03,0.03);
-      mk(new THREE.SphereGeometry(0.0021,10,8),M.head,tray,0.0235,0.0028+(i%2)*0.0012,z).scale.set(1.25,1,1); }
+      mk(new SphereGeometry(0.0021,10,8),M.head,tray,0.0235,0.0028+(i%2)*0.0012,z).scale.set(1.25,1,1); }
     void sleeve;
   }
   if(id==='candle'||id==='litCandle') candleModel(g,id==='litCandle');
   if(id==='fude'||id==='fudeSumi') brushModel(g,id==='fudeSumi');
-  if(id==='sumi'){ mk(new THREE.BoxGeometry(0.022,0.009,0.075),[M.ink,M.ink,M.sumiTop,M.ink,M.ink,M.ink],g,0,0.0045,0); }
-  if(id==='shiori'){ mk(new THREE.BoxGeometry(0.028,0.0012,0.15),M.shiori,g,0,0.0006,0.06);
-    mk(new THREE.TorusGeometry(0.0022,0.0007,6,14),M.brass,g,0,0.0012,0.13).rotation.x=PI/2;   // eyelet
+  if(id==='sumi'){ mk(new BoxGeometry(0.022,0.009,0.075),[M.ink,M.ink,M.sumiTop,M.ink,M.ink,M.ink],g,0,0.0045,0); }
+  if(id==='shiori'){ mk(new BoxGeometry(0.028,0.0012,0.15),M.shiori,g,0,0.0006,0.06);
+    mk(new TorusGeometry(0.0022,0.0007,6,14),M.brass,g,0,0.0012,0.13).rotation.x=PI/2;   // eyelet
     cordTassel(g,[[0,0.0012,0.13],[0.002,0.0015,0.15],[-0.003,0.0016,0.168],[0.001,0.0016,0.182]],M.cord,M.brass); }
   if(id==='smallKey'){
-    const r=mk(new THREE.TorusGeometry(0.009,0.0028,12,28),M.iron,g,0,0.0028,0); r.rotation.x=PI/2;
+    const r=mk(new TorusGeometry(0.009,0.0028,12,28),M.iron,g,0,0.0028,0); r.rotation.x=PI/2;
     mk(new CylinderGeometry(0.0021,0.0021,0.032,14),M.iron,g,0.0255,0.0028,0).rotation.z=PI/2;
-    for(const [bx,w,d] of [[0.036,0.004,0.011],[0.0405,0.003,0.007]]) mk(new THREE.BoxGeometry(w,0.004,d),M.iron,g,bx,0.0028,0.005);
+    for(const [bx,w,d] of [[0.036,0.004,0.011],[0.0405,0.003,0.007]]) mk(new BoxGeometry(w,0.004,d),M.iron,g,bx,0.0028,0.005);
     cordTassel(g,[[-0.009,0.0028,0],[-0.016,0.0028,-0.006],[-0.016,0.003,-0.018],[-0.012,0.003,-0.03]],M.cord,M.brass); }
   if(id==='keyBow'){ keyBowModel(g,0); mk(new CylinderGeometry(0.0024,0.0024,0.01,14),M.brass,g,0.022,0.0026,0).rotation.z=PI/2; }
   if(id==='keyShaft') keyShaftModel(g,-0.025,0.025);
   if(id==='mizusashi'||id==='sumiMizu'){   // a small celadon water dropper (suiteki) with a spout and a knob lid
     const w=new Group(); g.add(w); if(id==='sumiMizu') w.position.x=0.045;
-    const glaze=std({color:C('#8fb3a2'),roughness:0.15,clearcoat:0.8,clearcoatRoughness:0.08},1.4,true);
-    mk(new THREE.LatheGeometry([[0,0],[0.02,0],[0.026,0.006],[0.034,0.02],[0.032,0.034],[0.022,0.044],[0.012,0.047],[0,0.047]].map(p=>new THREE.Vector2(...p)),40),glaze,w);
-    mk(new THREE.SphereGeometry(0.008,16,10),glaze,w,0,0.05,0).scale.set(1,0.7,1);
+    const glaze=mat('#8fb3a2',{roughness:0.15,clearcoat:0.8,clearcoatRoughness:0.08},1.4,true);
+    mk(new LatheGeometry([[0,0],[0.02,0],[0.026,0.006],[0.034,0.02],[0.032,0.034],[0.022,0.044],[0.012,0.047],[0,0.047]].map(p=>new Vector2(...p)),40),glaze,w);
+    mk(new SphereGeometry(0.008,16,10),glaze,w,0,0.05,0).scale.set(1,0.7,1);
     const sp=mk(new CylinderGeometry(0.0035,0.0055,0.03,14),glaze,w,0.034,0.03,0); sp.rotation.z=-1.0;
     if(id==='sumiMizu'){ const s2=new Group(); s2.position.set(-0.035,0,0); s2.rotation.y=0.5; g.add(s2);
-      mk(new THREE.BoxGeometry(0.022,0.009,0.075),[M.ink,M.ink,M.sumiTop,M.ink,M.ink,M.ink],s2,0,0.0045,0); } }
+      mk(new BoxGeometry(0.022,0.009,0.075),[M.ink,M.ink,M.sumiTop,M.ink,M.ink,M.ink],s2,0,0.0045,0); } }
   if(id==='makimono'){   // a rolled hand-scroll: indigo silk cover, red cord, lacquered roller ends
-    const silk=std({color:C('#26324a'),roughness:0.7},0.3);
+    const silk=mat('#26324a',{roughness:0.7},0.3);
     mk(new CylinderGeometry(0.014,0.014,0.13,28),silk,g,0,0.014,0).rotation.z=PI/2;
     for(const sx of [-1,1]) mk(new CylinderGeometry(0.008,0.009,0.012,20),M.lacquer,g,sx*0.071,0.014,0).rotation.z=PI/2;
-    const band=mk(new THREE.TorusGeometry(0.0143,0.0012,8,28),M.cord,g,0.02,0.014,0); band.rotation.y=PI/2;
+    const band=mk(new TorusGeometry(0.0143,0.0012,8,28),M.cord,g,0.02,0.014,0); band.rotation.y=PI/2;
     cordTassel(g,[[0.02,0.002,0.012],[0.026,0.001,0.024],[0.024,0.001,0.036],[0.03,0.001,0.046]],M.cord,M.brass); }
   if(id==='makimonoOpen'){   // unrolled: the written sheet laid out, the rest still rolled on the left roller
-    const silk=std({color:C('#26324a'),roughness:0.7},0.3);
+    const silk=mat('#26324a',{roughness:0.7},0.3);
     const tex=canvasTex(640,240,(g,w,h)=>{ drawPaper(g,w,h,{base:'#efe6d0',fibers:600});
       g.fillStyle='#26324a'; g.fillRect(w-36,0,36,h);                                                    // silk mount at the start (right)
       const cols=['書斎の畳','幾度も叩きて','確かめよ'];
@@ -2521,9 +2520,9 @@ let iconRT=null;
 function itemStill(id){
   if(iconCache[id]) return iconCache[id];
   if(!iconRT){ iconRT=new THREE.WebGLRenderTarget(ICON_PX,ICON_PX); iconRT.texture.encoding=THREE.sRGBEncoding; }
-  const sc=new THREE.Scene(), m=itemMesh(id); sc.add(m);
+  const sc=new Scene(), m=itemMesh(id); sc.add(m);
   m.traverse(o=>{ if(o.material&&!Array.isArray(o.material)&&o.material.envMap){ o.material=o.material.clone(); o.material.envMapIntensity*=2; } });
-  sc.add(new THREE.HemisphereLight(0xfff2e0,0x2a2018,0.35));
+  sc.add(new HemisphereLight(0xfff2e0,0x2a2018,0.35));
   const key=new THREE.DirectionalLight(0xfff0dc,1.25); key.position.set(-1,2,1.4); sc.add(key);
   const rim=new THREE.DirectionalLight(0xffd9a8,0.8); rim.position.set(1.2,1,-1.5); sc.add(rim);
   const fl=new THREE.DirectionalLight(0xc8d4ff,0.2); fl.position.set(1.5,0.3,1); sc.add(fl);
@@ -2577,12 +2576,12 @@ function itemProp(id,obj,inner,x,y,z,parent){
   // a larger invisible hit box around it (2.5cm margin), so it's easy to tap
   const bb=new THREE.Box3(); obj.updateMatrixWorld(true);
   obj.traverse(o=>{ if(o.isMesh){ o.geometry.computeBoundingBox(); bb.union(o.geometry.boundingBox.clone().applyMatrix4(new THREE.Matrix4().copy(obj.matrixWorld).invert().multiply(o.matrixWorld))); } });
-  const sz=bb.getSize(new Vector3()).addScalar(0.05), hit=new Mesh(new THREE.BoxGeometry(sz.x,sz.y,sz.z),HIT_MAT);
+  const sz=bb.getSize(new Vector3()).addScalar(0.05), hit=new Mesh(new BoxGeometry(sz.x,sz.y,sz.z),HIT_MAT);
   bb.getCenter(hit.position); obj.add(hit);
   if(inner){ obj.userData.innerAct=()=>pickUp(obj); obj.userData.noFocus=true; } else pickables.push(obj);
   return obj;
 }
-const HIT_MAT=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false,colorWrite:false});
+const HIT_MAT=new MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false,colorWrite:false});
 const inv=[];               // ids held, in pick-up order
 let selItem=null, lbItem=null;
 function pickUp(obj){
@@ -2636,7 +2635,7 @@ const DOOR_FRONT=new Vector3(DOOR_CX,1.42,1.1);
 function camOffset(th,ph,r){ const sp=Math.sin(ph); return new Vector3(r*sp*Math.sin(th),r*Math.cos(ph),r*sp*Math.cos(th)); }
 // kf: [{u, th, ph}] view-direction keys at fractions u of the (eased) ride; path: a smooth curve for the eye
 function startRoomRide(points,kf,duration,done){
-  roomRide={t:0,duration,curve:new THREE.CatmullRomCurve3(points,false,'centripetal'),kf,done};
+  roomRide={t:0,duration,curve:new CatmullRomCurve3(points,false,'centripetal'),kf,done};
 
 }
 function updateRoomRide(dt){

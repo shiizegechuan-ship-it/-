@@ -14,6 +14,12 @@ three.js（r128、cdnjs から読み込み）製の 3D 脱出ゲーム。書院�
 - GitHub: `shiizegechuan-ship-it/-` のブランチ `claude/sharp-darwin-8ujasl` に push 済み（`main` には未マージ、自動デプロイなし）。
 - プレビュー: claude.ai の Artifact `https://claude.ai/artifact/845Tz1mbwakRJQUyY28NKC`（非公開。更新は手動で再公開が必要）。
 
+## 編集と配布(ビルド)
+- **編集するのはリポジトリ直下の読みやすいソース**(`wa-no-shodana.html` / `wa-no-chikashitsu.html`)。`dist/` は自動生成物なので直接編集しない。
+- 配布用の小さい版を作る: 初回だけ `npm install`、その後 `npm run build` → `dist/` に同名で出力(コメント・空白の除去と内部名の短縮のみ。動作は同一)。
+- サイズ: 本体 176KB → 配布版 約111KB。
+- 素材の色指定は `mat('#色',{オプション},映り込み,物理?)`(= `std({color:C('#色'),...})` の短縮形)。
+
 ## 遊び方の流れ（現在の謎）
 1. 本棚の部屋：掛け軸をタップ → 裏のハンドルをタップ → 本棚がスライドし襖が現れる
 2. 襖をタップ → 奥の部屋に入る（初回入室でアイテムボックスが出現。これ以前は本棚の部屋のアイテムは拾えない）
