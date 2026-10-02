@@ -2084,6 +2084,7 @@ function buildInnerInterior(z0,z1){
     }
     // bench
     const b=group(S,winX,0,z1+0.36);
+    b.userData.innerAct=()=>{}; setView(b,b,[0,0.42,0],1.9,0.42);   // tapping the bench frames all of it
     box(1.9,0.05,0.4,matWal,0,0.405,0,b);
     for(const sx of [-1,1]){ box(0.05,0.38,0.34,matWal,sx*0.82,0.19,0,b); }
     box(1.6,0.03,0.05,matWal,0,0.12,0,b);
@@ -2644,7 +2645,8 @@ function walkBy(dx,dy){
   goal.target.addScaledVector(r,-dx*k).addScaledVector(f,dy*k);
   goal.target.x=clamp(goal.target.x,-3.8,3.8); goal.target.z=clamp(goal.target.z,INNER_Z1+0.5,INNER_Z0-0.4);
 }
-function backToRoomCentre(){ if(!roomRide) lookRide(ROOM_EYE.clone(),ROOM_EYE.clone().add(new Vector3(0,-0.05,-1)),1.6); }
+function backToRoomCentre(){ if(roomRide) return; roomFov=60;   // also undo any pinch/wheel zoom
+  lookRide(ROOM_EYE.clone(),ROOM_EYE.clone().add(new Vector3(0,-0.05,-1)),1.6); }
 function enterInnerRoom(){
   if(!innerDoorMv||roomRide||roomView) return;
   innerDoorMv.goal=1;
