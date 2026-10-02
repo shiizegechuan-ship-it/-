@@ -586,31 +586,27 @@ function fillShelfUnit(y,clearH){
 }
 
 /* ---------- shoji lights: 市松・七宝・矢絣・鱗 ----------
-   A tall paper light on the outer side of each corner shelf. The paper is printed with one traditional pattern
-   per face (from the SVG tiles: grey ground + white motif), rendered warm: the motif glows brightest, the
-   ground a little dimmer, as light through thicker and thinner paper. LIGHT_PATTERNS: [svg path, viewBox w,h,
-   evenodd?, tile height in metres]. To change a pattern, edit its path (SVG path syntax) or tile size. */
+   One traditional pattern per face, laid straight onto the outer side panel of each corner shelf (no frame).
+   Only the motif (the white part of the SVG tile) is drawn; the ground is fully transparent, so the panel shows through.
+   LIGHT_PATTERNS: {path: SVG path, vw/vh: viewBox, evenodd?, cols: tiles across the panel width (smaller = bigger pattern)}.
+   Colour of the motif: LIGHT_COLOR. Glow: emissiveIntensity and the PointLight below. */
+const LIGHT_COLOR='#fff3dc';
 const LIGHT_PATTERNS=[
-  {name:'市松',path:'M0 0H1V1H0zM1 1H2V2H1z',vw:2,vh:2,tile:0.04},
-  {name:'七宝',path:'m1 0a1 1 0 0 1 0 2 1 1 0 0 1 0-2 1 1 0 0 1-1 1 1 1 0 0 1 1 1 1 1 0 0 1 1-1 1 1 0 0 1-1-1z',vw:2,vh:2,tile:0.04},
-  {name:'矢絣',path:'m0 0l19 19h2l19-19v60l-19 19h-2l-19-19zm19-60h2v240h-2zm21 0l19 19h2l19-19v60l-19 19h-2l-19-19zm19 0h2v240h-2zm-19 120l19 19h2l19-19v60l-19 19h-2l-19-19z',vw:80,vh:120,evenodd:true,tile:0.06},
-  {name:'鱗',path:'m4 0 8 14h-16zm4 7h-8l4 7z',vw:8,vh:14,tile:0.05},
+  {name:'市松',path:'M0 0H1V1H0zM1 1H2V2H1z',vw:2,vh:2,cols:1},
+  {name:'七宝',path:'m1 0a1 1 0 0 1 0 2 1 1 0 0 1 0-2 1 1 0 0 1-1 1 1 1 0 0 1 1 1 1 1 0 0 1 1-1 1 1 0 0 1-1-1z',vw:2,vh:2,cols:1},
+  {name:'矢絣',path:'m0 0l19 19h2l19-19v60l-19 19h-2l-19-19zm19-60h2v240h-2zm21 0l19 19h2l19-19v60l-19 19h-2l-19-19zm19 0h2v240h-2zm-19 120l19 19h2l19-19v60l-19 19h-2l-19-19z',vw:80,vh:120,evenodd:true,cols:1},
+  {name:'鱗',path:'m4 0 8 14h-16zm4 7h-8l4 7z',vw:8,vh:14,cols:1},
 ];
 function shojiLight(parent,face,cx,cy,zFace,w,h){
   const P=LIGHT_PATTERNS[face%LIGHT_PATTERNS.length], px=256, py=Math.round(px*P.vh/P.vw);
-  const tex=canvasTex(px,py,(g,W,H)=>{
-    g.fillStyle='#b48a5c'; g.fillRect(0,0,W,H);                                  // ground (#ccc in the SVG): dimmer paper
-    g.save(); g.scale(W/P.vw,H/P.vh); g.fillStyle='#fff3dc'; g.fill(new Path2D(P.path),P.evenodd?'evenodd':'nonzero'); g.restore();   // motif (#fff): bright paper
-    for(let i=0;i<900;i++){ g.fillStyle=`rgba(${rnd()<.5?'255,250,235':'120,90,50'},${R(.03,.09)})`; g.fillRect(rnd()*W,rnd()*H,R(1,3),R(1,6)); }   // washi fibres
+  const tex=canvasTex(px,py,g=>{   // transparent canvas: motif only
+    g.scale(px/P.vw,py/P.vh); g.fillStyle=LIGHT_COLOR; g.fill(new Path2D(P.path),P.evenodd?'evenodd':'nonzero');
   });
-  const fw=0.01, iw=w-2*fw, ih=h-2*fw, tileW=P.tile*P.vw/P.vh;
-  tex.repeat.set(iw/tileW,ih/P.tile);
-  const paper=new THREE.Mesh(new THREE.PlaneGeometry(iw,ih),new THREE.MeshStandardMaterial({map:tex,emissive:new THREE.Color(1,0.78,0.5),emissiveMap:tex,emissiveIntensity:1.1,roughness:0.9}));
-  paper.rotation.y=Math.PI; paper.position.set(cx,cy,zFace-0.016); parent.add(paper);   // faces outward (-z)
-  // black-lacquer frame and a thin box behind the paper
-  box(w,fw,0.02,matLacquer,cx,cy+h/2-fw/2,zFace-0.01,parent); box(w,fw,0.02,matLacquer,cx,cy-h/2+fw/2,zFace-0.01,parent);
-  box(fw,h,0.02,matLacquer,cx-w/2+fw/2,cy,zFace-0.01,parent); box(fw,h,0.02,matLacquer,cx+w/2-fw/2,cy,zFace-0.01,parent);
-  for(let i=1;i<6;i++) box(w-2*fw,0.004,0.006,matLacquer,cx,cy-h/2+h*i/6,zFace-0.018,parent);   // a few cross bars (kumiko)
+  const tileW=w/P.cols, tileH=tileW*P.vh/P.vw;
+  tex.repeat.set(P.cols,h/tileH);
+  const paper=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshStandardMaterial({map:tex,transparent:true,alphaTest:0.4,
+    emissive:new THREE.Color(1,0.78,0.5),emissiveMap:tex,emissiveIntensity:1.1,roughness:0.9}));
+  paper.rotation.y=Math.PI; paper.position.set(cx,cy,zFace-0.0015); parent.add(paper);   // faces outward (-z), just in front of the panel to avoid z-fighting
   const glow=new THREE.PointLight(0xffc88a,0.35,1.3,2); glow.position.set(cx,cy,zFace-0.2); parent.add(glow);
 }
 
@@ -706,12 +702,11 @@ Object.assign(sun.shadow.camera,{left:-1.6,right:1.6,top:2.2,bottom:-0.3,near:0.
 sun.shadow.camera.updateProjectionMatrix(); sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.012; sun.shadow.radius=3;
 scene.add(sun,sun.target);
 const fill=new THREE.DirectionalLight(0xd8e2ff,0.35); fill.position.set(2.4,1.8,-2.2); fill.target.position.set(0,H_TOTAL*0.4,0); scene.add(fill,fill.target);
-const warm=new THREE.PointLight(0xffb15a,0.9,4,2); warm.position.set(0,H_TOTAL*0.5,0); scene.add(warm); // 空洞の中を仄かに照らす
+const warm=new THREE.PointLight(0xffb15a,0.5,4,2); warm.position.set(0,H_TOTAL*0.5,0); scene.add(warm); // 空洞の中を仄かに照らす
 
 /* ---------- inside the hollow centre (seen from above, through the top frame) ----------
    floor: a karesansui of raked white sand with three stones and moss, in a black-lacquer frame;
-   walls: gold-leaf panels painted with a seasonal motif each (松・竹・梅・波), framed in lacquer;
-   above: a round paper lantern on a cord, the warm light of the hollow. */
+   walls: plain gold-leaf panels, framed in lacquer. */
 {
   const IN=S/2-DU-0.002, top=topBoardY+BOARD_T;   // inner half-width, height of the walls' top
   const sand=canvasTex(512,512,(g,w,h)=>{
@@ -739,35 +734,15 @@ const warm=new THREE.PointLight(0xffb15a,0.9,4,2); warm.position.set(0,H_TOTAL*0
     const m=new THREE.Mesh(new THREE.CylinderGeometry(r*1.25,r*1.35,0.006,20),moss); m.position.set(gx,SAND_Y+0.003,gz); scene.add(m);
   }
   // gold-leaf walls
-  const MOTIF=['pine','bamboo','plum','wave'];
-  const wallTex=k=>canvasTex(512,1024,(g,w,h)=>{
+  const wallTex=()=>canvasTex(512,1024,(g,w,h)=>{
     const t=32; for(let y=0;y<h;y+=t) for(let x=0;x<w;x+=t){ const v=R(0.86,1.06); g.fillStyle=`rgb(${200*v|0},${160*v|0},${78*v|0})`; g.fillRect(x,y,t-1,t-1); }   // gold-leaf squares
-    g.fillStyle='rgba(255,250,235,.55)'; for(const cy of [0.18,0.5,0.8]) { g.beginPath(); g.ellipse(w*R(.3,.7),h*cy,w*0.42,h*0.035,0,0,7); g.fill(); }   // drifting clouds
-    g.fillStyle=g.strokeStyle='#1d2a1c'; g.lineCap='round';
-    const m=MOTIF[k];
-    if(m==='pine'){ g.lineWidth=18; g.strokeStyle='#2b1d14'; g.beginPath(); g.moveTo(w*0.2,h); g.bezierCurveTo(w*0.1,h*0.6,w*0.6,h*0.55,w*0.45,h*0.25); g.stroke();
-      g.fillStyle='#24361f'; for(const [x,y,r] of [[.45,.25,.17],[.25,.45,.14],[.65,.5,.15],[.4,.65,.12]]){ g.beginPath(); g.ellipse(w*x,h*y,w*r,w*r*0.45,0,0,7); g.fill(); } }
-    if(m==='bamboo'){ for(const x of [0.25,0.5,0.72]){ g.fillStyle='#3d5a32'; g.fillRect(w*x-9,0,18,h); for(let y=40;y<h;y+=150){ g.fillStyle='#24361f'; g.fillRect(w*x-11,y,22,5); } }
-      g.fillStyle='#2f4a28'; for(let i=0;i<40;i++){ g.save(); g.translate(w*pick([0.25,0.5,0.72]),R(0,h*0.7)); g.rotate(R(-1.2,1.2)); g.beginPath(); g.ellipse(30,0,32,6,0,0,7); g.fill(); g.restore(); } }
-    if(m==='plum'){ g.lineWidth=12; g.strokeStyle='#2b1d14'; g.beginPath(); g.moveTo(w*0.1,h*0.9); g.lineTo(w*0.35,h*0.6); g.lineTo(w*0.3,h*0.35); g.lineTo(w*0.6,h*0.15); g.moveTo(w*0.35,h*0.6); g.lineTo(w*0.75,h*0.45); g.stroke();
-      for(let i=0;i<26;i++){ const x=R(.15,.8)*w, y=R(.12,.85)*h; g.fillStyle='#f1f0ea'; for(let p=0;p<5;p++){ g.beginPath(); g.arc(x+Math.cos(p*1.256)*7,y+Math.sin(p*1.256)*7,6,0,7); g.fill(); } g.fillStyle='#c9302c'; g.beginPath(); g.arc(x,y,3,0,7); g.fill(); } }
-    if(m==='wave'){ for(let row=0;row<14;row++) for(let i=-1;i<9;i++){ const x=i*64+(row%2)*32, y=h*0.45+row*40; for(let r=32;r>0;r-=8){ g.fillStyle=r%16?'#1f3657':'#e9e0c8'; g.beginPath(); g.arc(x,y,r,Math.PI,0); g.fill(); } } }
   });
   for(let k=0;k<4;k++){
-    const a=k*Math.PI/2, wall=new THREE.Mesh(new THREE.PlaneGeometry(IN*2,top-SAND_Y),new THREE.MeshStandardMaterial({map:wallTex(k),roughness:0.45,metalness:0.35}));
+    const a=k*Math.PI/2, wall=new THREE.Mesh(new THREE.PlaneGeometry(IN*2,top-SAND_Y),new THREE.MeshStandardMaterial({map:wallTex(),roughness:0.45,metalness:0.35}));
     wall.position.set(Math.sin(a)*IN,(top+SAND_Y)/2,Math.cos(a)*IN); wall.rotation.y=a+Math.PI; wall.receiveShadow=true; scene.add(wall);
     const fr=new THREE.Group(); fr.position.copy(wall.position); fr.rotation.y=wall.rotation.y; scene.add(fr);
     box(IN*2,0.025,0.02,matLacquer,0,(top-SAND_Y)/2-0.0125,0.01,fr); box(IN*2,0.025,0.02,matLacquer,0,-(top-SAND_Y)/2+0.0125,0.01,fr);
   }
-  // round paper lantern hanging on a cord from the top frame
-  const LY=H_TOTAL*0.62;
-  const lprof=[]; for(let i=0;i<=20;i++){ const t=0.12+0.76*i/20; lprof.push([0.012+0.15*Math.pow(Math.sin(Math.PI*t),0.8),-0.16+0.32*(i/20)]); }
-  const shade=lathe(lprof,new THREE.MeshStandardMaterial({color:C('#f3ead4'),emissive:new THREE.Color(1,0.8,0.55),emissiveIntensity:1.3,roughness:0.9,side:THREE.DoubleSide}),40);
-  shade.castShadow=false; shade.position.y=LY; scene.add(shade);
-  for(let i=2;i<20;i+=2){ const [r,y]=lprof[i]; const rib=new THREE.Mesh(new THREE.TorusGeometry(r+0.0015,0.0012,4,40),matDark); rib.rotation.x=Math.PI/2; rib.position.y=LY+y; scene.add(rib); }
-  const cord=new THREE.Mesh(new THREE.CylinderGeometry(0.002,0.002,H_TOTAL-LY-0.16,6),matDark); cord.position.y=(H_TOTAL+LY+0.16)/2; scene.add(cord);
-  box(0.05,0.012,0.05,matGold,0,LY+0.165,0,scene).castShadow=false;
-  warm.position.set(0,LY,0);
 }
 
 /* ---------- camera rig ---------- */
@@ -837,7 +812,7 @@ function tick(){
   const sp=Math.sin(cur.phi);
   camera.position.set(cur.target.x+cur.r*sp*Math.sin(cur.theta),cur.target.y+cur.r*Math.cos(cur.phi),cur.target.z+cur.r*sp*Math.cos(cur.theta));
   camera.lookAt(cur.target);
-  warm.intensity=0.9+0.05*Math.sin(time*3.1);
+  warm.intensity=0.5+0.03*Math.sin(time*3.1);
   renderer.render(scene,camera);
   if(first){ first=false; loadingEl.style.opacity='0'; setTimeout(()=>loadingEl.remove(),1000); }
 }
