@@ -1999,7 +1999,7 @@ function buildInnerInterior(z0,z1){
     // over it blackens the surface but not the carved strokes, so the character stands out (as in a rubbing).
     const plank=(g,w,h)=>drawWood(g,w,h,{base:'#7a5232',dark:'40,22,10',light:'190,140,90',lines:20,wave:1});
     const carved=(g,w,h,fill)=>vtext(g,SAFE_CODE,w/2,h*0.06,h*0.88,w*0.62,fill,'700');   // the four characters, top to bottom
-    const plaqueMat=std({map:canvasTex(120,330,(g,w,h)=>{ plank(g,w,h); carved(g,w,h,'rgba(20,10,4,.13)'); },{repeat:false}),roughness:0.9},0.1);
+    const plaqueMat=std({map:canvasTex(120,330,(g,w,h)=>{ plank(g,w,h); carved(g,w,h,'rgba(20,10,4,.035)'); },{repeat:false}),roughness:0.9},0.1);
     const plaque=new Mesh(new THREE.BoxGeometry(0.13,0.36,0.006),plaqueMat); plaque.position.set(scX,1.2,z1+0.004); plaque.receiveShadow=true; S.add(plaque);
     lockable(plaque,'plaque',()=>{ plaqueMat.map=canvasTex(120,330,(g,w,h)=>{
         const t=document.createElement('canvas'); t.width=w; t.height=h; const tg=t.getContext('2d'); plank(tg,w,h);
