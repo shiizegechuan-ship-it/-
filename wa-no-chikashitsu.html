@@ -586,28 +586,31 @@ function fillShelfUnit(y,clearH){
 }
 
 /* ---------- shoji lights: 市松・七宝・矢絣・鱗 ----------
-   One traditional pattern per face, laid straight onto the outer side panel of each corner shelf (no frame).
-   Only the motif (the white part of the SVG tile) is drawn; the ground is fully transparent, so the panel shows through.
-   LIGHT_PATTERNS: {path: SVG path, vw/vh: viewBox, evenodd?, cols: tiles across the panel width (smaller = bigger pattern)}.
-   Colour of the motif: LIGHT_COLOR. Glow: emissiveIntensity and the PointLight below. */
-const LIGHT_COLOR='#fff3dc';
+   One traditional pattern per face, laid straight onto the outer side of each corner shelf (no frame). It covers the
+   shelf's side panel and the neighbouring post on the same plane, so the whole strip of that face glows.
+   Only the motif (the white part of the SVG tile) is drawn; the ground is fully transparent, so the wood shows through.
+   LIGHT_PATTERNS: {path: SVG path, vw/vh: viewBox, evenodd?, cols: tiles across the width}. cols is set so every
+   pattern shows exactly 2 columns (市松 and 矢絣 already hold 2 per tile). Rows are rounded to whole tiles.
+   Colour: LIGHT_COLOR (warm white). Glow: LIGHT_GLOW and the PointLight below. */
+const LIGHT_COLOR='#ffe8c6', LIGHT_GLOW=0.6;
 const LIGHT_PATTERNS=[
   {name:'市松',path:'M0 0H1V1H0zM1 1H2V2H1z',vw:2,vh:2,cols:1},
-  {name:'七宝',path:'m1 0a1 1 0 0 1 0 2 1 1 0 0 1 0-2 1 1 0 0 1-1 1 1 1 0 0 1 1 1 1 1 0 0 1 1-1 1 1 0 0 1-1-1z',vw:2,vh:2,cols:1},
+  {name:'七宝',path:'m1 0a1 1 0 0 1 0 2 1 1 0 0 1 0-2 1 1 0 0 1-1 1 1 1 0 0 1 1 1 1 1 0 0 1 1-1 1 1 0 0 1-1-1z',vw:2,vh:2,cols:2},
   {name:'矢絣',path:'m0 0l19 19h2l19-19v60l-19 19h-2l-19-19zm19-60h2v240h-2zm21 0l19 19h2l19-19v60l-19 19h-2l-19-19zm19 0h2v240h-2zm-19 120l19 19h2l19-19v60l-19 19h-2l-19-19z',vw:80,vh:120,evenodd:true,cols:1},
-  {name:'鱗',path:'m4 0 8 14h-16zm4 7h-8l4 7z',vw:8,vh:14,cols:1},
+  {name:'鱗',path:'m4 0 8 14h-16zm4 7h-8l4 7z',vw:8,vh:14,cols:2},
 ];
 function shojiLight(parent,face,cx,cy,zFace,w,h){
   const P=LIGHT_PATTERNS[face%LIGHT_PATTERNS.length], px=256, py=Math.round(px*P.vh/P.vw);
   const tex=canvasTex(px,py,g=>{   // transparent canvas: motif only
-    g.scale(px/P.vw,py/P.vh); g.fillStyle=LIGHT_COLOR; g.fill(new Path2D(P.path),P.evenodd?'evenodd':'nonzero');
+    g.scale(px/P.vw,py/P.vh); g.fillStyle=LIGHT_COLOR; const path=new Path2D(P.path);
+    for(const dx of [-1,0,1]) for(const dy of [-1,0,1]){ g.save(); g.translate(dx*P.vw,dy*P.vh); g.fill(path,P.evenodd?'evenodd':'nonzero'); g.restore(); }   // also the neighbours' overhang, so the tile wraps without a seam
   });
-  const tileW=w/P.cols, tileH=tileW*P.vh/P.vw;
-  tex.repeat.set(P.cols,h/tileH);
-  const paper=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshStandardMaterial({map:tex,transparent:true,alphaTest:0.4,
-    emissive:new THREE.Color(1,0.78,0.5),emissiveMap:tex,emissiveIntensity:1.1,roughness:0.9}));
-  paper.rotation.y=Math.PI; paper.position.set(cx,cy,zFace-0.0015); parent.add(paper);   // faces outward (-z), just in front of the panel to avoid z-fighting
-  const glow=new THREE.PointLight(0xffc88a,0.35,1.3,2); glow.position.set(cx,cy,zFace-0.2); parent.add(glow);
+  const tileH=(w/P.cols)*P.vh/P.vw;
+  tex.repeat.set(P.cols,Math.max(1,Math.round(h/tileH)));
+  const paper=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshStandardMaterial({map:tex,alphaTest:0.5,
+    emissive:C(LIGHT_COLOR),emissiveMap:tex,emissiveIntensity:LIGHT_GLOW,roughness:1}));
+  paper.rotation.y=Math.PI; paper.position.set(cx,cy,zFace-0.002); parent.add(paper);   // faces outward (-z), just in front of the wood to avoid z-fighting
+  const glow=new THREE.PointLight(0xffe2bc,0.25,1.0,2); glow.position.set(cx,cy,zFace-0.15); parent.add(glow);   // soft warm spill
 }
 
 function buildUnit(parent,face){
@@ -653,12 +656,13 @@ function buildUnit(parent,face){
   // 窪みの短辺側(手前)に板を設け、独立した小さな棚として見えるようにする(金縁で額装)
   {
     const panelW=nW, panelCY=KICK_H+postSpan/2, panelZ=zOuter+BOARD_T+0.003, fm=0.01;
-    box(panelW,postSpan,BOARD_T,matDark,notchCx,panelCY,zOuter+BOARD_T/2,parent);
+    box(SHRINK,postSpan,BOARD_T,matDark,notchCx,panelCY,zOuter+BOARD_T/2,parent);   // full width: meets the post flush (no seam behind the light)
     box(panelW-2*fm,0.006,0.004,matGold,notchCx,panelCY+postSpan/2-fm-0.003,panelZ,parent);
     box(panelW-2*fm,0.006,0.004,matGold,notchCx,panelCY-postSpan/2+fm+0.003,panelZ,parent);
     box(0.006,postSpan-2*fm,0.004,matGold,notchCx-panelW/2+fm+0.003,panelCY,panelZ,parent);
     box(0.006,postSpan-2*fm,0.004,matGold,notchCx+panelW/2-fm-0.003,panelCY,panelZ,parent);
-    shojiLight(parent,face,notchCx,panelCY,zOuter,nW,postSpan);   // 外側の面に障子張りのライト
+    const lx0=-S/2, lx1=xA+POST;   // 小物棚の側板+隣の見附柱(同じ面)
+    shojiLight(parent,face,(lx0+lx1)/2,panelCY,zOuter,lx1-lx0,postSpan);   // 外側の面に障子張りのライト
   }
   // 台輪(黒漆)・金帯・天板 ― 四隅の凹みごと覆い、上下の縁は大きな正方形にする
   box(LU_FULL+0.06,KICK_H,DU+0.06,matLacquer,cxFull,KICK_H/2,czMid,parent);
