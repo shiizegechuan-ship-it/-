@@ -1059,11 +1059,11 @@ let roomView=false, roomRide=null, roomFov=60, innerVisited=false;   // innerVis
 let underScene=null;   // the stairwell under the tatami (built by openTrap)
 
 /* ---------- camera / interaction ---------- */
-const home={theta:-0.04,phi:1.42,r:4.0,target:new Vector3(-0.05,1.0,0.4)};   // framed to take in the scroll (left) and the andon (right) as well as the shelf
+const home={theta:0.3,phi:1.43,r:4.0,target:new Vector3(0.05,1.12,0.4)};   // a slight angle from the right, framed close on the shelf
 const goal={theta:home.theta,phi:home.phi,r:home.r,target:home.target.clone()};
 const cur={theta:home.theta,phi:home.phi,r:home.r+1.4,target:home.target.clone()};
-function fitRadius(){ const a=camera.aspect, t=Math.tan(THREE.MathUtils.degToRad(camera.fov/2)); return clamp(2.85/(t*a),4.0,7.5); }   // 2.85: half the width to keep in view (scroll to andon)
-function baseFov(){ return camera.aspect<0.9?72:38; }   // portrait screens need a wider lens to take in the room
+function fitRadius(){ const a=camera.aspect, t=Math.tan(THREE.MathUtils.degToRad(camera.fov/2)); return clamp((a<0.9?1.85:2.55)/(t*a),3.2,7.5); }   // 2.55: half the width to keep in view
+function baseFov(){ return camera.aspect<0.9?62:38; }   // portrait screens need a wider lens to take in the room
 function resize(){
   const w=host.clientWidth||window.innerWidth, h=host.clientHeight||window.innerHeight;
   renderer.setSize(w,h); camera.aspect=w/h; camera.fov=baseFov(); camera.updateProjectionMatrix();
@@ -1380,8 +1380,8 @@ let TRAP_X_G=0, TRAP_W_G=1.8, TRAP_ZF_G=0.9, TRAP_ZN_G=1.8;
 const STAIR_G={};
 const catcherMat=std({color:0x000000},0);
 catcherMat.transparent=true; catcherMat.opacity=0; catcherMat.depthWrite=false;
-const trapCatcher=new Mesh(new PlaneGeometry(3.4,1.9),catcherMat);
-trapCatcher.rotation.x=-PI/2; trapCatcher.position.set(0,0.002,1.4);
+const trapCatcher=new Mesh(new PlaneGeometry(ROOM_W,ROOM_D),catcherMat);   // the whole tatami floor counts the taps
+trapCatcher.rotation.x=-PI/2; trapCatcher.position.set(0,0.002,ROOM_D/2);
 scene.add(trapCatcher); pickables.push(trapCatcher);
 // sumi-e print: a pale moon behind a pine bough, for the stairwell
 function drawSumiPine(g,w,h){
@@ -2104,15 +2104,16 @@ function buildInnerInterior(z0,z1){
     box(0.13,0.006,0.1,stone,-0.025,0.015,0,sz);                                                  // the grinding face (陸)
     for(const z of [-0.055,0.055]) box(0.2,0.014,0.01,stone,0,0.019,z,sz);                       // rim
     for(const x of [-0.095,0.095]) box(0.01,0.014,0.1,stone,x,0.019,0,sz);
-    const inkMat=new THREE.MeshStandardMaterial({color:C('#030202'),roughness:0.55,envMap:envTex,envMapIntensity:0.12});   // deep black; its wet shine comes from the glints below
+    const inkMat=new THREE.MeshBasicMaterial({color:new THREE.Color(0.012,0.01,0.008)});   // ink is black: unlit, so no light greys it -- the wet look comes from the edge highlights
     const ink=new Group(); ink.visible=false; sz.add(ink);
-    const pool=new Mesh(new PlaneGeometry(0.06,0.1),inkMat); pool.rotation.x=-PI/2; pool.position.set(0.06,0.0165,0); ink.add(pool);
-    const film=new Mesh(new PlaneGeometry(0.128,0.098),inkMat); film.rotation.x=-PI/2; film.position.set(-0.025,0.0182,0); ink.add(film);
-    // the highlight: a soft reflected glint of the lantern on the wet ink, so it reads at a glance
-    const glintTex=canvasTex(128,64,(g,w,h)=>{ const r=g.createRadialGradient(w/2,h/2,0,w/2,h/2,w/2); r.addColorStop(0,'rgba(255,240,215,.8)'); r.addColorStop(.35,'rgba(255,225,180,.3)'); r.addColorStop(1,'rgba(255,220,170,0)'); g.fillStyle=r; g.fillRect(0,0,w,h); },{repeat:false});
-    const glint=new Mesh(new PlaneGeometry(0.045,0.018),new THREE.MeshBasicMaterial({map:glintTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
-    glint.rotation.x=-PI/2; glint.rotation.z=0.4; glint.position.set(0.02,0.0187,0.012); ink.add(glint);
-    const glint2=glint.clone(); glint2.scale.set(0.5,0.6,1); glint2.position.set(0.07,0.017,-0.02); ink.add(glint2);
+    const pool=new Mesh(new PlaneGeometry(0.05,0.1),inkMat); pool.rotation.x=-PI/2; pool.position.set(0.065,0.0165,0); ink.add(pool);   // the well (海) only
+    // highlights: ink climbs the well's walls (surface tension), so light catches in thin lines just inside two adjacent edges
+    const lineTex=canvasTex(128,8,(g,w,h)=>{ const r=g.createLinearGradient(0,0,w,0); r.addColorStop(0,'rgba(255,235,205,0)'); r.addColorStop(.2,'rgba(255,235,205,.85)'); r.addColorStop(.8,'rgba(255,235,205,.85)'); r.addColorStop(1,'rgba(255,235,205,0)');
+      g.fillStyle=r; g.fillRect(0,0,w,h); const v=g.createLinearGradient(0,0,0,h); v.addColorStop(0,'rgba(0,0,0,1)'); v.addColorStop(.5,'rgba(0,0,0,0)'); v.addColorStop(1,'rgba(0,0,0,1)');
+      g.globalCompositeOperation='destination-out'; g.fillStyle=v; g.fillRect(0,0,w,h); },{repeat:false});
+    const lineMat=new THREE.MeshBasicMaterial({map:lineTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});
+    const hl1=new Mesh(new PlaneGeometry(0.044,0.0022),lineMat); hl1.rotation.x=-PI/2; hl1.position.set(0.065,0.0168,-0.0455); ink.add(hl1);   // along the far edge
+    const hl2=new Mesh(new PlaneGeometry(0.092,0.0022),lineMat); hl2.rotation.x=-PI/2; hl2.rotation.z=PI/2; hl2.position.set(0.0865,0.0168,0); ink.add(hl2);   // along the end edge
     sz.userData.innerAct=()=>{
       if(!USES.suzuri.open){ if(useAt('suzuri')) ink.visible=true; return; }
       if(selItem==='fude'){ dropItem('fude'); toast('筆を墨汁に浸すと、穂先がたっぷりと墨を含んだ。'); setTimeout(()=>giveItem('fudeSumi'),1400); renderItems(); }
