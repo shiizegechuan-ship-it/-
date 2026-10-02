@@ -7,7 +7,7 @@ three.js（r128、cdnjs から読み込み）製の 3D 脱出ゲーム。書院�
 | ファイル | 内容 |
 |---|---|
 | `wa-no-shodana.html` | 本体（約150KB・1ファイル完結） |
-| `wa-no-chikashitsu.html` | 地下の扉の先のページ。今は「準備中」の仮ページ。**次に作る空間** |
+| `wa-no-chikashitsu.html` | 地下の扉の先のページ「空飛ぶ本棚の大書庫」(段階1〜6まで作成。詳細は `wa-no-chikashitsu-handoff.md`) |
 | `wa-no-shodana-handoff.md` | このメモ |
 
 - 2つの HTML は同じフォルダに置く（地下の扉から相対リンクで移動するため）。

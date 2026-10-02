@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>地下 ― 風車組み本棚(試作)</title>
+<title>地下 ― 空飛ぶ本棚の大書庫(試作)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@500;700&display=swap">
@@ -38,19 +38,35 @@ canvas{display:block}
 #loading{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);color:var(--muted);
   letter-spacing:.4em;font-size:14px;transition:opacity .9s;z-index:5}
 @media (prefers-reduced-motion: reduce){ #loading,.hint{transition:none} }
+/* 大書庫 mode: buttons under the title, the on-screen stick on touch screens */
+body.lib .shelfOnly, body:not(.lib) .libOnly{display:none}
+body.lib .bar{left:20px;transform:none;top:calc(66px + env(safe-area-inset-top,0px));bottom:auto;padding:0;justify-content:flex-start}
+body.lib .bar button{font-size:12px;padding:7px 12px}
+body.lib .hint{top:calc(110px + env(safe-area-inset-top,0px))}
+.pad{display:none}
+body.lib.touch .pad{display:block}
+.stick{position:absolute;left:calc(22px + env(safe-area-inset-left,0px));bottom:calc(26px + env(safe-area-inset-bottom,0px));width:120px;height:120px;border-radius:50%;
+  border:1px solid var(--line);background:rgba(22,15,10,.35);pointer-events:auto;touch-action:none}
+.knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(214,176,98,.45);border:1px solid #e0b96a;pointer-events:none}
+.ud{position:absolute;right:calc(22px + env(safe-area-inset-right,0px));bottom:calc(26px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px}
+.ud button{width:64px;height:56px;font-size:20px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:4px;pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <div class="hud">
-  <div class="title"><div class="seal">卍</div><div><b>風車組み本棚</b><small>直方体4棟を回転対称に組む ― 試作</small></div></div>
+  <div class="title"><div class="seal">卍</div><div><b id="ttl">空飛ぶ本棚の大書庫</b><small id="sub">地下の書庫 ― 試作</small></div></div>
   <div class="hint" id="hint">ドラッグで見回す ／ ホイール・ピンチで寄る<br>同じ直方体の本棚を4棟、90度ずつ回して噛み合わせています<br>外側に出る側を縮めてできた四隅の凹みを、そのまま浅い棚にしています</div>
   <div class="bar">
-    <button id="bFace" type="button">次の棟へ</button>
-    <button id="bAuto" type="button">自動回転</button>
-    <button id="bReset" type="button">視点を戻す</button>
+    <button id="bFace" class="shelfOnly" type="button">次の棟へ</button>
+    <button id="bAuto" class="shelfOnly" type="button">自動回転</button>
+    <button id="bReset" class="shelfOnly" type="button">視点を戻す</button>
+    <button id="bLib" class="shelfOnly" type="button">大書庫へ</button>
+    <button id="bShelf" class="libOnly" type="button">本棚を眺める</button>
     <button id="bBack" type="button" onclick="location.href='wa-no-shodana.html'">書斎へ戻る</button>
   </div>
+  <div class="pad"><div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+    <div class="ud"><button id="bUp" type="button" aria-label="上昇">▲</button><button id="bDown" type="button" aria-label="下降">▼</button></div></div>
 </div>
 <div id="loading">読み込み中</div>
 
@@ -680,7 +696,8 @@ const warm=new THREE.PointLight(0xffb15a,0.5,4,2); warm.position.set(0,H_TOTAL*0
 
 /* ---------- inside the hollow centre (seen from above, through the top frame) ----------
    floor: a karesansui of raked white sand with three stones and moss, in a black-lacquer frame;
-   walls: plain gold-leaf panels, framed in lacquer. */
+   walls: plain gold-leaf panels, framed in lacquer. Everything goes into HOLLOW (also copied into the library's shelf template). */
+const HOLLOW=new THREE.Group(); scene.add(HOLLOW);
 {
   const IN=S/2-DU-0.002, top=topBoardY+BOARD_T;   // inner half-width, height of the walls' top
   const sand=canvasTex(512,512,(g,w,h)=>{
@@ -695,17 +712,17 @@ const warm=new THREE.PointLight(0xffb15a,0.5,4,2); warm.position.set(0,H_TOTAL*0
   sand.repeat.set(1,1);
   const SAND_Y=0.1;
   const garden=new THREE.Mesh(new THREE.PlaneGeometry(IN*2-0.04,IN*2-0.04),new THREE.MeshStandardMaterial({map:sand,bumpMap:sand,bumpScale:0.4,roughness:0.95}));
-  garden.rotation.x=-Math.PI/2; garden.position.y=SAND_Y; garden.receiveShadow=true; scene.add(garden);
-  for(const sx of [-1,1]){ box(IN*2,0.02,0.02,matLacquer,0,SAND_Y+0.006,sx*(IN-0.01),scene); box(0.02,0.02,IN*2,matLacquer,sx*(IN-0.01),SAND_Y+0.006,0,scene); }
-  box(IN*2,SAND_Y,IN*2,matLacquer,0,SAND_Y/2-0.001,0,scene).receiveShadow=true;
+  garden.rotation.x=-Math.PI/2; garden.position.y=SAND_Y; garden.receiveShadow=true; HOLLOW.add(garden);
+  for(const sx of [-1,1]){ box(IN*2,0.02,0.02,matLacquer,0,SAND_Y+0.006,sx*(IN-0.01),HOLLOW); box(0.02,0.02,IN*2,matLacquer,sx*(IN-0.01),SAND_Y+0.006,0,HOLLOW); }
+  box(IN*2,SAND_Y,IN*2,matLacquer,0,SAND_Y/2-0.001,0,HOLLOW).receiveShadow=true;
   const stoneMat=new THREE.MeshStandardMaterial({color:C('#4a4743'),roughness:0.85,flatShading:true}), moss=new THREE.MeshStandardMaterial({color:C('#3f5a2c'),roughness:1});
   for(const [u,v,r] of [[.32,.38,.11],[.7,.66,.075],[.62,.26,.05]]){
     const gx=(u-0.5)*(IN*2-0.04), gz=(v-0.5)*(IN*2-0.04);
     const geo=new THREE.DodecahedronGeometry(r,1), pp=geo.attributes.position;
     for(let i=0;i<pp.count;i++) pp.setXYZ(i,pp.getX(i)*R(0.85,1.2),pp.getY(i)*R(0.5,0.75),pp.getZ(i)*R(0.85,1.2));
     geo.computeVertexNormals();
-    const st=new THREE.Mesh(geo,stoneMat); st.position.set(gx,SAND_Y+r*0.25,gz); st.rotation.y=rnd()*6; st.castShadow=st.receiveShadow=true; scene.add(st);
-    const m=new THREE.Mesh(new THREE.CylinderGeometry(r*1.25,r*1.35,0.006,20),moss); m.position.set(gx,SAND_Y+0.003,gz); scene.add(m);
+    const st=new THREE.Mesh(geo,stoneMat); st.position.set(gx,SAND_Y+r*0.25,gz); st.rotation.y=rnd()*6; st.castShadow=st.receiveShadow=true; HOLLOW.add(st);
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(r*1.25,r*1.35,0.006,20),moss); m.position.set(gx,SAND_Y+0.003,gz); HOLLOW.add(m);
   }
   // gold-leaf walls
   const wallTex=()=>canvasTex(512,1024,(g,w,h)=>{
@@ -713,13 +730,14 @@ const warm=new THREE.PointLight(0xffb15a,0.5,4,2); warm.position.set(0,H_TOTAL*0
   });
   for(let k=0;k<4;k++){
     const a=k*Math.PI/2, wall=new THREE.Mesh(new THREE.PlaneGeometry(IN*2,top-SAND_Y),new THREE.MeshStandardMaterial({map:wallTex(),roughness:0.45,metalness:0.35}));
-    wall.position.set(Math.sin(a)*IN,(top+SAND_Y)/2,Math.cos(a)*IN); wall.rotation.y=a+Math.PI; wall.receiveShadow=true; scene.add(wall);
-    const fr=new THREE.Group(); fr.position.copy(wall.position); fr.rotation.y=wall.rotation.y; scene.add(fr);
+    wall.position.set(Math.sin(a)*IN,(top+SAND_Y)/2,Math.cos(a)*IN); wall.rotation.y=a+Math.PI; wall.receiveShadow=true; HOLLOW.add(wall);
+    const fr=new THREE.Group(); fr.position.copy(wall.position); fr.rotation.y=wall.rotation.y; HOLLOW.add(fr);
     box(IN*2,0.025,0.02,matLacquer,0,(top-SAND_Y)/2-0.0125,0.01,fr); box(IN*2,0.025,0.02,matLacquer,0,-(top-SAND_Y)/2+0.0125,0.01,fr);
   }
 }
 
 /* ---------- camera rig ---------- */
+let mode='lib';   // 'lib' = 大書庫, 'shelf' = 本棚をひとつ眺める
 const home={theta:-0.55,phi:1.35,r:0};
 function fitRadius(){
   const t=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
@@ -731,7 +749,9 @@ const cur={theta:home.theta,phi:home.phi,r:4.4,target:target.clone()};
 let autoRotate=false;
 function resize(){
   const w=host.clientWidth||window.innerWidth, h=host.clientHeight||window.innerHeight;
-  renderer.setSize(w,h); camera.aspect=w/h; camera.fov=camera.aspect<0.9?50:38; camera.updateProjectionMatrix();
+  renderer.setSize(w,h); camera.aspect=w/h;
+  if(mode==='lib'){ camera.fov=camera.aspect<0.9?72:60; camera.far=90; } else { camera.fov=camera.aspect<0.9?50:38; camera.far=60; }
+  camera.updateProjectionMatrix();
   home.r=fitRadius(); if(!moved) goal.r=home.r;
 }
 let moved=false;
@@ -742,11 +762,13 @@ const bAuto=$('bAuto');
 function setAuto(v){ autoRotate=v; bAuto.classList.toggle('on',v); }
 const pointers=new Map(); let pinchPrev=0;
 host.addEventListener('pointerdown',e=>{
+  if(mode!=='shelf') return;
   try{ host.setPointerCapture(e.pointerId); }catch(_){}
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(pointers.size===2){ const [a,b]=[...pointers.values()]; pinchPrev=Math.hypot(a.x-b.x,a.y-b.y); }
 });
 host.addEventListener('pointermove',e=>{
+  if(mode!=='shelf') return;
   const p=pointers.get(e.pointerId); if(!p) return;
   const dx=e.clientX-p.x, dy=e.clientY-p.y; p.x=e.clientX; p.y=e.clientY;
   if(pointers.size===1){
@@ -762,7 +784,7 @@ host.addEventListener('pointermove',e=>{
 function endPointer(e){ pointers.delete(e.pointerId); pinchPrev=0; }
 host.addEventListener('pointerup',endPointer);
 host.addEventListener('pointercancel',endPointer);
-host.addEventListener('wheel',e=>{ e.preventDefault(); goal.r=clamp(goal.r*Math.exp(e.deltaY*0.0012),1.8,8); moved=true; },{passive:false});
+host.addEventListener('wheel',e=>{ if(mode!=='shelf') return; e.preventDefault(); goal.r=clamp(goal.r*Math.exp(e.deltaY*0.0012),1.8,8); moved=true; },{passive:false});
 
 let faceIdx=0;
 const FACE_ANGLES=[0,Math.PI/2,Math.PI,-Math.PI/2];
@@ -773,13 +795,325 @@ bAuto.addEventListener('click',()=>setAuto(!autoRotate));
 $('bReset').addEventListener('click',()=>{
   goal.theta=home.theta; goal.phi=home.phi; goal.r=home.r; goal.target.copy(target); setAuto(false); moved=false;
 });
-setTimeout(()=>{ $('hint').style.opacity='0'; },12000);
+
+/* =====================================================================================
+   空飛ぶ本棚の大書庫(段階1〜6)
+   1 本棚を増やす … 上で作った1基(ASSEMBLY + HOLLOW)を、材質ごとに1つへまとめた「型」(SHELF_T) にし、
+                    InstancedMesh で何百基も描く。近くは実物(NEAR_*)、遠くは正面の写真を貼った箱(インポスター)。
+   2 空間         … 果ての見えない暗い書庫。霧・黒漆の大柱・浮かぶ提灯。
+   3 無限         … 装飾の本棚・柱・提灯は、カメラの周りの格子に「場所から決まる乱数」(hash3) で置くので、
+                    どこまで行っても同じ密度で続き、離れた所は霧に溶ける。
+   4 空飛ぶ椅子   … 黒漆の座椅子+朱の座布団+瑞雲+提灯。三人称(椅子の後ろ)から見る。
+   5 操作         … キーボード・ゲームパッド・画面のスティック/▲▼ボタン・ドラッグで見回し。
+   6 立体迷路     … 4×3×4 部屋の迷路(MAZE)。壁はすべて本棚。当たり判定あり。
+   ※ 謎解き(7)・出口(8)はまだ。MAZE.goal に「入口から最も遠い部屋」を計算済み。
+   ===================================================================================== */
+const LIB={NEAR_R:7, NEAR_MAX:30, FAR_MAX:2000, FOG:0x0b0806, FOG_D:0.045};
+
+// ---- 1. the shelf as one template: one geometry with a group per material ----
+function mergeToTemplate(roots){
+  const buckets=new Map(), v=new THREE.Vector3(), n=new THREE.Vector3(), nm=new THREE.Matrix3();
+  for(const root of roots){ root.updateMatrixWorld(true); root.traverse(o=>{
+    if(!o.isMesh||!o.visible) return;
+    const g=o.geometry.index?o.geometry.toNonIndexed():o.geometry;
+    const P=g.attributes.position, N=g.attributes.normal, U=g.attributes.uv, K=g.attributes.color;
+    const M=o.matrixWorld, order=M.determinant()<0?[0,2,1]:[0,1,2]; nm.getNormalMatrix(M);
+    const multi=Array.isArray(o.material), groups=multi&&g.groups.length?g.groups:[{start:0,count:P.count,materialIndex:0}];
+    for(const gr of groups){
+      const mat=multi?o.material[gr.materialIndex]:o.material; if(!mat) continue;
+      let b=buckets.get(mat); if(!b) buckets.set(mat,b={p:[],n:[],u:[],c:[]});
+      const end=Math.min(gr.start+gr.count,P.count);
+      for(let t=gr.start;t+2<end;t+=3) for(const j of order){ const i=t+j;
+        v.fromBufferAttribute(P,i).applyMatrix4(M); b.p.push(v.x,v.y,v.z);
+        if(N){ n.fromBufferAttribute(N,i).applyMatrix3(nm).normalize(); b.n.push(n.x,n.y,n.z); } else b.n.push(0,1,0);
+        if(U) b.u.push(U.getX(i),U.getY(i)); else b.u.push(0,0);
+        if(K) b.c.push(K.getX(i),K.getY(i),K.getZ(i)); else b.c.push(1,1,1);
+      }
+    }
+  }); }
+  let total=0; buckets.forEach(b=>total+=b.p.length/3);
+  const P=new Float32Array(total*3), N=new Float32Array(total*3), U=new Float32Array(total*2), K=new Float32Array(total*3);
+  const geo=new THREE.BufferGeometry(), mats=[]; let off=0;
+  buckets.forEach((b,mat)=>{ const c=b.p.length/3; P.set(b.p,off*3); N.set(b.n,off*3); U.set(b.u,off*2); K.set(b.c,off*3); geo.addGroup(off,c,mats.length); mats.push(mat); off+=c; });
+  geo.setAttribute('position',new THREE.BufferAttribute(P,3)); geo.setAttribute('normal',new THREE.BufferAttribute(N,3));
+  geo.setAttribute('uv',new THREE.BufferAttribute(U,2)); geo.setAttribute('color',new THREE.BufferAttribute(K,3));
+  geo.computeBoundingSphere();
+  return {geo,mats};
+}
+const SHELF_T=mergeToTemplate([ASSEMBLY,HOLLOW]);
+const SHELF_HX=(S+0.08)/2, SHELF_HY=H_TOTAL/2;   // half size of one shelf (for collisions)
+
+// far shelves: a box wearing a photo of the real shelf (taken once, from the lit side)
+function bakeImpostor(){
+  const rt=new THREE.WebGLRenderTarget(256,512,{minFilter:THREE.LinearMipmapLinearFilter,generateMipmaps:true});
+  rt.texture.encoding=THREE.sRGBEncoding;
+  const cam=new THREE.OrthographicCamera(-SHELF_HX,SHELF_HX,H_TOTAL+0.01,-0.01,0.1,20); cam.position.set(0,0,6);
+  const bg=scene.background; floor.visible=false; scene.background=new THREE.Color(0x050403);
+  renderer.setRenderTarget(rt); renderer.render(scene,cam); renderer.setRenderTarget(null);
+  floor.visible=true; scene.background=bg;
+  return rt.texture;
+}
+const IMP_GEO=new THREE.BoxGeometry(SHELF_HX*2,H_TOTAL,SHELF_HX*2).translate(0,H_TOTAL/2,0);
+const impSide=new THREE.MeshBasicMaterial({map:bakeImpostor(),color:C('#8a7c6a')}), impCap=new THREE.MeshBasicMaterial({color:C('#0c0a08')});
+const IMP_MATS=[impSide,impSide,impCap,impCap,impSide,impSide];
+
+// ---- 2. the space ----
+const libScene=new THREE.Scene();
+libScene.background=new THREE.Color(LIB.FOG); libScene.fog=new THREE.FogExp2(LIB.FOG,LIB.FOG_D);
+libScene.add(new THREE.HemisphereLight(0xffdcb0,0x140d08,0.6));
+const moon=new THREE.DirectionalLight(0xffe2bc,0.8); moon.position.set(-0.4,1,0.3); libScene.add(moon);
+
+const nearShelves=new THREE.InstancedMesh(SHELF_T.geo,SHELF_T.mats,LIB.NEAR_MAX);
+const farShelves=new THREE.InstancedMesh(IMP_GEO,IMP_MATS,LIB.FAR_MAX);
+for(const m of [nearShelves,farShelves]){ m.frustumCulled=false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); libScene.add(m); }
+
+// pillars: black lacquer with gold bands, endless upward and downward (in the fog)
+const pillarTex=canvasTex(64,256,(g,w,h)=>{ g.fillStyle='#0d0a08'; g.fillRect(0,0,w,h); g.fillStyle='#b8913f'; g.fillRect(0,18,w,10); g.fillRect(0,34,w,3); });
+pillarTex.repeat.set(3,14);
+const PILLAR_H=140, pillars=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.9,0.9,PILLAR_H,20,1,true),
+  new THREE.MeshStandardMaterial({map:pillarTex,roughness:0.35,metalness:0.2}),64);
+pillars.frustumCulled=false; libScene.add(pillars);
+
+// floating paper lanterns (body + lacquer caps in one template)
+const LANT_T=(()=>{ const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.SphereGeometry(0.3,20,14),new THREE.MeshStandardMaterial({color:C('#f2d9ae'),emissive:C('#ffb35c'),emissiveIntensity:1.2,roughness:0.9}));
+  body.scale.y=1.3; g.add(body);
+  for(const y of [0.38,-0.38]) box(0.24,0.05,0.24,matLacquer,0,y,0,g);
+  return mergeToTemplate([g]); })();
+const lanterns=new THREE.InstancedMesh(LANT_T.geo,LANT_T.mats,400); lanterns.frustumCulled=false; libScene.add(lanterns);
+
+// position-seeded random numbers: the same cell always gives the same values (so the world is endless and stable)
+function hash3(a,b,c,s){ let h=Math.imul(a,73856093)^Math.imul(b,19349663)^Math.imul(c,83492791)^Math.imul(s+1,668265263);
+  h=Math.imul(h^(h>>>13),1274126177); h^=h>>>16; return (h>>>0)/4294967296; }
+
+// ---- 6. the maze (cells at odd voxel coords, walls = every closed voxel = one shelf) ----
+const MAZE=(()=>{
+  const nx=4,ny=3,nz=4, X=2*nx+1,Y=2*ny+1,Z=2*nz+1, VX=2.1, VY=2.5;
+  const id=(i,j,k)=>i+X*(j+Y*k), open=new Uint8Array(X*Y*Z), mr=mulberry32(4649);
+  const seen=new Uint8Array(nx*ny*nz), cid=(a,b,c)=>a+nx*(b+ny*c), stack=[[0,0,0]];
+  const DIRS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  seen[0]=1; open[id(1,1,1)]=1;
+  while(stack.length){   // recursive backtracker
+    const [a,b,c]=stack[stack.length-1];
+    const nb=DIRS.map(d=>[a+d[0],b+d[1],c+d[2]]).filter(([x,y,z])=>x>=0&&y>=0&&z>=0&&x<nx&&y<ny&&z<nz&&!seen[cid(x,y,z)]);
+    if(!nb.length){ stack.pop(); continue; }
+    const [x,y,z]=nb[Math.floor(mr()*nb.length)];
+    seen[cid(x,y,z)]=1; open[id(2*x+1,2*y+1,2*z+1)]=1; open[id(a+x+1,b+y+1,c+z+1)]=1; stack.push([x,y,z]);
+  }
+  const entrance=[1,1,0]; open[id(...entrance)]=1;
+  // farthest room from the entrance (for the later puzzle / exit)
+  const dist=new Int16Array(X*Y*Z).fill(-1), q=[entrance]; dist[id(...entrance)]=0; let goal=entrance;
+  while(q.length){ const [i,j,k]=q.shift(), d=dist[id(i,j,k)];
+    if(i%2&&j%2&&k%2&&d>dist[id(...goal)]) goal=[i,j,k];
+    for(const [dx,dy,dz] of DIRS){ const a=i+dx,b=j+dy,c=k+dz; if(a<0||b<0||c<0||a>=X||b>=Y||c>=Z) continue; const t=id(a,b,c); if(open[t]&&dist[t]<0){ dist[t]=d+1; q.push([a,b,c]); } } }
+  const o=new THREE.Vector3(-(X-1)/2*VX,-(Y-1)/2*VY,-(Z-1)/2*VX);
+  const world=(i,j,k,out=new THREE.Vector3())=>out.set(o.x+i*VX,o.y+j*VY,o.z+k*VX);
+  const walls=[], wallAt=new Int32Array(X*Y*Z).fill(-1);
+  for(let k=0;k<Z;k++) for(let j=0;j<Y;j++) for(let i=0;i<X;i++) if(!open[id(i,j,k)]){
+    wallAt[id(i,j,k)]=walls.length; walls.push({p:world(i,j,k),rot:Math.floor(mr()*4)*Math.PI/2,ph:mr()*6.283});
+  }
+  const min=world(0,0,0).subScalar(SHELF_HX), max=world(X-1,Y-1,Z-1).addScalar(SHELF_HX);
+  const voxel=p=>[Math.round((p.x-o.x)/VX),Math.round((p.y-o.y)/VY),Math.round((p.z-o.z)/VX)];
+  const wallIndex=(i,j,k)=>(i<0||j<0||k<0||i>=X||j>=Y||k>=Z)?-1:wallAt[id(i,j,k)];
+  return {X,Y,Z,VX,VY,open,id,walls,world,voxel,wallIndex,entrance,goal,min,max};
+})();
+
+// decorative floating shelves around the maze: one per lattice cell (or none), moving gently
+const DECOR={S:8, SY:7, RX:5, RY:3, MARGIN:3.5};
+function decorAt(a,b,c,time,out){
+  if(hash3(a,b,c,1)>0.55) return false;
+  const x=a*DECOR.S+(hash3(a,b,c,2)-0.5)*2.4, y=b*DECOR.SY+(hash3(a,b,c,3)-0.5)*2, z=c*DECOR.S+(hash3(a,b,c,4)-0.5)*2.4;
+  const m=DECOR.MARGIN; if(x>MAZE.min.x-m&&x<MAZE.max.x+m&&y>MAZE.min.y-m&&y<MAZE.max.y+m&&z>MAZE.min.z-m&&z<MAZE.max.z+m) return false;
+  out.x=x; out.y=y+Math.sin(time*0.45+hash3(a,b,c,5)*6.28)*0.25; out.z=z;
+  out.rot=hash3(a,b,c,6)*6.283+time*(hash3(a,b,c,7)-0.5)*0.12;
+  return true;
+}
+
+// ---- 4. the flying chair ----
+const chair=new THREE.Group(); libScene.add(chair);
+const chairBody=new THREE.Group(); chair.add(chairBody);
+{
+  const red=new THREE.MeshStandardMaterial({color:C('#8c2620'),roughness:0.85});
+  const paper=new THREE.MeshStandardMaterial({color:C('#f2dcb4'),emissive:C('#ffae58'),emissiveIntensity:1.3,roughness:0.9});
+  const cloud=new THREE.MeshStandardMaterial({color:C('#efe2c6'),emissive:C('#6b4a22'),emissiveIntensity:0.5,roughness:0.7});
+  const g=chairBody;
+  box(0.66,0.07,0.62,matLacquer,0,0,0,g); box(0.68,0.012,0.64,matGold,0,-0.035,0,g);        // seat board + gold rim
+  box(0.62,0.4,0.05,matLacquer,0,0.23,0.29,g);                                                  // low backrest (chair faces -z)
+  box(0.5,0.008,0.01,matGold,0,0.38,0.262,g); box(0.5,0.008,0.01,matGold,0,0.08,0.262,g);        // gold lines on the backrest
+  for(const sx of [-1,1]){
+    box(0.06,0.05,0.58,matLacquer,sx*0.33,0.22,0,g);                                            // armrests
+    box(0.04,0.18,0.04,matLacquer,sx*0.33,0.11,-0.22,g); box(0.04,0.18,0.04,matLacquer,sx*0.33,0.11,0.2,g);
+  }
+  const cushion=new THREE.Mesh(new THREE.SphereGeometry(0.5,24,12),red); cushion.scale.set(0.56,0.09,0.54); cushion.position.y=0.06; g.add(cushion);
+  for(const [x,z] of [[-0.27,-0.26],[0.27,-0.26],[-0.27,0.26],[0.27,0.26]]){                   // tassels
+    const t=new THREE.Mesh(new THREE.ConeGeometry(0.018,0.07,8),matGold); t.position.set(x,0.03,z); g.add(t); }
+  for(const [x,y,z,r] of [[-0.2,-0.12,0.02,0.24],[0.2,-0.13,0.08,0.22],[0.02,-0.15,-0.2,0.2],[0,-0.1,0.24,0.18]]){   // auspicious cloud underneath
+    const c=new THREE.Mesh(new THREE.SphereGeometry(r,18,10),cloud); c.scale.y=0.38; c.position.set(x,y,z); g.add(c); }
+  box(0.022,0.62,0.022,matLacquer,0.31,0.41,0.33,g); box(0.022,0.022,0.2,matLacquer,0.31,0.71,0.24,g);   // lantern pole
+  const lan=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.15,0.11),paper); lan.position.set(0.31,0.61,0.15); g.add(lan);
+  box(0.13,0.015,0.13,matLacquer,0.31,0.695,0.15,g); box(0.13,0.015,0.13,matLacquer,0.31,0.525,0.15,g);
+}
+const chairLight=new THREE.PointLight(0xffb468,1.5,9,2); chairLight.position.set(0.31,0.61,0.1); chairBody.add(chairLight);
+// two lanterns and a light at the maze entrance
+{
+  const e=MAZE.world(...MAZE.entrance);
+  for(const sx of [-1,1]){ const m=new THREE.Mesh(LANT_T.geo,LANT_T.mats); m.position.set(e.x+sx*1.2,e.y+0.9,e.z-1.4); libScene.add(m); }
+  const l=new THREE.PointLight(0xffb060,1.6,8,2); l.position.set(e.x,e.y+0.6,e.z-1.6); libScene.add(l);
+}
+
+// ---- 5. player state & controls ----
+const lib={pos:MAZE.world(MAZE.entrance[0],MAZE.entrance[1],-3), vel:new THREE.Vector3(), yaw:Math.PI, pitch:-0.18, dist:3.0,
+  keys:new Set(), joy:{x:0,y:0}, ud:0, chairYaw:Math.PI, R:0.5};
+const libCam={pos:new THREE.Vector3(), look:new THREE.Vector3()};
+const KEYMAP={KeyW:'f',ArrowUp:'f',KeyS:'b',ArrowDown:'b',KeyA:'l',KeyD:'r',ArrowLeft:'tl',ArrowRight:'tr',Space:'u',KeyE:'u',ShiftLeft:'d',ShiftRight:'d',KeyQ:'d'};
+window.addEventListener('keydown',e=>{ if(mode!=='lib') return; const k=KEYMAP[e.code]; if(k){ lib.keys.add(k); e.preventDefault(); } });
+window.addEventListener('keyup',e=>{ const k=KEYMAP[e.code]; if(k) lib.keys.delete(k); });
+window.addEventListener('blur',()=>lib.keys.clear());
+
+// on-screen stick and up/down buttons (shown on touch screens)
+{
+  const stick=$('stick'), knob=$('knob'); let sid=null;
+  const setJoy=e=>{ const r=stick.getBoundingClientRect(), R=r.width/2; let x=(e.clientX-r.left-R)/R, y=(e.clientY-r.top-R)/R; const l=Math.hypot(x,y); if(l>1){x/=l;y/=l;}
+    lib.joy.x=x; lib.joy.y=y; knob.style.transform=`translate(${x*R*0.6}px,${y*R*0.6}px)`; };
+  stick.addEventListener('pointerdown',e=>{ sid=e.pointerId; try{stick.setPointerCapture(sid);}catch(_){} setJoy(e); e.stopPropagation(); });
+  stick.addEventListener('pointermove',e=>{ if(e.pointerId===sid) setJoy(e); });
+  const stop=e=>{ if(e.pointerId!==sid) return; sid=null; lib.joy.x=lib.joy.y=0; knob.style.transform=''; };
+  stick.addEventListener('pointerup',stop); stick.addEventListener('pointercancel',stop);
+  for(const [id,v] of [['bUp',1],['bDown',-1]]){ const b=$(id);
+    b.addEventListener('pointerdown',e=>{ lib.ud=v; try{b.setPointerCapture(e.pointerId);}catch(_){} e.stopPropagation(); });
+    for(const ev of ['pointerup','pointercancel','lostpointercapture']) b.addEventListener(ev,()=>{ if(lib.ud===v) lib.ud=0; }); }
+}
+
+// drag to look / pinch or wheel to move the camera closer
+const libPtr=new Map(); let libPinch=0;
+host.addEventListener('pointerdown',e=>{ if(mode!=='lib') return; try{host.setPointerCapture(e.pointerId);}catch(_){} libPtr.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(libPtr.size===2){ const [a,b]=[...libPtr.values()]; libPinch=Math.hypot(a.x-b.x,a.y-b.y); } });
+host.addEventListener('pointermove',e=>{ if(mode!=='lib') return; const p=libPtr.get(e.pointerId); if(!p) return;
+  const dx=e.clientX-p.x, dy=e.clientY-p.y; p.x=e.clientX; p.y=e.clientY;
+  if(libPtr.size===1){ lib.yaw-=dx*0.005; lib.pitch=clamp(lib.pitch-dy*0.004,-1.2,1.2); }
+  else if(libPtr.size===2){ const [a,b]=[...libPtr.values()], d=Math.hypot(a.x-b.x,a.y-b.y); if(libPinch>0) lib.dist=clamp(lib.dist*libPinch/d,1.4,6); libPinch=d; } });
+for(const ev of ['pointerup','pointercancel']) host.addEventListener(ev,e=>{ libPtr.delete(e.pointerId); libPinch=0; });
+host.addEventListener('wheel',e=>{ if(mode!=='lib') return; e.preventDefault(); lib.dist=clamp(lib.dist*Math.exp(e.deltaY*0.0012),1.4,6); },{passive:false});
+
+// collisions: sphere against the shelves near p (maze voxels around p, and the decor cell p is in)
+const _q=new THREE.Vector3(), _c=new THREE.Vector3(), _d={x:0,y:0,z:0,rot:0};
+function pushOutOfBox(p,cx,cy,cz,hx,hy,hz,r){
+  _c.set(clamp(p.x,cx-hx,cx+hx),clamp(p.y,cy-hy,cy+hy),clamp(p.z,cz-hz,cz+hz));
+  _q.subVectors(p,_c); const d=_q.length();
+  if(d>=r) return false;
+  if(d>1e-6){ p.addScaledVector(_q,(r-d)/d); return true; }
+  const ox=hx-Math.abs(p.x-cx), oy=hy-Math.abs(p.y-cy), oz=hz-Math.abs(p.z-cz);   // centre inside: leave by the shortest way
+  if(ox<oy&&ox<oz) p.x=cx+Math.sign(p.x-cx||1)*(hx+r); else if(oy<oz) p.y=cy+Math.sign(p.y-cy||1)*(hy+r); else p.z=cz+Math.sign(p.z-cz||1)*(hz+r);
+  return true;
+}
+function collide(p,r,time){
+  let hit=false;
+  const [vi,vj,vk]=MAZE.voxel(p);
+  for(let k=vk-1;k<=vk+1;k++) for(let j=vj-1;j<=vj+1;j++) for(let i=vi-1;i<=vi+1;i++){
+    const w=MAZE.wallIndex(i,j,k); if(w<0) continue; const c=MAZE.walls[w].p;
+    hit=pushOutOfBox(p,c.x,c.y,c.z,SHELF_HX,SHELF_HY,SHELF_HX,r)||hit;
+  }
+  const a=Math.round(p.x/DECOR.S), b=Math.round(p.y/DECOR.SY), c=Math.round(p.z/DECOR.S);
+  if(decorAt(a,b,c,time,_d)){   // rotating shelf: treat as an upright cylinder
+    const dx=p.x-_d.x, dz=p.z-_d.z, dh=Math.hypot(dx,dz), R=SHELF_HX*1.42+r;
+    if(dh<R&&Math.abs(p.y-_d.y)<SHELF_HY+r){ if(dh>1e-6){ p.x=_d.x+dx/dh*R; p.z=_d.z+dz/dh*R; } else p.x+=R; hit=true; }
+  }
+  return hit;
+}
+function solidAt(p,pad,time){   // is p inside a shelf (used to stop the camera going through)
+  const [i,j,k]=MAZE.voxel(p), w=MAZE.wallIndex(i,j,k);
+  if(w>=0){ const c=MAZE.walls[w].p; if(Math.abs(p.x-c.x)<SHELF_HX+pad&&Math.abs(p.y-c.y)<SHELF_HY+pad&&Math.abs(p.z-c.z)<SHELF_HX+pad) return true; }
+  if(decorAt(Math.round(p.x/DECOR.S),Math.round(p.y/DECOR.SY),Math.round(p.z/DECOR.S),time,_d)
+     &&Math.hypot(p.x-_d.x,p.z-_d.z)<SHELF_HX*1.42+pad&&Math.abs(p.y-_d.y)<SHELF_HY+pad) return true;
+  return false;
+}
+
+// ---- per-frame update of the library ----
+const _m=new THREE.Matrix4(), _qt=new THREE.Quaternion(), _s=new THREE.Vector3(1,1,1), _v=new THREE.Vector3(), _up=new THREE.Vector3(0,1,0);
+const candidates=[];
+function placeShelf(mesh,i,x,y,z,rot){ _qt.setFromAxisAngle(_up,rot); _v.set(x,y-SHELF_HY,z); _m.compose(_v,_qt,_s); mesh.setMatrixAt(i,_m); }
+function updateLib(dt,time){
+  // input
+  const K=lib.keys; let f=(K.has('f')?1:0)-(K.has('b')?1:0)-lib.joy.y, st=(K.has('r')?1:0)-(K.has('l')?1:0)+lib.joy.x, u=(K.has('u')?1:0)-(K.has('d')?1:0)+lib.ud;
+  lib.yaw+=((K.has('tl')?1:0)-(K.has('tr')?1:0))*dt*1.8;
+  const pads=navigator.getGamepads?navigator.getGamepads():[];
+  for(const gp of pads){ if(!gp) continue; const ax=i=>Math.abs(gp.axes[i]||0)>0.15?gp.axes[i]:0, bt=i=>gp.buttons[i]?gp.buttons[i].value:0;
+    st+=ax(0); f-=ax(1); lib.yaw-=ax(2)*dt*2.2; lib.pitch=clamp(lib.pitch-ax(3)*dt*1.6,-1.2,1.2); u+=bt(0)+bt(7)-bt(1)-bt(6); }
+  f=clamp(f,-1,1); st=clamp(st,-1,1); u=clamp(u,-1,1);
+  // move (relative to where the camera looks), with a little inertia
+  const sy=Math.sin(lib.yaw), cy=Math.cos(lib.yaw);
+  _v.set(-sy*f+cy*st,0,-cy*f-sy*st); if(_v.lengthSq()>1) _v.normalize(); _v.multiplyScalar(3.2); _v.y=u*2.4;
+  lib.vel.lerp(_v,1-Math.exp(-dt*4));
+  lib.pos.addScaledVector(lib.vel,dt);
+  for(let n=0;n<3;n++) if(!collide(lib.pos,lib.R,time)) break;
+  // chair: turns toward the view, banks into turns and bobs
+  let dy=lib.yaw-lib.chairYaw; dy=Math.atan2(Math.sin(dy),Math.cos(dy)); lib.chairYaw+=dy*(1-Math.exp(-dt*5));
+  chair.position.copy(lib.pos); chair.rotation.y=lib.chairYaw;
+  chairBody.position.y=-0.25+Math.sin(time*1.6)*0.04;
+  chairBody.rotation.z=clamp(-st*0.12-dy*0.4,-0.35,0.35)*0.8+chairBody.rotation.z*0.2;
+  chairBody.rotation.x=f*0.06;
+  chairLight.intensity=1.5+0.1*Math.sin(time*5.3)+0.06*Math.sin(time*8.1);
+  // camera behind the chair; pulled in when a shelf is in the way
+  const cp=Math.cos(lib.pitch);
+  _v.set(-Math.sin(lib.yaw)*cp,Math.sin(lib.pitch),-Math.cos(lib.yaw)*cp);   // view direction
+  libCam.look.set(lib.pos.x,lib.pos.y+1.2,lib.pos.z);   // a little above the chair, so the chair sits low in the view
+  let t=1; for(let i=1;i<=12;i++){ const tt=i/12; _c.copy(libCam.look).addScaledVector(_v,-lib.dist*tt); _c.y+=0.15*tt; if(solidAt(_c,0.15,time)){ t=Math.max(0.15,(i-1)/12); break; } }
+  libCam.pos.copy(libCam.look).addScaledVector(_v,-lib.dist*t); libCam.pos.y+=0.15*t;
+  camera.position.copy(libCam.pos); camera.lookAt(_c.copy(libCam.pos).add(_v));
+  // shelves: maze walls + decor around the camera → near (real) or far (photo box)
+  candidates.length=0; const cam=camera.position;
+  MAZE.walls.forEach(w=>candidates.push(w.p.x,w.p.y+Math.sin(time*0.7+w.ph)*0.03,w.p.z,w.rot));
+  const ca=Math.round(cam.x/DECOR.S), cb=Math.round(cam.y/DECOR.SY), cc=Math.round(cam.z/DECOR.S);
+  for(let c=cc-DECOR.RX;c<=cc+DECOR.RX;c++) for(let b=cb-DECOR.RY;b<=cb+DECOR.RY;b++) for(let a=ca-DECOR.RX;a<=ca+DECOR.RX;a++)
+    if(decorAt(a,b,c,time,_d)) candidates.push(_d.x,_d.y,_d.z,_d.rot);
+  let nn=0, nf=0; const near=[];
+  for(let i=0;i<candidates.length;i+=4){ const d=Math.hypot(candidates[i]-cam.x,candidates[i+1]-cam.y,candidates[i+2]-cam.z); if(d<LIB.NEAR_R) near.push([d,i]); else if(nf<LIB.FAR_MAX) placeShelf(farShelves,nf++,candidates[i],candidates[i+1],candidates[i+2],candidates[i+3]); }
+  near.sort((a,b)=>a[0]-b[0]);
+  near.forEach(([d,i])=>{ const x=candidates[i],y=candidates[i+1],z=candidates[i+2],r=candidates[i+3];
+    if(nn<LIB.NEAR_MAX) placeShelf(nearShelves,nn++,x,y,z,r); else if(nf<LIB.FAR_MAX) placeShelf(farShelves,nf++,x,y,z,r); });
+  nearShelves.count=nn; farShelves.count=nf; nearShelves.instanceMatrix.needsUpdate=farShelves.instanceMatrix.needsUpdate=true;
+  // pillars on a 26 m grid (offset so none stands in the maze), endless in height
+  let np=0; const PS=26, pa=Math.round((cam.x-13)/PS), pc=Math.round((cam.z-13)/PS), py=Math.round(cam.y/20)*20;
+  for(let c=pc-3;c<=pc+3;c++) for(let a=pa-3;a<=pa+3;a++){ _v.set(13+a*PS,py,13+c*PS); _m.makeTranslation(_v.x,_v.y,_v.z); pillars.setMatrixAt(np++,_m); }
+  pillars.count=np; pillars.instanceMatrix.needsUpdate=true;
+  // lanterns drifting on a 10 m grid
+  let nl=0; const LS=10, la=Math.round(cam.x/LS), lb=Math.round(cam.y/LS), lc=Math.round(cam.z/LS), m=1.5;
+  for(let c=lc-4;c<=lc+4;c++) for(let b=lb-3;b<=lb+3;b++) for(let a=la-4;a<=la+4;a++){
+    if(hash3(a,b,c,11)>0.35||nl>=400) continue;
+    const x=a*LS+(hash3(a,b,c,12)-0.5)*6+5, y=b*LS+(hash3(a,b,c,13)-0.5)*6+Math.sin(time*0.6+hash3(a,b,c,14)*6.28)*0.4, z=c*LS+(hash3(a,b,c,15)-0.5)*6+5;
+    if(x>MAZE.min.x-m&&x<MAZE.max.x+m&&y>MAZE.min.y-m&&y<MAZE.max.y+m&&z>MAZE.min.z-m&&z<MAZE.max.z+m) continue;
+    _m.makeTranslation(x,y,z); lanterns.setMatrixAt(nl++,_m); }
+  lanterns.count=nl; lanterns.instanceMatrix.needsUpdate=true;
+}
+
+// ---- mode: 'lib' (大書庫, default) or 'shelf' (眺める: the single shelf on its floor) ----
+const TEXTS={
+  lib:{t:'空飛ぶ本棚の大書庫',s:'地下の書庫 ― 試作',
+       h:matchMedia('(pointer:coarse)').matches
+         ?'左下のスティックで進む ／ 右下の ▲▼ で上昇・下降<br>画面をドラッグで見回す ／ ピンチで椅子に寄る<br>本棚の迷路の入口は、正面の提灯の間'
+         :'W A S D・矢印キーで進む ／ Space・E で上昇、Shift・Q で下降<br>ドラッグで見回す ／ ホイールで椅子に寄る ／ ゲームパッドも使えます<br>本棚の迷路の入口は、正面の提灯の間'},
+  shelf:{t:'風車組み本棚',s:'直方体4棟を回転対称に組む ― 試作',
+       h:'ドラッグで見回す ／ ホイール・ピンチで寄る<br>同じ直方体の本棚を4棟、90度ずつ回して噛み合わせています<br>外側に出る側を縮めてできた四隅の凹みを、そのまま浅い棚にしています'}};
+let hintTimer=0;
+function setMode(m){
+  mode=m; document.body.classList.toggle('lib',m==='lib');
+  const T=TEXTS[m]; $('ttl').textContent=T.t; $('sub').textContent=T.s; $('hint').innerHTML=T.h; $('hint').style.opacity='1';
+  clearTimeout(hintTimer); hintTimer=setTimeout(()=>{ $('hint').style.opacity='0'; },15000);
+  lib.keys.clear(); resize();
+}
+$('bLib').addEventListener('click',()=>setMode('lib'));
+$('bShelf').addEventListener('click',()=>setMode('shelf'));
+if(matchMedia('(pointer:coarse)').matches) document.body.classList.add('touch');
+window.addEventListener('touchstart',()=>document.body.classList.add('touch'),{once:true,passive:true});
+setMode('lib');
 
 /* ---------- loop ---------- */
 const clock=new THREE.Clock(); let first=true;
 function tick(){
   requestAnimationFrame(tick);
   const dt=Math.min(clock.getDelta(),0.05), time=clock.elapsedTime;
+  if(mode==='lib'){ updateLib(dt,time); renderer.render(libScene,camera); }
+  else{
   if(autoRotate) goal.theta+=dt*0.28;
   const k=1-Math.exp(-dt*6);
   cur.theta+=(goal.theta-cur.theta)*k; cur.phi+=(goal.phi-cur.phi)*k; cur.r+=(goal.r-cur.r)*k; cur.target.lerp(goal.target,k);
@@ -788,6 +1122,7 @@ function tick(){
   camera.lookAt(cur.target);
   warm.intensity=0.5+0.03*Math.sin(time*3.1);
   renderer.render(scene,camera);
+  }
   if(first){ first=false; loadingEl.style.opacity='0'; setTimeout(()=>loadingEl.remove(),1000); }
 }
 tick();
