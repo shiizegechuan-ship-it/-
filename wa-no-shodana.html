@@ -1160,7 +1160,7 @@ function endPointer(e){
   pointers.delete(e.pointerId); pinchPrev=0; pinchMid=null;
   if(wasSingle&&downInfo&&!downInfo.moved&&!downInfo.multi&&performance.now()-downInfo.t<600){
     if(SC.rig){ if(SC.goal>0) SC.goal=0; }
-    else if(roomView){ setNdc(e); const r=innerRoom.pick(raycaster); if(r&&r.focus) focusInnerPoint(r.point,r.dist,r.dir,r.elev); }   // only the hidden room's own props respond in there
+    else if(roomView&&!roomRide){ setNdc(e); const r=innerRoom.pick(raycaster); if(r&&r.focus) focusInnerPoint(r.point,r.dist,r.dir,r.elev); }   // only the hidden room's own props respond in there
     else if(roomRide){ /* gliding in or out */ }
     else{
       setNdc(e); const hit=raycaster.intersectObjects(pickables,true);
@@ -1916,6 +1916,16 @@ function buildInnerInterior(z0,z1){
   // where the camera goes when obj is tapped: point p (local to frame), seen from the frame's front
   function setView(obj,frame,p,dist,elev){ obj.userData.view={frame,p:new Vector3(...p),dist,elev}; return obj; }
   function hover(rc){ const h=firstHit(rc); return !!(h&&actOwner(h.object)); }
+  let sumiOnFloor=null;
+  // with the room lit: step back to the room's centre, look down under the low table, and pick up the ink stick there
+  function revealSumi(){
+    const P=sumiOnFloor.getWorldPosition(new Vector3());
+    const crouch=P.clone().add(new Vector3(0.04,0.32,0.48));   // down low in front of the table, looking underneath
+    const glint=new THREE.PointLight(0xffc890,0,0.7,2); glint.position.copy(P).add(new Vector3(0,0.07,0.12)); S.add(glint);   // lantern light now reaching under the table
+    setTimeout(()=>lookRide(ROOM_EYE.clone(),P,2.0,()=>{ toast('座卓の下に、何か落ちている……');
+      setTimeout(()=>lookRide(crouch,P,1.6,()=>setTimeout(()=>{ sumiOnFloor.parent.remove(sumiOnFloor); S.remove(glint); giveItem('sumi'); },1800)),900); }),1200);
+    setTimeout(()=>{ glint.intensity=0.9; },1200);
+  }
   const lampOn={pend:false,floor:true,table:true};   // the pendant lantern is unlit until the lit candle is put in it
   const toggleLamp=k=>{ lampOn[k]=!lampOn[k]; applyLamps(); };
 
@@ -1985,12 +1995,17 @@ function buildInnerInterior(z0,z1){
     anchor.userData.innerAct=()=>{ scSwing.goal=scSwing.goal?0:1; };
     anchor.userData.focusAt=new Vector3(scX,1.25,z1); anchor.userData.focusDist=2.3;   // stand back far enough to watch the whole sheet curl
     customs.push(dt=>{ const e=step(scSwing,dt,3); if(e!==null) updateScrollCurl(scCurl.maxAngle*e,scCurl); });
-    const plaque=box(0.18,0.24,0.006,matKeyaki.clone(),scX,1.25,z1+0.004,S);   // blank wooden plaque behind the scroll
-    lockable(plaque,'plaque',()=>{ plaque.material.map=canvasTex(128,170,(g,w,h)=>{ drawWood(g,w,h,{base:'#5e3a22',dark:'30,15,6',light:'160,110,70',lines:20,wave:1});
-      g.font=`500 ${w*0.6}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle='#0a0705'; g.font=`700 ${w*0.66}px ${FONT}`; g.fillText('月',w/2,h/2); },{repeat:false});
-      plaque.geometry.dispose(); plaque.geometry=new THREE.BoxGeometry(0.18,0.24,0.006);   // plain 0..1 UVs for the written face
-      plaque.material.color.set(0xffffff); plaque.material.roughness=0.92; plaque.material.clearcoat=0; plaque.material.envMapIntensity=0.02;   // matte: no glare over the character
-      plaque.material.needsUpdate=true; });
+    // wooden plaque behind the scroll: a character is carved into it so shallowly it can't be read. Brushing ink
+    // over it blackens the surface but not the carved strokes, so the character stands out (as in a rubbing).
+    const plank=(g,w,h)=>drawWood(g,w,h,{base:'#5e3a22',dark:'30,15,6',light:'160,110,70',lines:20,wave:1});
+    const carved=(g,w,h,fill)=>{ g.font=`700 ${w*0.66}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle=fill; g.fillText('月',w/2,h/2); };
+    const plaqueMat=std({map:canvasTex(128,170,(g,w,h)=>{ plank(g,w,h); carved(g,w,h,'rgba(20,10,4,.13)'); },{repeat:false}),roughness:0.9},0.1);
+    const plaque=new Mesh(new THREE.BoxGeometry(0.18,0.24,0.006),plaqueMat); plaque.position.set(scX,1.25,z1+0.004); plaque.receiveShadow=true; S.add(plaque);
+    lockable(plaque,'plaque',()=>{ plaqueMat.map=canvasTex(128,170,(g,w,h)=>{
+        const t=document.createElement('canvas'); t.width=w; t.height=h; const tg=t.getContext('2d'); plank(tg,w,h);
+        tg.globalCompositeOperation='destination-in'; carved(tg,w,h,'#000');                             // the bare wood, only where carved
+        g.fillStyle='#0b0907'; g.fillRect(0,0,w,h); for(let i=0;i<40;i++){ g.fillStyle=`rgba(40,30,24,${R(.1,.3)})`; g.fillRect(0,rnd()*h,w,R(1,3)); }   // inked, with brush streaks
+        g.drawImage(t,0,0); },{repeat:false}); plaqueMat.needsUpdate=true; });
     setView(plaque,S,[scX,1.25,z1],1.45,-0.15);
     // ikebana: a low black suiban with a camellia branch
     const suiban=lathe([[0,0],[0.17,0],[0.19,0.01],[0.2,0.05],[0.185,0.05],[0.175,0.015],[0,0.015]],matCeramic,48);
@@ -2027,6 +2042,7 @@ function buildInnerInterior(z0,z1){
     for(const sx of [-1,1]) box(0.008,DH-0.05,d-0.07,matWal,sx*(w/2-0.075),DH/2,-0.01,dg);
     { const hb=new Mesh(new THREE.BoxGeometry(w-0.04,DH+0.08,0.1),HIT_MAT); hb.position.set(0,DH/2+0.02,d/2); dg.add(hb); }   // generous hit area over the front
     itemProp('keyBow',itemMesh('keyBow'),true,0.2,0.016,0.03,dg).scale.setScalar(2.2);
+    itemProp('makimono',itemMesh('makimono'),true,-0.1,0.016,0.02,dg).rotation.y=0.15;   // the hint to the trapdoor
     movable(dg,'position','z',0.26); lockable(dg,'shelfDrawer'); setView(dg,g,[0.2,0.02,0.29],0.8,1.15);
     const ys=[DH,0.55,1.05,1.55];
     for(const y of ys.slice(1)) box(w-0.08,0.028,d,matWal,0,y,0,g);
@@ -2093,6 +2109,7 @@ function buildInnerInterior(z0,z1){
     for(const sx of [-1,1])for(const sz of [-1,1]) box(0.035,0.35,0.035,matIron,sx*0.56,0.175,sz*0.29,g);
     box(1.12,0.022,0.035,matIron,0,0.33,0.29,g); box(1.12,0.022,0.035,matIron,0,0.33,-0.29,g);
     box(1.1,0.02,0.58,matWal,0,0.1,0,g);
+    sumiOnFloor=itemMesh('sumi'); put(sumiOnFloor,0.12,0.012,0.27,g); sumiOnFloor.rotation.y=0.5; sumiOnFloor.scale.setScalar(1.3);   // dropped under the table's front edge: in shadow until the lantern is lit
     // tetsubin iron kettle on a small tray, two cups
     box(0.34,0.012,0.24,matKeyaki,-0.22,0.413,0.04,g);
     const pot=lathe([[0,0],[0.05,0],[0.075,0.02],[0.085,0.05],[0.08,0.08],[0.06,0.1],[0.036,0.11],[0.036,0.118],[0,0.118]],matIron,40); put(pot,-0.26,0.419,0.04,g);
@@ -2124,7 +2141,7 @@ function buildInnerInterior(z0,z1){
   {
     // the shade is open at the bottom (an iron-rimmed hole), so the candle can be set in from below onto a wire holder
     const inside=itemMesh('candle'); inside.visible=false;   // the candle, once put in
-    const g=group(S,gx,lanternY,gz); g.userData.innerAct=()=>toggleLamp('pend'); lockable(g,'lantern',()=>{ inside.visible=true; lampOn.pend=true; applyLamps(); },false);
+    const g=group(S,gx,lanternY,gz); g.userData.innerAct=()=>toggleLamp('pend'); lockable(g,'lantern',()=>{ inside.visible=true; lampOn.pend=true; applyLamps(); revealSumi(); },false);
     const T0=0.16, prof=[]; for(let i=0;i<=20;i++){ const t=T0+(1-T0)*i/20; prof.push([0.012+0.25*Math.pow(Math.sin(PI*t),0.75),-0.26+0.52*t]); }
     const shade=lathe(prof,matShade,48); shade.castShadow=false; g.add(shade);
     for(let i=1;i<20;i++){ const [r,y]=prof[i]; const rib=new Mesh(new THREE.TorusGeometry(r+0.002,0.0018,4,48),matRib); rib.rotation.x=PI/2; rib.position.y=y; g.add(rib); }
@@ -2214,8 +2231,25 @@ function buildInnerInterior(z0,z1){
     { const k=itemProp('smallKey',itemMesh('smallKey'),true,0.0,AY+0.03,-0.24,g); k.rotation.x=-PI/2; k.scale.setScalar(1.6); }   // hung upright on the back
     const sd=group(g,-0.22,AY,-0.197);                                                 // its door, hinged on the left
     box(0.44,0.34,0.012,matIron,0.22,0,0.006,sd);
-    const dial=cyl(0.045,0.045,0.02,matBrass2,32); dial.rotation.x=PI/2; put(dial,0.28,0.02,0.02,sd);
     box(0.014,0.09,0.02,matBrass2,0.09,0,0.02,sd);
+    // 文字錠: a brass window showing one character on a drum; each tap turns it to the next. Set to 月 and the bolt draws back.
+    const DIAL=['花','鳥','風','雪','月','山','川','空']; let di=0;
+    const dialTex=canvasTex(128,128,()=>{},{repeat:false});
+    const drawDial=()=>{ const c=dialTex.image, g2=c.getContext('2d'); g2.fillStyle='#e8dcc0'; g2.fillRect(0,0,128,128);
+      g2.fillStyle='#1d1a17'; g2.font=`700 86px ${FONT}`; g2.textAlign='center'; g2.textBaseline='middle'; g2.fillText(DIAL[di],64,68);
+      const sh=g2.createLinearGradient(0,0,0,128); sh.addColorStop(0,'rgba(0,0,0,.45)'); sh.addColorStop(.25,'rgba(0,0,0,0)'); sh.addColorStop(.75,'rgba(0,0,0,0)'); sh.addColorStop(1,'rgba(0,0,0,.45)');
+      g2.fillStyle=sh; g2.fillRect(0,0,128,128); dialTex.needsUpdate=true; };
+    drawDial();
+    const dial=group(sd,0.27,0.02,0.012);
+    box(0.1,0.1,0.006,matBrass2,0,0,0.003,dial);                                                   // brass escutcheon
+    const win=new Mesh(new PlaneGeometry(0.066,0.066),new THREE.MeshBasicMaterial({map:dialTex,color:new THREE.Color(0.75,0.72,0.66)})); win.position.z=0.0065; dial.add(win);
+    for(const y of [-0.042,0.042]) box(0.03,0.006,0.012,matBrass2,0,y,0.009,dial);               // the drum's turning tabs
+    dial.userData.noFocus=true;
+    dial.userData.innerAct=()=>{
+      if(USES.safe.open) return;
+      di=(di+1)%DIAL.length; drawDial();
+      if(DIAL[di]==='月'){ USES.safe.open=true; toast('かちり、と閂の外れる音がした。'); setTimeout(()=>USES.safe.after(),600); }
+    };
     const safeA=movable(sd,'rotation','y',-1.6,2.4); lockable(sd,'safe'); setView(sd,g,[0,AY-0.05,-0.2],1.75,0.05);
     ah.userData.innerAct=()=>{ artA.goal=artA.goal?0:1; if(!artA.goal) safeA.goal=0; };   // closing the painting shuts the safe too
     const art=new Mesh(new PlaneGeometry(1.2,0.8),matArt); art.position.z=0.012; art.receiveShadow=true; af.add(art);
@@ -2287,13 +2321,14 @@ const ITEMS={
   matches:{name:'燐寸',desc:'古い燐寸箱。中に数本だけ残っている。',pose:[0.75,0.5]},
   candle:{name:'和蝋燭',desc:'朱塗りの和蝋燭。芯はまだ新しい。',pose:[0.3,0.6]},
   litCandle:{name:'灯した和蝋燭',desc:'静かに揺れる炎。',pose:[0.3,0.6]},
-  sumi:{name:'墨',desc:'艶のある古墨。金で小さく「月」の字。',pose:[1.0,0.35]},
+  sumi:{name:'墨',desc:'艶のある古墨。金で雲の模様が押されている。',pose:[1.0,0.35]},
   fude:{name:'筆',desc:'竹軸の筆。穂先は乾いている。',pose:[0.8,0.55]},
   fudeSumi:{name:'墨を含ませた筆',desc:'たっぷりと墨を含んだ筆。',pose:[0.8,0.55]},
   smallKey:{name:'小さな鍵',desc:'朱の紐が結ばれた、小ぶりな黒鉄の鍵。',pose:[1.0,0.4]},
   shiori:{name:'栞',desc:'本に挟まっていた、臙脂色の薄い栞。',pose:[1.1,0.45]},
   keyBow:{name:'鍵の持ち手',desc:'四角い穴の空いた、銭形の真鍮の持ち手。先が折れている。',pose:[1.0,0.4]},
   keyShaft:{name:'鍵の軸',desc:'歯の付いた真鍮の棒。持ち手がない。',pose:[0.95,0.4]},
+  makimono:{name:'巻物',desc:'紐を解いて広げると、墨でこう記されている。「書斎の畳、幾度も叩きて確かめよ。」',pose:[0.7,0.5]},
   cellarKey:{name:'地下の鍵',desc:'銭形の持ち手と軸がぴたりと合わさった、朱の房付きの重い真鍮の鍵。',pose:[1.0,0.4]},
 };
 // [a, b, result]: combinations (order doesn't matter)
@@ -2301,12 +2336,13 @@ const RECIPES=[['matches','candle','litCandle'],['sumi','fude','fudeSumi'],['key
 // Places that react to an item. Select the item, then tap the place (held:true -- just carrying it is enough).
 //   consume: the item is used up   give: an item received   unlock: another USES entry this opens
 //   hint: shown while locked   msg: shown when it works   done: shown on later taps (if nothing else happens)
-// The chain: 燐寸+和蝋燭 -> 灯した和蝋燭 -> 吊り行灯 -> 墨; 墨+筆 -> 木札に「月」 -> 金庫 -> 小さな鍵 -> サイドボード -> 鍵の軸;
+// The chain: 燐寸+和蝋燭 -> 灯した和蝋燭 -> 吊り行灯 (lights the room; the ink stick under the table is found) -> 墨;
+//            墨+筆 -> 木札に塗ると彫られた「月」が浮かぶ -> 金庫の文字錠を「月」に -> 小さな鍵 -> サイドボード -> 鍵の軸;
 //            栞（座卓の本） -> 飾り棚の引き出し -> 鍵の持ち手; 持ち手+軸 -> 地下の鍵 -> 地下の扉 -> NEXT_PAGE
 const USES={
-  lantern:    {item:'litCandle',consume:true,give:'sumi',hint:'吊り行灯には灯が入っていない。下に、手が入るほどの口が開いている。',msg:'行灯に蝋燭を入れると、部屋が明るくなった。座卓の上に墨が見える……'},
-  plaque:     {item:'fudeSumi',consume:true,unlock:'safe',hint:'掛け軸の裏の木札。何も書かれていない。',msg:'木札に「月」と書いた。どこかで、かちりと音がした。',done:'木札に「月」と書かれている。'},
-  safe:       {hint:'金の絵の裏の小さな金庫。固く閉じている。'},
+  lantern:    {item:'litCandle',consume:true,hint:'吊り行灯には灯が入っていない。下に、手が入るほどの口が開いている。',msg:'行灯に蝋燭を入れると、部屋が明るくなった。'},
+  plaque:     {item:'fudeSumi',consume:true,hint:'掛け軸の裏の木札。表面に浅い彫り跡があるが、読み取れない。',msg:'墨を塗ると、彫られていた字が白く浮かび上がった。「月」',done:'木札には「月」と彫られている。'},
+  safe:       {hint:'金の絵の裏の小さな金庫。扉に、文字を合わせる錠が付いている。'},
   sideboard:  {item:'smallKey',consume:true,hint:'取っ手のない扉に、小さな鍵穴がある。',msg:'小さな鍵を差し込んで回すと、扉が開いた。'},
   shelfDrawer:{item:'shiori',consume:true,hint:'飾り棚の引き出しが開かない。金具に薄い隙間がある。何か薄いものを差し込めそうだ。',msg:'栞を隙間に差し込むと、からくりが外れた。'},
   cellarDoor: {item:'cellarKey',held:true,hint:'重い扉には鍵がかかっている。',msg:'鍵が回り、扉が開いた……'},
@@ -2326,7 +2362,7 @@ function itemMats(){
   const hair=tx(64,64,(g,w,h)=>{ g.fillStyle='#e9dfc8'; g.fillRect(0,0,w,h); for(let x=0;x<w;x+=1){ g.fillStyle=`rgba(${rnd()<.5?'140,120,90':'255,250,235'},${R(.1,.35)})`; g.fillRect(x,0,1,h); } });
   const sumiTop=tx(96,320,(g,w,h)=>{ g.fillStyle='#14110e'; g.fillRect(0,0,w,h); for(let i=0;i<900;i++){ g.fillStyle=`rgba(255,255,255,${R(.01,.05)})`; g.fillRect(rnd()*w,rnd()*h,1,1); }
     g.strokeStyle='#c9a24a'; g.lineWidth=2; g.strokeRect(w*0.22,h*0.18,w*0.56,h*0.4);
-    g.fillStyle='#d4ad55'; g.font=`700 ${w*0.42}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillText('月',w/2,h*0.38); });
+    g.strokeStyle='#d4ad55'; g.lineWidth=3; for(const [x,y,r] of [[.42,.36,.11],[.58,.32,.09],[.5,.44,.1]]){ g.beginPath(); g.arc(x*w,y*h,r*w,PI*0.9,PI*2.2); g.stroke(); } });
   const shiori=tx(64,320,(g,w,h)=>{ g.fillStyle='#8e2a2e'; g.fillRect(0,0,w,h); for(let i=0;i<500;i++){ g.strokeStyle=`rgba(255,220,200,${R(.03,.1)})`; g.beginPath(); const x=rnd()*w,y=rnd()*h; g.moveTo(x,y); g.lineTo(x+R(-6,6),y+R(4,14)); g.stroke(); }
     g.fillStyle='rgba(212,173,85,.9)'; for(const [x,y,s] of [[.3,.22,9],[.68,.34,7],[.42,.5,6]]){ g.beginPath(); for(let k=0;k<5;k++){ const a=k/5*6.283; g.ellipse(x*w+Math.cos(a)*s*0.6,y*h+Math.sin(a)*s*0.6,s*0.5,s*0.28,a,0,6.283); } g.fill(); }
     g.strokeStyle='#d4ad55'; g.lineWidth=2; g.strokeRect(4,4,w-8,h-8); });
@@ -2417,6 +2453,12 @@ function itemMesh(id){
     cordTassel(g,[[-0.009,0.0028,0],[-0.016,0.0028,-0.006],[-0.016,0.003,-0.018],[-0.012,0.003,-0.03]],M.cord,M.brass); }
   if(id==='keyBow'){ keyBowModel(g,0); mk(new CylinderGeometry(0.0024,0.0024,0.01,14),M.brass,g,0.022,0.0026,0).rotation.z=PI/2; }
   if(id==='keyShaft') keyShaftModel(g,-0.025,0.025);
+  if(id==='makimono'){   // a rolled hand-scroll: indigo silk cover, red cord, lacquered roller ends
+    const silk=std({color:C('#26324a'),roughness:0.7},0.3);
+    mk(new CylinderGeometry(0.014,0.014,0.13,28),silk,g,0,0.014,0).rotation.z=PI/2;
+    for(const sx of [-1,1]) mk(new CylinderGeometry(0.008,0.009,0.012,20),M.lacquer,g,sx*0.071,0.014,0).rotation.z=PI/2;
+    const band=mk(new THREE.TorusGeometry(0.0143,0.0012,8,28),M.cord,g,0.02,0.014,0); band.rotation.y=PI/2;
+    cordTassel(g,[[0.02,0.002,0.012],[0.026,0.001,0.024],[0.024,0.001,0.036],[0.03,0.001,0.046]],M.cord,M.brass); }
   if(id==='cellarKey'){ keyBowModel(g,-0.028); keyShaftModel(g,-0.011,0.045);
     cordTassel(g,[[-0.044,0.004,0],[-0.054,0.004,0.006],[-0.058,0.004,0.02],[-0.054,0.004,0.034]],M.cord,M.brass); }
   return g;
