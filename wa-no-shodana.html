@@ -1997,16 +1997,19 @@ function buildInnerInterior(z0,z1){
     customs.push(dt=>{ const e=step(scSwing,dt,3); if(e!==null) updateScrollCurl(scCurl.maxAngle*e,scCurl); });
     // wooden plaque behind the scroll: a character is carved into it so shallowly it can't be read. Brushing ink
     // over it blackens the surface but not the carved strokes, so the character stands out (as in a rubbing).
-    const plank=(g,w,h)=>drawWood(g,w,h,{base:'#5e3a22',dark:'30,15,6',light:'160,110,70',lines:20,wave:1});
-    const carved=(g,w,h,fill)=>{ g.font=`700 ${w*0.66}px ${FONT}`; g.textAlign='center'; g.textBaseline='middle'; g.fillStyle=fill; g.fillText('月',w/2,h/2); };
-    const plaqueMat=std({map:canvasTex(128,170,(g,w,h)=>{ plank(g,w,h); carved(g,w,h,'rgba(20,10,4,.13)'); },{repeat:false}),roughness:0.9},0.1);
-    const plaque=new Mesh(new THREE.BoxGeometry(0.18,0.24,0.006),plaqueMat); plaque.position.set(scX,1.25,z1+0.004); plaque.receiveShadow=true; S.add(plaque);
-    lockable(plaque,'plaque',()=>{ plaqueMat.map=canvasTex(128,170,(g,w,h)=>{
+    const plank=(g,w,h)=>drawWood(g,w,h,{base:'#7a5232',dark:'40,22,10',light:'190,140,90',lines:20,wave:1});
+    const carved=(g,w,h,fill)=>vtext(g,SAFE_CODE,w/2,h*0.06,h*0.88,w*0.62,fill,'700');   // the four characters, top to bottom
+    const plaqueMat=std({map:canvasTex(120,330,(g,w,h)=>{ plank(g,w,h); carved(g,w,h,'rgba(20,10,4,.13)'); },{repeat:false}),roughness:0.9},0.1);
+    const plaque=new Mesh(new THREE.BoxGeometry(0.13,0.36,0.006),plaqueMat); plaque.position.set(scX,1.2,z1+0.004); plaque.receiveShadow=true; S.add(plaque);
+    lockable(plaque,'plaque',()=>{ plaqueMat.map=canvasTex(120,330,(g,w,h)=>{
         const t=document.createElement('canvas'); t.width=w; t.height=h; const tg=t.getContext('2d'); plank(tg,w,h);
-        tg.globalCompositeOperation='destination-in'; carved(tg,w,h,'#000');                             // the bare wood, only where carved
+        const mask=document.createElement('canvas'); mask.width=w; mask.height=h; carved(mask.getContext('2d'),w,h,'#000');
+        tg.globalCompositeOperation='destination-in'; tg.drawImage(mask,0,0);                            // the bare wood, only where carved (all four strokes at once)
         g.fillStyle='#0b0907'; g.fillRect(0,0,w,h); for(let i=0;i<40;i++){ g.fillStyle=`rgba(40,30,24,${R(.1,.3)})`; g.fillRect(0,rnd()*h,w,R(1,3)); }   // inked, with brush streaks
-        g.drawImage(t,0,0); },{repeat:false}); plaqueMat.needsUpdate=true; });
-    setView(plaque,S,[scX,1.25,z1],1.45,-0.15);
+        g.drawImage(t,0,0); g.globalCompositeOperation='lighter'; g.globalAlpha=0.55; g.drawImage(t,0,0); g.globalAlpha=1; },{repeat:false});   // freshly bared wood reads pale
+      plaqueMat.emissive=new THREE.Color(0xffffff); plaqueMat.emissiveMap=plaqueMat.map; plaqueMat.emissiveIntensity=0.35;   // so the strokes stay legible in the scroll's shadow
+      plaqueMat.needsUpdate=true; });
+    setView(plaque,S,[scX,1.2,z1],1.45,-0.15);
     // ikebana: a low black suiban with a camellia branch
     const suiban=lathe([[0,0],[0.17,0],[0.19,0.01],[0.2,0.05],[0.185,0.05],[0.175,0.015],[0,0.015]],matCeramic,48);
     put(suiban,cx+0.48,0.15,z1+0.36,S);
@@ -2232,24 +2235,27 @@ function buildInnerInterior(z0,z1){
     const sd=group(g,-0.22,AY,-0.197);                                                 // its door, hinged on the left
     box(0.44,0.34,0.012,matIron,0.22,0,0.006,sd);
     box(0.014,0.09,0.02,matBrass2,0.09,0,0.02,sd);
-    // 文字錠: a brass window showing one character on a drum; each tap turns it to the next. Set to 月 and the bolt draws back.
-    const DIAL=['花','鳥','風','雪','月','山','川','空']; let di=0;
-    const dialTex=canvasTex(128,128,()=>{},{repeat:false});
-    const drawDial=()=>{ const c=dialTex.image, g2=c.getContext('2d'); g2.fillStyle='#e8dcc0'; g2.fillRect(0,0,128,128);
-      g2.fillStyle='#1d1a17'; g2.font=`700 86px ${FONT}`; g2.textAlign='center'; g2.textBaseline='middle'; g2.fillText(DIAL[di],64,68);
-      const sh=g2.createLinearGradient(0,0,0,128); sh.addColorStop(0,'rgba(0,0,0,.45)'); sh.addColorStop(.25,'rgba(0,0,0,0)'); sh.addColorStop(.75,'rgba(0,0,0,0)'); sh.addColorStop(1,'rgba(0,0,0,.45)');
-      g2.fillStyle=sh; g2.fillRect(0,0,128,128); dialTex.needsUpdate=true; };
-    drawDial();
-    const dial=group(sd,0.27,0.02,0.012);
-    box(0.1,0.1,0.006,matBrass2,0,0,0.003,dial);                                                   // brass escutcheon
-    const win=new Mesh(new PlaneGeometry(0.066,0.066),new THREE.MeshBasicMaterial({map:dialTex,color:new THREE.Color(0.75,0.72,0.66)})); win.position.z=0.0065; dial.add(win);
-    for(const y of [-0.042,0.042]) box(0.03,0.006,0.012,matBrass2,0,y,0.009,dial);               // the drum's turning tabs
-    dial.userData.noFocus=true;
-    dial.userData.innerAct=()=>{
-      if(USES.safe.open) return;
-      di=(di+1)%DIAL.length; drawDial();
-      if(DIAL[di]==='月'){ USES.safe.open=true; toast('かちり、と閂の外れる音がした。'); setTimeout(()=>USES.safe.after(),600); }
-    };
+    // 文字錠: four brass windows in a row, each showing one character on its own drum; a tap turns that drum to the
+    // next. Only when the four read SAFE_CODE does the bolt draw back (8 characters each: 4096 combinations).
+    const dials=[], dialAt=[1,0,1,0];   // start positions (not the answer)
+    const plate=group(sd,0.28,0.02,0.012); box(0.29,0.1,0.006,matBrass2,0,0,0.003,plate);
+    for(let k=0;k<4;k++){
+      const tex=canvasTex(128,128,()=>{},{repeat:false});
+      const draw=()=>{ const g2=tex.image.getContext('2d'); g2.fillStyle='#e8dcc0'; g2.fillRect(0,0,128,128);
+        g2.fillStyle='#1d1a17'; g2.font=`700 86px ${FONT}`; g2.textAlign='center'; g2.textBaseline='middle'; g2.fillText(DIAL_CHARS[dialAt[k]],64,68);
+        const sh=g2.createLinearGradient(0,0,0,128); sh.addColorStop(0,'rgba(0,0,0,.45)'); sh.addColorStop(.25,'rgba(0,0,0,0)'); sh.addColorStop(.75,'rgba(0,0,0,0)'); sh.addColorStop(1,'rgba(0,0,0,.45)');
+        g2.fillStyle=sh; g2.fillRect(0,0,128,128); tex.needsUpdate=true; };
+      draw();
+      const d=group(plate,(k-1.5)*0.066,0,0);
+      const win=new Mesh(new PlaneGeometry(0.052,0.052),new THREE.MeshBasicMaterial({map:tex,color:new THREE.Color(0.75,0.72,0.66)})); win.position.z=0.0065; d.add(win);
+      for(const y of [-0.04,0.04]) box(0.024,0.006,0.012,matBrass2,0,y,0.009,d);   // the drum's turning tabs
+      d.userData.noFocus=true;
+      d.userData.innerAct=()=>{
+        if(USES.safe.open) return;
+        dialAt[k]=(dialAt[k]+1)%DIAL_CHARS.length; draw();
+        if(dialAt.map(i=>DIAL_CHARS[i]).join('')===SAFE_CODE){ USES.safe.open=true; toast('かちり、と閂の外れる音がした。'); setTimeout(()=>USES.safe.after(),600); }
+      };
+    }
     const safeA=movable(sd,'rotation','y',-1.6,2.4); lockable(sd,'safe'); setView(sd,g,[0,AY-0.05,-0.2],1.75,0.05);
     ah.userData.innerAct=()=>{ artA.goal=artA.goal?0:1; if(!artA.goal) safeA.goal=0; };   // closing the painting shuts the safe too
     const art=new Mesh(new PlaneGeometry(1.2,0.8),matArt); art.position.z=0.012; art.receiveShadow=true; af.add(art);
@@ -2328,7 +2334,8 @@ const ITEMS={
   shiori:{name:'栞',desc:'本に挟まっていた、臙脂色の薄い栞。',pose:[1.1,0.45]},
   keyBow:{name:'鍵の持ち手',desc:'四角い穴の空いた、銭形の真鍮の持ち手。先が折れている。',pose:[1.0,0.4]},
   keyShaft:{name:'鍵の軸',desc:'歯の付いた真鍮の棒。持ち手がない。',pose:[0.95,0.4]},
-  makimono:{name:'巻物',desc:'紐を解いて広げると、墨でこう記されている。「書斎の畳、幾度も叩きて確かめよ。」',pose:[0.7,0.5]},
+  makimono:{name:'巻物',desc:'紺の絹で表装された巻物。朱の紐で結ばれている。（絵をタップして広げる）',pose:[0.7,0.5],alt:'makimonoOpen'},
+  makimonoOpen:{name:'巻物',desc:'紐を解いて広げると、墨でこう記されている。「書斎の畳、幾度も叩きて確かめよ。」',pose:[1.15,0.0]},
   cellarKey:{name:'地下の鍵',desc:'銭形の持ち手と軸がぴたりと合わさった、朱の房付きの重い真鍮の鍵。',pose:[1.0,0.4]},
 };
 // [a, b, result]: combinations (order doesn't matter)
@@ -2341,13 +2348,14 @@ const RECIPES=[['matches','candle','litCandle'],['sumi','fude','fudeSumi'],['key
 //            栞（座卓の本） -> 飾り棚の引き出し -> 鍵の持ち手; 持ち手+軸 -> 地下の鍵 -> 地下の扉 -> NEXT_PAGE
 const USES={
   lantern:    {item:'litCandle',consume:true,hint:'吊り行灯には灯が入っていない。下に、手が入るほどの口が開いている。',msg:'行灯に蝋燭を入れると、部屋が明るくなった。'},
-  plaque:     {item:'fudeSumi',consume:true,hint:'掛け軸の裏の木札。表面に浅い彫り跡があるが、読み取れない。',msg:'墨を塗ると、彫られていた字が白く浮かび上がった。「月」',done:'木札には「月」と彫られている。'},
-  safe:       {hint:'金の絵の裏の小さな金庫。扉に、文字を合わせる錠が付いている。'},
+  plaque:     {item:'fudeSumi',consume:true,hint:'掛け軸の裏の木札。表面に浅い彫り跡があるが、読み取れない。',msg:'墨を塗ると、彫られていた字が浮かび上がった。「一燈照隅」',done:'木札には「一燈照隅」と彫られている。'},
+  safe:       {hint:'金の絵の裏の小さな金庫。扉に、四文字を合わせる錠が付いている。'},
   sideboard:  {item:'smallKey',consume:true,hint:'取っ手のない扉に、小さな鍵穴がある。',msg:'小さな鍵を差し込んで回すと、扉が開いた。'},
   shelfDrawer:{item:'shiori',consume:true,hint:'飾り棚の引き出しが開かない。金具に薄い隙間がある。何か薄いものを差し込めそうだ。',msg:'栞を隙間に差し込むと、からくりが外れた。'},
   cellarDoor: {item:'cellarKey',held:true,hint:'重い扉には鍵がかかっている。',msg:'鍵が回り、扉が開いた……'},
 };
 const NEXT_PAGE='wa-no-chikashitsu.html';   // the space beyond the cellar door (a separate file)
+const SAFE_CODE='一燈照隅', DIAL_CHARS=['隅','角','燈','火','照','影','一','閑'];   // the plaque's carving and the safe's dial characters
 // ---- item models: real-scale 3D, resting on y=0, also used (rendered as stills) for the item box and lightbox ----
 let IM=null;   // shared item materials, made on first use
 function itemMats(){
@@ -2459,6 +2467,18 @@ function itemMesh(id){
     for(const sx of [-1,1]) mk(new CylinderGeometry(0.008,0.009,0.012,20),M.lacquer,g,sx*0.071,0.014,0).rotation.z=PI/2;
     const band=mk(new THREE.TorusGeometry(0.0143,0.0012,8,28),M.cord,g,0.02,0.014,0); band.rotation.y=PI/2;
     cordTassel(g,[[0.02,0.002,0.012],[0.026,0.001,0.024],[0.024,0.001,0.036],[0.03,0.001,0.046]],M.cord,M.brass); }
+  if(id==='makimonoOpen'){   // unrolled: the written sheet laid out, the rest still rolled on the left roller
+    const silk=std({color:C('#26324a'),roughness:0.7},0.3);
+    const tex=canvasTex(640,240,(g,w,h)=>{ drawPaper(g,w,h,{base:'#efe6d0',fibers:600});
+      g.fillStyle='#26324a'; g.fillRect(w-36,0,36,h);                                                    // silk mount at the start (right)
+      const cols=['書斎の畳','幾度も叩きて','確かめよ'];
+      cols.forEach((t,i)=>vtext(g,t,w-90-i*70,h*0.1,h*0.8,40,'#14110e','500'));
+      g.fillStyle='#a3291c'; g.fillRect(w-300,h*0.72,26,26); },{repeat:false});
+    const sheet=mk(new PlaneGeometry(0.27,0.1),std({map:tex,roughness:0.85,side:DoubleSide},0.2),g,0.0,0.0015,0); sheet.rotation.x=-PI/2;
+    mk(new CylinderGeometry(0.009,0.009,0.1,24),silk,g,-0.144,0.009,0).rotation.x=PI/2;               // the rolled remainder
+    for(const sz of [-1,1]) mk(new CylinderGeometry(0.006,0.007,0.01,18),M.lacquer,g,-0.144,0.009,sz*0.055).rotation.x=PI/2;
+    mk(new CylinderGeometry(0.003,0.003,0.104,12),M.lacquer,g,0.137,0.003,0).rotation.x=PI/2;           // the thin end stave
+    cordTassel(g,[[0.137,0.003,0.05],[0.15,0.002,0.06],[0.158,0.001,0.075],[0.152,0.001,0.09]],M.cord,M.brass); }
   if(id==='cellarKey'){ keyBowModel(g,-0.028); keyShaftModel(g,-0.011,0.045);
     cordTassel(g,[[-0.044,0.004,0],[-0.054,0.004,0.006],[-0.058,0.004,0.02],[-0.054,0.004,0.034]],M.cord,M.brass); }
   return g;
@@ -2563,10 +2583,13 @@ function combine(a,b){
   openLb(r[2]); lbMsg(ITEMS[a].name+'と'+ITEMS[b].name+'を合わせて、'+ITEMS[r[2]].name+'になった'); renderItems();
 }
 const lb=$('lb');
-function openLb(id){ lbItem=id; drawIcon(lb.querySelector('canvas'),id); lb.querySelector('b').textContent=ITEMS[id].name; lb.querySelector('.desc').textContent=ITEMS[id].desc; lbMsg(''); lb.hidden=false; }
+let lbAlt=false;   // showing the item's other state (e.g. the scroll unrolled)
+function showLb(id){ drawIcon(lb.querySelector('canvas'),id); lb.querySelector('.desc').textContent=ITEMS[id].desc; }
+function openLb(id){ lbItem=id; lbAlt=false; drawIcon(lb.querySelector('canvas'),id); lb.querySelector('b').textContent=ITEMS[id].name; lb.querySelector('.desc').textContent=ITEMS[id].desc; lbMsg(''); lb.hidden=false; }
 function closeLb(){ lb.hidden=true; lbItem=null; }
 function lbMsg(t){ lb.querySelector('.msg').textContent=t; }
 lb.addEventListener('click',e=>{ if(e.target===lb||e.target.classList.contains('x')) closeLb(); });
+lb.querySelector('canvas').addEventListener('click',()=>{ const alt=lbItem&&ITEMS[lbItem].alt; if(!alt) return; lbAlt=!lbAlt; showLb(lbAlt?alt:lbItem); });
 window.addEventListener('keydown',e=>{ if(e.key==='Escape') closeLb(); });
 let toastT=0;
 function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('on'),1600+t.length*90); }
