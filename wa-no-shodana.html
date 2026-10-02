@@ -2120,11 +2120,18 @@ function buildInnerInterior(z0,z1){
   // Akari-style paper pendant lantern
   const lanternY=2.15;
   {
-    const g=group(S,gx,lanternY,gz); g.userData.innerAct=()=>toggleLamp('pend'); lockable(g,'lantern',()=>{ lampOn.pend=true; applyLamps(); },false);
-    const prof=[]; for(let i=0;i<=20;i++){ const t=i/20; prof.push([0.012+0.25*Math.pow(Math.sin(PI*t),0.75),-0.26+0.52*t]); }
+    // the shade is open at the bottom (an iron-rimmed hole), so the candle can be set in from below onto a wire holder
+    const inside=cyl(0.015,0.011,0.09,std({color:C('#b8322a'),roughness:0.5},0.3),16); inside.visible=false;   // the candle, once put in
+    const g=group(S,gx,lanternY,gz); g.userData.innerAct=()=>toggleLamp('pend'); lockable(g,'lantern',()=>{ inside.visible=true; lampOn.pend=true; applyLamps(); },false);
+    const T0=0.16, prof=[]; for(let i=0;i<=20;i++){ const t=T0+(1-T0)*i/20; prof.push([0.012+0.25*Math.pow(Math.sin(PI*t),0.75),-0.26+0.52*t]); }
     const shade=lathe(prof,matShade,48); shade.castShadow=false; g.add(shade);
     for(let i=1;i<20;i++){ const [r,y]=prof[i]; const rib=new Mesh(new THREE.TorusGeometry(r+0.002,0.0018,4,48),matRib); rib.rotation.x=PI/2; rib.position.y=y; g.add(rib); }
-    put(cyl(0.03,0.03,0.02,matIron,16),0,0.27,0,g); put(cyl(0.025,0.025,0.015,matIron,16),0,-0.265,0,g);
+    const [r0,y0]=prof[0];
+    const rim=new Mesh(new THREE.TorusGeometry(r0,0.004,6,40),matIron); rim.rotation.x=PI/2; rim.position.y=y0; g.add(rim);
+    for(const a of [0,PI/2]){ const w=box(r0*2,0.003,0.003,matIron,0,y0+0.03,0,g); w.rotation.y=a; w.castShadow=false; }   // cross-wire holder
+    put(cyl(0.022,0.022,0.008,matIron,16),0,y0+0.034,0,g);   // its little dish
+    put(inside,0,y0+0.083,0,g);
+    put(cyl(0.03,0.03,0.02,matIron,16),0,0.27,0,g);
     put(cyl(0.004,0.004,ROOM_H-lanternY-0.28,matIron,6),0,(ROOM_H-lanternY+0.28)/2,0,g).castShadow=false;
     put(cyl(0.05,0.05,0.02,matIron,20),0,ROOM_H-lanternY-0.01,0,g);
   }
@@ -2306,7 +2313,7 @@ const RECIPES=[['matches','candle','litCandle'],['sumi','fude','fudeSumi'],['key
 // The chain: 燐寸+和蝋燭 -> 灯した和蝋燭 -> 吊り行灯 -> 墨; 墨+筆 -> 木札に「月」 -> 金庫 -> 小さな鍵 -> サイドボード -> 鍵の軸;
 //            栞（座卓の本） -> 飾り棚の引き出し -> 鍵の持ち手; 持ち手+軸 -> 地下の鍵 -> 地下の扉 -> NEXT_PAGE
 const USES={
-  lantern:    {item:'litCandle',consume:true,give:'sumi',hint:'吊り行灯には灯が入っていない。',msg:'行灯に蝋燭を入れると、部屋が明るくなった。座卓の上に墨が見える……'},
+  lantern:    {item:'litCandle',consume:true,give:'sumi',hint:'吊り行灯には灯が入っていない。下に、手が入るほどの口が開いている。',msg:'行灯に蝋燭を入れると、部屋が明るくなった。座卓の上に墨が見える……'},
   plaque:     {item:'fudeSumi',consume:true,unlock:'safe',hint:'掛け軸の裏の木札。何も書かれていない。',msg:'木札に「月」と書いた。どこかで、かちりと音がした。',done:'木札に「月」と書かれている。'},
   safe:       {hint:'金の絵の裏の小さな金庫。固く閉じている。'},
   sideboard:  {item:'smallKey',consume:true,hint:'取っ手のない扉に、小さな鍵穴がある。',msg:'小さな鍵を差し込んで回すと、扉が開いた。'},
