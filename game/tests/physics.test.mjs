@@ -107,3 +107,58 @@ test('奈落に落ちたら少しのダメージで足場に戻る', () => {
   assert.ok(g.player.y < 460, 'respawned on ledge');
   assert.ok(g.player.hp < g.player.maxHp);
 });
+
+test('崖から落ちても、戻ったあとに同じ穴へ落ち続けない（ダメージは1回だけ）', () => {
+  const PIT = [
+    '################################',
+    ...Array.from({ length: 13 }, () => '#..............................#'),
+    '#P.............................#',
+    '#####..........#################',
+    '#####..........#################',
+    '#####..........#################',
+  ];
+  for (const held of [['right'], ['right', 'dodge'], ['right', 'jump']]) {
+    const g = sandbox(PIT); const d = new Driver(g);
+    d.frame(2);
+    let falls = 0, wasLow = false;
+    for (let i = 0; i < 600; i++) {
+      d.frame(1, i < 40 ? held : []);
+      const low = g.player.y > 460;
+      if (low && !wasLow) falls++;
+      wasLow = low;
+    }
+    assert.equal(falls, 1, `held ${held}: fell ${falls} times`);
+    assert.equal(g.player.hp, g.player.maxHp - 12);
+    assert.ok(g.player.onGround && g.player.state === 'normal');
+  }
+});
+
+import { Input, readPads } from '../src/input.js';
+test('左右を同時に押したときは、後から押した方向を優先する（十字キーの転がし）', () => {
+  const inp = new Input();
+  inp.set('left', true); inp.step();
+  assert.equal(inp.dirX(), -1);
+  inp.set('right', true); inp.step();
+  assert.equal(inp.dirX(), 1, 'right pressed later wins');
+  inp.set('left', false); inp.step();
+  assert.equal(inp.dirX(), 1);
+});
+
+test('ゲームパッド：先頭に動かない仮想デバイスがいても読める。スティックは境目でぶれない', () => {
+  const pad = (axes, pressed = []) => ({ connected: true, mapping: 'standard', index: 1, axes, buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i), value: pressed.includes(i) ? 1 : 0 })) });
+  const phantom = { connected: true, mapping: '', index: 0, axes: [0, 0], buttons: [] };
+  const st = {};
+  let r = readPads([phantom, pad([0.5, 0])], st);
+  assert.ok(r.right && !r.left);
+  r = readPads([phantom, pad([0.35, 0])], st); // 押した後は 0.3 まで保つ
+  assert.ok(r.right);
+  r = readPads([phantom, pad([0.2, 0])], st);
+  assert.ok(!r.right);
+  r = readPads([phantom, pad([0.4, 0])], st); // 離した後は 0.45 まで押されない
+  assert.ok(!r.right);
+  r = readPads([phantom, pad([0, 0], [14])], st);
+  assert.ok(r.left);
+  // 非標準配置の十字キー（軸 6）
+  const ns = { connected: true, mapping: '', index: 2, axes: [0, 0, 0, 0, 0, 0, 1, 0], buttons: [] };
+  assert.ok(readPads([ns], {}).right);
+});

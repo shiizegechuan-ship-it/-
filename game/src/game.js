@@ -528,6 +528,8 @@ export class Game {
     if (p.state === 'dead') return;
     if (!pit && p.invulnerable) return;
     p.hurt(dmg, fromX ?? cx(p));
+    // 落下からの復帰では吹き飛ばさない（同じ穴へ落ち続けないように）
+    if (pit && p.state !== 'dead') { p.vx = 0; p.vy = 0; }
     if (this.combo.n >= 10) this.fx.text(cx(p), p.y - 26, `${this.combo.n} HIT 途切れた`, '#9a8fa6', 11);
     this.combo.n = 0;
     this.fx.vignette = 1;

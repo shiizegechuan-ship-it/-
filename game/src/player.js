@@ -70,7 +70,7 @@ export class Player {
     // ジャンプの先行入力
     if (input.pressed('jump')) this.bufferT = P.jumpBuffer; else if (this.bufferT > 0) this.bufferT -= dt;
 
-    const dirX = (input.down('right') ? 1 : 0) - (input.down('left') ? 1 : 0);
+    const dirX = input.dirX ? input.dirX() : (input.down('right') ? 1 : 0) - (input.down('left') ? 1 : 0);
 
     switch (this.state) {
       case 'normal': this.updateNormal(game, input, dt, dirX); break;
@@ -101,7 +101,8 @@ export class Player {
         game.sfx.play('land');
       }
       // 安全な足場を覚えておく（奈落からの救済用）
-      if (this.state === 'normal' && !standingOnOneway(this, map)) this.lastSafe = { x: this.x, y: this.y };
+      // 戻し先は「両足とも固い床の上」のときだけ記録する（崖の縁ぎりぎりを避ける）
+      if (this.state === 'normal' && !standingOnOneway(this, map) && map.solidAt(this.x + 1, this.y + this.h + 2) && map.solidAt(this.x + this.w - 1, this.y + this.h + 2)) this.lastSafe = { x: this.x, y: this.y };
     } else if (this.coyoteT > 0) this.coyoteT -= dt;
     if (r.hitCeil && this.vy < 0) this.vy = 0;
 

@@ -45,6 +45,14 @@ export class Input {
     this.pressBuffer = {};
   }
   down(a) { return this.cur[a]; }
+  // 左右が同時に押されているときは、後から押した方を優先（十字キーを転がしたときの引っかかり防止）
+  dirX() {
+    if (this.pressed('left')) this.lastX = -1;
+    if (this.pressed('right')) this.lastX = 1;
+    const l = this.cur.left, r = this.cur.right;
+    if (l && r) return this.lastX || 0;
+    return l ? -1 : r ? 1 : 0;
+  }
   pressed(a) { return (this.cur[a] && !this.prev[a]) || !!(this.pressedNow && this.pressedNow[a]); }
   released(a) { return !this.cur[a] && this.prev[a]; }
   // メニュー等が入力を消費したときに使う
@@ -69,20 +77,41 @@ export function attachKeyboard(input, target) {
   target.addEventListener('blur', () => input.clear());
 }
 
-// 標準マッピングのゲームパッド
+// ゲームパッド。接続中のすべてのパッドをまとめて読む（仮想デバイスが先頭にいても動くように）
 const PAD = { jump: 0, attack: 2, dodge: 1, skill: 3, interact: 5, pause: 9, journal: 8 };
+const ON = 0.45, OFF = 0.3; // スティックの押す／離す判定に差をつけて、境目でぶれないようにする
+export function readPads(pads, stickAll) {
+  const out = { left: false, right: false, up: false, down: false, confirm: false, back: false };
+  for (const k of Object.keys(PAD)) out[k] = false;
+  let any = false;
+  for (const p of pads) {
+    if (!p || (!p.connected && p.connected !== undefined)) continue;
+    any = true;
+    const stick = (stickAll[p.index ?? 0] ||= {}); // スティックの状態はパッドごとに持つ
+    const b = (i) => !!(p.buttons[i] && (p.buttons[i].pressed || p.buttons[i].value > 0.5));
+    const ax = p.axes[0] || 0, ay = p.axes[1] || 0;
+    // 標準配置の十字キー
+    let dl = b(14), dr = b(15), du = b(12), dd = b(13);
+    // 非標準配置：十字キーが軸 6/7 に来る機種
+    if (p.mapping !== 'standard' && p.axes.length >= 8) {
+      dl ||= p.axes[6] < -0.5; dr ||= p.axes[6] > 0.5; du ||= p.axes[7] < -0.5; dd ||= p.axes[7] > 0.5;
+    }
+    const hx = (dir, v, was) => (was ? v * dir > OFF : v * dir > ON);
+    stick.left = hx(-1, ax, stick.left); stick.right = hx(1, ax, stick.right);
+    stick.up = hx(-1, ay, stick.up) && Math.abs(ay) > Math.abs(ax) * 0.7;
+    stick.down = hx(1, ay, stick.down) && Math.abs(ay) > Math.abs(ax) * 0.7;
+    out.left ||= dl || stick.left; out.right ||= dr || stick.right;
+    out.up ||= du || stick.up; out.down ||= dd || stick.down;
+    for (const [a, i] of Object.entries(PAD)) out[a] ||= b(i);
+    out.confirm ||= b(0); out.back ||= b(1);
+  }
+  return any ? out : null;
+}
 export function pollGamepad(input) {
-  const pads = (typeof navigator !== 'undefined' && navigator.getGamepads) ? navigator.getGamepads() : [];
-  const p = pads && Array.from(pads).find((x) => x);
-  if (!p) return false;
-  const b = (i) => !!(p.buttons[i] && p.buttons[i].pressed);
-  const ax = p.axes[0] || 0, ay = p.axes[1] || 0;
-  input.set('left', b(14) || ax < -0.4, 'pad');
-  input.set('right', b(15) || ax > 0.4, 'pad');
-  input.set('up', b(12) || ay < -0.5, 'pad');
-  input.set('down', b(13) || ay > 0.5, 'pad');
-  for (const [a, i] of Object.entries(PAD)) input.set(a, b(i), 'pad');
-  input.set('confirm', b(0), 'pad');
-  input.set('back', b(1), 'pad');
+  const pads = (typeof navigator !== 'undefined' && navigator.getGamepads) ? Array.from(navigator.getGamepads() || []) : [];
+  input.padStick ||= {};
+  const st = readPads(pads, input.padStick);
+  if (!st) return false;
+  for (const [a, v] of Object.entries(st)) input.set(a, v, 'pad');
   return true;
 }
