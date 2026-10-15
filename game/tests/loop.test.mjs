@@ -8,9 +8,9 @@ import {
 } from '../src/meta.js';
 import { Game } from '../src/game.js';
 
-test('部屋レイアウトはすべて18行・幅が揃っている', () => {
+test('部屋レイアウトは決まった行数・幅が揃っている', () => {
   for (const [name, rows] of Object.entries(LAYOUTS)) {
-    assert.ok(rows.length === 18 || rows.length === 24, `${name}: ${rows.length} rows`);
+    assert.ok([18, 24, 29].includes(rows.length), `${name}: ${rows.length} rows`);
     const w = rows[0].length;
     for (const r of rows) assert.equal(r.length, w, `${name}: ${r}`);
     assert.ok(rows.some((r) => r.includes('P')), `${name} has spawn`);

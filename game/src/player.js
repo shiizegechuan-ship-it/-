@@ -17,6 +17,9 @@ export class Player {
     this.dodgeCd = 0;
     this.iframeT = 0;
     this.airDodgeUsed = false;
+    this.airJumpsLeft = P.airJumps;
+    this.aimY = 0; // ↑=-1 / ↓=1（方向攻撃の向き）
+    this.stepT = 0;
     this.atk = null; // {name, def, t, hitIds:Set, queued}
     this.comboIndex = 0;
     this.comboGrace = 0;
@@ -71,6 +74,7 @@ export class Player {
     // ジャンプの先行入力
     if (input.pressed('jump')) this.bufferT = P.jumpBuffer; else if (this.bufferT > 0) this.bufferT -= dt;
 
+    this.aimY = input.down('up') ? -1 : input.down('down') ? 1 : 0;
     const dirX = input.dirX ? input.dirX() : (input.down('right') ? 1 : 0) - (input.down('left') ? 1 : 0);
 
     switch (this.state) {
@@ -90,15 +94,20 @@ export class Player {
       this.vy = Math.min(this.vy + g * dt, P.maxFall);
     }
     const wasGround = this.onGround;
+    if (!this.onGround) this.fallV = this.vy;
     const r = moveBody(this, map, dt, { dropThrough: this.dropT > 0 });
     this.onGround = r.onGround;
     if (this.onGround) {
       this.coyoteT = P.coyote;
       this.airDodgeUsed = false;
+      this.airJumpsLeft = P.airJumps;
       if (!wasGround) {
         this.landedThisFrame = true;
         this.squash = -0.35;
-        game.fx.dust(this.x + this.w / 2, this.y + this.h, 4);
+        // 落ちた速さに応じて左右に砂煙が広がる
+        const hard = this.fallV > 700;
+        game.fx.landPuff(this.x + this.w / 2, this.y + this.h, hard ? 1 : 0.5);
+        if (hard) game.fx.shake(1.5, 0.05);
         game.sfx.play('land');
       }
       // 安全な足場を覚えておく（奈落からの救済用）
@@ -113,6 +122,12 @@ export class Player {
       game.damagePlayer(12, { fromX: this.x, pit: true });
     }
     if (this.onGround && Math.abs(this.vx) > 20) this.runAnim += dt * Math.abs(this.vx) / 30;
+    // 走りの足音の砂煙と、切り返しの土煙
+    if (this.onGround && this.state === 'normal' && Math.abs(this.vx) > 180) {
+      this.stepT -= dt;
+      if (this.stepT <= 0) { this.stepT = 0.16; game.fx.step(this.x + this.w / 2 - sign(this.vx) * 6, this.y + this.h, -sign(this.vx)); }
+    }
+    if (this.onGround && this.state === 'normal' && dirX !== 0 && sign(this.vx) === -dirX && Math.abs(this.vx) > 120) game.fx.skid(this.x + this.w / 2 + dirX * 6, this.y + this.h, dirX);
   }
 
   tryJump(game, input) {
@@ -125,8 +140,18 @@ export class Player {
       this.vy = -P.jumpVel;
       this.bufferT = 0; this.coyoteT = 0; this.onGround = false;
       this.squash = 0.35;
-      game.fx.dust(this.x + this.w / 2, this.y + this.h, 3);
+      game.fx.jumpPuff(this.x + this.w / 2, this.y + this.h);
       game.sfx.play('jump');
+      return true;
+    }
+    // 2段ジャンプ：空中でもう一度跳べる（着地・下突きの命中で回復）
+    if (this.bufferT > 0 && !this.onGround && this.airJumpsLeft > 0) {
+      this.airJumpsLeft--;
+      this.vy = -P.airJumpVel;
+      this.bufferT = 0;
+      this.squash = 0.3;
+      game.fx.airJump(this.x + this.w / 2, this.y + this.h, this);
+      game.sfx.play('airJump');
       return true;
     }
     return false;
@@ -213,7 +238,9 @@ export class Player {
     if (dirX !== 0) this.face = dirX;
     let name = forceName;
     if (!name) {
-      if (!this.onGround) name = 'air';
+      if (this.aimY < 0) name = this.onGround ? 'up' : 'upAir';
+      else if (this.aimY > 0) name = this.onGround ? 'sweep' : 'down';
+      else if (!this.onGround) name = 'air';
       else {
         const max = this.stats.fourth ? 4 : 3;
         this.comboIndex = this.comboIndex % max + 1;
@@ -225,7 +252,8 @@ export class Player {
     this.state = 'attack'; this.stateT = 0;
     // 踏み込み。走っている勢いは半分残す（急停止しない）
     if (this.onGround && def.lunge) this.vx = this.face * Math.max(def.lunge, Math.abs(this.vx) * 0.5 * (sign(this.vx) === this.face ? 1 : 0));
-    if (name === 'air' && this.vy > 0) this.vy *= 0.5; // 空中攻撃で少しだけ滞空
+    if ((name === 'air' || name === 'upAir') && this.vy > 0) this.vy *= 0.5;
+    if (name === 'down') this.vy = Math.max(this.vy, 120); // 下突きは少し沈み込む // 空中攻撃で少しだけ滞空
     if (name === 'parry') { this.comboIndex = 0; game.sfx.play('perfect'); if (!this.onGround) this.vy = Math.min(this.vy, 0); }
   }
 
@@ -235,16 +263,28 @@ export class Player {
     if (!a || this.state !== 'attack') return null;
     const d = a.def;
     if (a.t < d.startup || a.t >= d.startup + d.active) return null;
-    const x = this.face > 0 ? this.x + this.w + d.ox - (d.spin ? 0 : 0) : this.x - d.w - d.ox;
-    const bx = d.spin ? this.x + this.w / 2 - d.w / 2 : x;
-    return { x: bx, y: this.y + this.h / 2 - d.h / 2 + d.oy, w: d.w, h: d.h };
+    const mx = this.x + this.w / 2;
+    // 頭上・足元の攻撃：体ごと覆う
+    if (d.dir === 'up') return { x: mx - d.w / 2, y: this.y - d.h, w: d.w, h: d.h + this.h };
+    if (d.dir === 'down') return { x: mx - d.w / 2, y: this.y, w: d.w, h: this.h + d.h };
+    const ox = d.ox || 0, oy = d.oy || 0;
+    const x = this.face > 0 ? this.x + this.w + ox : this.x - d.w - ox;
+    const fx = d.spin ? mx - d.w / 2 : x;
+    const fy = this.y + this.h / 2 - d.h / 2 + oy;
+    // 前方の判定と、主人公の体（少し背中側まで）を合わせた範囲。密着した敵にも当たる
+    const x0 = Math.min(fx, this.x - 4), x1 = Math.max(fx + d.w, this.x + this.w + 4);
+    const y0 = Math.min(fy, this.y), y1 = Math.max(fy + d.h, this.y + this.h);
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   }
 
   updateAttack(game, input, dt, dirX) {
     const a = this.atk;
     const d = a.def;
     a.t += dt;
-    if (!a.swung && a.t >= d.startup) { a.swung = true; game.sfx.play(a.name === 'heavy' ? 'heavySwing' : 'swing'); game.fx.slash(this, a.name); }
+    if (!a.swung && a.t >= d.startup) {
+      a.swung = true; game.sfx.play(a.name === 'heavy' ? 'heavySwing' : 'swing'); game.fx.slash(this, a.name);
+      if (this.onGround && d.lunge >= 90) game.fx.step(this.x + this.w / 2 - this.face * 6, this.y + this.h, -this.face); // 踏み込みの土煙
+    }
     // 移動：地上は踏み込み後に減速、空中はゆるく制御可能
     if (this.onGround) this.vx = approach(this.vx, 0, 1400 * dt);
     else this.horizontal(dirX, dt, 0.7);
@@ -254,12 +294,13 @@ export class Player {
     // 硬直のキャンセル：回避・ジャンプ
     if (inRecovery) {
       if (input.pressed('dodge') && this.startDodge(game, dirX)) return;
-      if (this.onGround && this.bufferT > 0 && this.tryJump(game, input)) { this.state = 'normal'; this.atk = null; return; }
+      if (this.bufferT > 0 && this.tryJump(game, input)) { this.state = 'normal'; this.atk = null; return; }
     }
     // 連撃の移行
-    if (a.queued && a.t >= d.cancel && (a.name.startsWith('combo') || a.name === 'air')) {
+    if (a.queued && a.t >= d.cancel && a.name !== 'heavy' && a.name !== 'parry') {
       const max = this.stats.fourth ? 4 : 3;
-      if (a.name === 'air' || this.comboIndex < max) { this.startAttack(game, dirX); return; }
+      // 方向攻撃・空中攻撃はいつでも次へつなげられる。地上の連撃は最大段数まで
+      if (!a.name.startsWith('combo') || this.aimY !== 0 || !this.onGround || this.comboIndex < max) { this.startAttack(game, dirX); return; }
     }
     if (a.t >= total) {
       this.atk = null;

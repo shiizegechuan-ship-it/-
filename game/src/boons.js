@@ -50,8 +50,18 @@ export const BOONS = {
   aura: { school: 'arts', max: 5, name: '刻の灯火', desc: (t) => `[常時] 3秒ごとに周囲へ炎の波動（${Math.round(15 * (1 + 0.4 * (t - 1)))}）` },
   seeker: { school: 'arts', max: 5, name: '追尾星', desc: (t) => `[常時] 2.4秒ごとに追尾する秒針を放つ（${Math.round(20 * (1 + 0.4 * (t - 1)))}）` },
   chainlight: { school: 'arts', max: 5, name: '雷鎖', desc: (t) => `[常時] 4秒ごとに近くの敵へ雷が落ち、連鎖する（${Math.round(45 * (1 + 0.4 * (t - 1)))}）` },
+  meteor: { school: 'arts', max: 5, name: '流星群', desc: (t) => `[常時] 3.5秒ごとに敵へ流星が${1 + t}つ降る（各${Math.round(24 * (1 + 0.4 * (t - 1)))}）` },
+  frostnova: { school: 'arts', max: 5, name: '凍てつく刻', desc: (t) => `[常時] 5秒ごとに氷の波動。周囲を遅くする（${Math.round(20 * (1 + 0.4 * (t - 1)))}・${(1.2 + 0.3 * t).toFixed(1)}秒）` },
+  swordrain: { school: 'arts', max: 5, name: '剣の雨', desc: (t) => `[常時] 4秒ごとに光の剣が${2 + t}本降り注ぐ（各${Math.round(22 * (1 + 0.4 * (t - 1)))}）` },
+  gearsaw: { school: 'arts', max: 5, name: '歯車の鋸', desc: (t) => `[常時] 2.8秒ごとに回る歯車を投げる。行きと帰りに貫通（${Math.round(14 * (1 + 0.4 * (t - 1)))}×2）` },
+  stormcloud: { school: 'arts', max: 5, name: '雷雲', desc: (t) => `[常時] 頭上の雷雲が${(1.6 - 0.15 * t).toFixed(2)}秒ごとに敵を撃つ（${Math.round(16 * (1 + 0.4 * (t - 1)))}）` },
+  wake: { school: 'arts', max: 5, name: '残光の轍', desc: (t) => `[常時] 走った跡に炎が残り、触れた敵を焼く（${Math.round(7 * (1 + 0.4 * (t - 1)))}／0.4秒）` },
   lastlight: { school: 'arts', max: 5, name: '残り火', desc: (t) => `[条件] HP30%以下のとき、命中した敵が炎を噴く（${Math.round(12 * (1 + 0.4 * (t - 1)))}）` },
 };
+// 常に発動する術の一覧。種類を多く持つほど、すべての常時の術が強くなる（術の共鳴）
+export const PASSIVE_IDS = ['orbit', 'aura', 'seeker', 'chainlight', 'meteor', 'frostnova', 'swordrain', 'gearsaw', 'stormcloud', 'wake'];
+export const passiveSynergy = (n) => 1 + 0.15 * Math.max(0, n - 1);
+for (const id of PASSIVE_IDS) { const d = BOONS[id].desc; BOONS[id].desc = (t) => d(t) + '（常時の術が多いほど強化）'; }
 export const boonMax = (id) => BOONS[id].max || 2;
 
 // 共鳴（同系統2つ）
@@ -126,7 +136,7 @@ export function computeStats(boons) {
     activeArt: boons.find((b) => BOONS[b.id].active) || null,
     procs: { secondhand: t('secondhand'), riposte: t('riposte'), thunderbell: t('thunderbell'), plunge: t('plunge'), lastlight: t('lastlight') },
     gaugeMul: counts.arts >= 2 ? 1.5 : 1,
-    passives: { orbit: t('orbit'), aura: t('aura'), seeker: t('seeker'), chainlight: t('chainlight') },
+    passives: Object.fromEntries(PASSIVE_IDS.map((id) => [id, t(id)])),
   };
   return s;
 }
@@ -144,6 +154,8 @@ export function rollOffer(rng, owned, unlockedSchools, n = 3) {
     const sc = BOONS[id].school;
     let w = sc === 'risk' ? 1 : 2 + (counts[sc] || 0) * 2;
     if (sc === 'power' || sc === 'arts') w = id in lv ? 3 : 2;
+    // 常時の術は、持つほど出やすい（積み上げる楽しさ）
+    if (PASSIVE_IDS.includes(id)) w += Math.min(4, owned.filter((b) => PASSIVE_IDS.includes(b.id)).length);
     for (let i = 0; i < w; i++) weighted.push(id);
   }
   const out = [];

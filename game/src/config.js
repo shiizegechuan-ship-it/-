@@ -21,6 +21,8 @@ export const PLAYER = {
   jumpVel: 650, // 最大跳躍 ≒ 3.3 タイル
   jumpCutMul: 0.42,
   maxFall: 900,
+  airJumps: 1, // 空中ジャンプの回数（2段ジャンプ）
+  airJumpVel: 590,
   coyote: 6 * F,
   jumpBuffer: 8 * F,
   dodgeTime: 18 * F,
@@ -53,6 +55,13 @@ export const ATTACKS = {
   air: { startup: 4 * F, active: 4 * F, recovery: 8 * F, cancel: 8 * F, dmg: 11, w: 44, h: 34, ox: 4, oy: 0, knock: 110, stop: 3 * F, lunge: 0, cat: 'air' },
   // パリィ斬り：回避の直後に攻撃。範囲が広く、当たれば必ず会心
   parry: { startup: 3 * F, active: 6 * F, recovery: 12 * F, cancel: 12 * F, dmg: 16, w: 80, h: 50, ox: -6, oy: -6, knock: 240, stop: 7 * F, lunge: 120, cat: 'combo', shake: 5, parry: true },
+  // 方向攻撃（↑＋攻撃／↓＋攻撃）。dir:'up'/'down' は頭上・足元に、体ごと覆う判定を出す
+  up: { startup: 4 * F, active: 5 * F, recovery: 11 * F, cancel: 10 * F, dmg: 12, w: 50, h: 46, dir: 'up', knock: 50, lift: 460, stop: 4 * F, lunge: 20, cat: 'combo', shake: 2 },
+  upAir: { startup: 4 * F, active: 5 * F, recovery: 9 * F, cancel: 9 * F, dmg: 12, w: 50, h: 46, dir: 'up', knock: 50, lift: 360, stop: 4 * F, lunge: 0, cat: 'air', shake: 2 },
+  // 空中の下突き：当たると跳ね上がる（敵を踏み台にできる）
+  down: { startup: 3 * F, active: 9 * F, recovery: 8 * F, cancel: 8 * F, dmg: 14, w: 40, h: 40, dir: 'down', knock: 60, stop: 4 * F, lunge: 0, cat: 'air', shake: 3, bounce: 560 },
+  // 地上の足払い：低く長い薙ぎ払い
+  sweep: { startup: 5 * F, active: 4 * F, recovery: 12 * F, cancel: 11 * F, dmg: 13, w: 54, h: 18, ox: 4, oy: 6, knock: 180, lift: 220, stop: 4 * F, lunge: 90, cat: 'combo', shake: 2 },
   heavy: { startup: 6 * F, active: 5 * F, recovery: 20 * F, cancel: 18 * F, dmg: 40, w: 62, h: 40, ox: 4, oy: -6, knock: 380, stop: 7 * F, lunge: 150, cat: 'heavy', shake: 6, breaks: true },
 };
 

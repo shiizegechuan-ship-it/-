@@ -345,8 +345,15 @@ export class Game {
       if (!e.alive || a.hitIds.has(e.id)) continue;
       if (!overlap(hb, e)) continue;
       a.hitIds.add(e.id);
-      const dir = a.def.spin ? sign(cx(e) - cx(p)) || p.face : p.face;
-      this.dealDamage(e, { base: a.def.dmg, cat: a.def.cat, knock: a.def.knock, dir, stop: a.def.stop, breaks: !!a.def.breaks, shake: a.def.shake || 0, heavy: a.name === 'heavy', parry: !!a.def.parry });
+      const dir = a.def.spin || a.def.dir ? sign(cx(e) - cx(p)) || p.face : p.face;
+      this.dealDamage(e, { base: a.def.dmg, cat: a.def.cat, knock: a.def.knock, dir, stop: a.def.stop, breaks: !!a.def.breaks, shake: a.def.shake || 0, heavy: a.name === 'heavy', parry: !!a.def.parry, lift: a.def.lift || 0 });
+      // 下突き：当たったら跳ね上がる（2段ジャンプと空中回避も回復）
+      if (a.def.bounce && !p.onGround && !a.bounced) {
+        a.bounced = true;
+        p.vy = -a.def.bounce; p.airJumpsLeft = PC.airJumps; p.airDodgeUsed = false;
+        this.fx.ring(cx(p), p.y + p.h, '#9fe3ff', 26, 0.25);
+        this.fx.sparks(cx(p), p.y + p.h, '#ffffff', 8, 240);
+      }
     }
     // 弾は斬り落とせる
     for (const pr of this.room.projectiles) {
@@ -386,7 +393,7 @@ export class Game {
     }
     if (e.warp > 0) cat = 'skill';
     dmg = Math.round(dmg);
-    const res = e.takeHit(this, { dmg, dir: info.dir, knock: info.knock, breaks: info.breaks, echo: !!info.echo, cat: info.cat });
+    const res = e.takeHit(this, { dmg, dir: info.dir, knock: info.knock, breaks: info.breaks, echo: !!info.echo, cat: info.cat, lift: info.lift || 0 });
     if (res.silent) return res;
     if (res.absorbed) { this.fx.text(cx(e), e.y - 10, '吸収', '#b67cf0', 12); return res; }
     if (res.parried) {

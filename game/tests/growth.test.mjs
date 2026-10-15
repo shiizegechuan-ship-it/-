@@ -220,3 +220,85 @@ test('常に発動する術：守りの秒針は回り続けて触れた敵を�
   assert.ok(g.player.orbitHands && g.player.orbitHands.length === 3);
   assert.ok(g.log.length >= 0);
 });
+
+test('新しい常時の術6種：それぞれ単独で敵にダメージを与え、種類が多いほど共鳴で強くなる', () => {
+  for (const id of ['meteor', 'frostnova', 'swordrain', 'gearsaw', 'stormcloud', 'wake']) {
+    const { g, d, e } = arena(RustSoldier, id === 'wake' ? 200 : 60);
+    e.hp = e.maxHp = 1e6; e.cool = 99;
+    g.player.setBoons([{ id, tier: 1 }]);
+    if (id === 'wake') { for (let i = 0; i < 60 * 3; i++) d.frame(1, [i < 50 ? 'right' : 'left']); }
+    else d.frame(60 * 6);
+    assert.ok(e.hp < e.maxHp, `${id} damages`);
+  }
+  const { g, d } = arena(RustSoldier, 60);
+  g.player.setBoons(['orbit', 'aura', 'meteor', 'gearsaw'].map((id) => ({ id, tier: 1 })));
+  d.frame(2);
+  assert.ok(Math.abs(g.player.passiveSyn - 1.45) < 1e-9, 'synergy +15% per extra kind');
+});
+
+test('凍てつく刻は敵を遅くする', () => {
+  const { g, d, e } = arena(RustSoldier, 60);
+  e.hp = e.maxHp = 1e6; e.cool = 99;
+  g.player.setBoons([{ id: 'frostnova', tier: 1 }]);
+  d.until(() => e.lag > 0, 60 * 6);
+  assert.ok(e.slowed);
+});
+
+test('2段ジャンプ：空中でもう一度跳べるが、3回目は出ない。着地で回復', () => {
+  const g = sandbox(FLAT); const d = new Driver(g); d.frame(5);
+  const p = g.player;
+  d.frame(1, ['jump']); d.frame(12, ['jump']); d.frame(6);
+  assert.ok(!p.onGround);
+  const y1 = p.y;
+  d.frame(1, ['jump']); d.frame(1);
+  assert.ok(p.vy < -400, 'second jump launches upward');
+  d.frame(8);
+  d.frame(1, ['jump']); d.frame(1);
+  assert.ok(p.vy > -400, 'no third jump');
+  d.until(() => p.onGround, 200);
+  assert.equal(p.airJumpsLeft, 1);
+  void y1;
+});
+
+test('上攻撃・下攻撃：↑＋攻撃は頭上に、↓＋攻撃は空中なら足元・地上なら足払い', () => {
+  const g = sandbox(FLAT); const d = new Driver(g); d.frame(5);
+  const p = g.player;
+  d.frame(1, ['up', 'attack']);
+  assert.equal(p.atk.name, 'up');
+  d.until(() => p.hitbox(), 20);
+  let hb = p.hitbox();
+  assert.ok(hb.y < p.y - 30 && hb.y + hb.h >= p.y + p.h, 'covers above the head down to the feet');
+  d.frame(40);
+  d.frame(1, ['down', 'attack']);
+  assert.equal(p.atk.name, 'sweep');
+  d.frame(40);
+  d.frame(1, ['jump']); d.frame(10, ['jump']);
+  d.frame(1, ['down', 'attack']);
+  assert.equal(p.atk.name, 'down');
+  d.until(() => p.hitbox(), 20);
+  hb = p.hitbox();
+  assert.ok(hb.y <= p.y && hb.y + hb.h > p.y + p.h + 30, 'covers the body down below the feet');
+});
+
+test('下突きが当たると跳ね上がり、2段ジャンプも回復する', () => {
+  const { g, d, e } = arena(RustSoldier, 0);
+  e.hp = e.maxHp = 1e6; e.cool = 99;
+  const p = g.player;
+  e.x = p.x - 2;
+  p.y = e.y - p.h - 50; p.vy = 0; p.onGround = false; p.airJumpsLeft = 0;
+  d.frame(1, ['down', 'attack']);
+  d.until(() => p.vy < -300, 30);
+  assert.ok(p.vy < -300, 'bounced');
+  assert.equal(p.airJumpsLeft, 1);
+  assert.ok(e.hp < e.maxHp);
+});
+
+test('通常攻撃の判定は主人公の体まで覆う（密着・背中寄りの敵にも当たる）', () => {
+  const { g, d, e } = arena(RustSoldier, 0);
+  e.hp = e.maxHp = 1e6; e.cool = 99;
+  const p = g.player; p.face = 1;
+  e.x = p.x - 6; // 体に重なる位置（少し背中側）
+  d.frame(1, ['attack']);
+  d.until(() => e.hp < e.maxHp, 20);
+  assert.ok(e.hp < e.maxHp);
+});

@@ -75,7 +75,8 @@ export class Enemy {
   }
   onFlinch(game, info) {
     this.vx = info.dir * info.knock;
-    if (!this.gravity) this.vy = -40;
+    if (!this.gravity) this.vy = info.lift ? -info.lift * 0.4 : -40;
+    else if (info.lift) this.vy = -info.lift; // 打ち上げ（↑攻撃・足払い）
     this.setState('flinch');
     return true;
   }
