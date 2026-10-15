@@ -32,9 +32,10 @@ function fit() {
   const dpr = window.devicePixelRatio || 1;
   canvas.style.width = `${Math.floor(VIEW_W * s)}px`;
   canvas.style.height = `${Math.floor(VIEW_H * s)}px`;
-  const k = Math.max(1, Math.min(2, s * dpr));
-  canvas.width = Math.floor(VIEW_W * k);
-  canvas.height = Math.floor(VIEW_H * k);
+  // ドット絵がにじまないよう、内部解像度は整数倍にする（拡大は CSS の pixelated）
+  const k = Math.max(1, Math.min(3, Math.floor(s * dpr + 0.15)));
+  canvas.width = VIEW_W * k;
+  canvas.height = VIEW_H * k;
 }
 window.addEventListener('resize', fit);
 if (window.ResizeObserver) new ResizeObserver(fit).observe(stage);

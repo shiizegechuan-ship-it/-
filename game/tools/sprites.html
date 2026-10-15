@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><title>スプライト一覧（開発用）</title>
+<style>body{margin:0;background:#2a2433}canvas{image-rendering:pixelated;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+import { ALL_FRAMES, PAL_ALLY, PAL_FOE } from '../src/sprites.js';
+import { sprite } from '../src/pix.js';
+const S = 6, c = document.getElementById('c'), ctx = c.getContext('2d');
+c.width = 1200; c.height = 760; let col = 0;
+ctx.fillStyle = '#d9d2c4'; ctx.fillRect(0, 380, 1200, 380);
+let y = 8, x0 = 8;
+for (const [group, frames] of Object.entries(ALL_FRAMES)) {
+  const pal = /HERO|LIRA|GLEN/.test(group) ? PAL_ALLY : PAL_FOE;
+  let x = x0, h = 0;
+  for (const [name, rows] of Object.entries(frames)) {
+    const s = sprite(group + name, rows, pal);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(s.img, x, y, s.w * S, s.h * S);
+    // 影絵
+    ctx.filter = 'brightness(0)';
+    ctx.drawImage(s.img, x, y + 380, s.w * S, s.h * S);
+    ctx.filter = 'none';
+    x += s.w * S + 10; h = Math.max(h, s.h * S);
+  }
+  y += h + 10; if (y > 250) { y = 8; x0 = 620; }
+}
+</script></body></html>

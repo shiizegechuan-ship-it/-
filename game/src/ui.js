@@ -5,13 +5,16 @@ import { BOONS, SCHOOLS, RESONANCE, synergyHints, schoolCounts } from './boons.j
 import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, openQuestions, bossCounter, GLEN_DEADLINE, hasWedge } from './meta.js';
 import { FLOOR_NAMES } from './world.js';
 
-export const FONT = `'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', 'IPAGothic', sans-serif`;
-const SERIF = `'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', 'IPAGothic', serif`;
+// ドット文字（DotGothic16）。読み込めない環境では OS の日本語フォントで表示される
+export const FONT = `'DotGothic16', 'Hiragino Sans', 'Yu Gothic', 'IPAGothic', sans-serif`;
+const SERIF = FONT;
 
 function text(ctx, str, x, y, { size = 14, color = C.text, align = 'left', bold = false, font = FONT, shadow = true } = {}) {
-  ctx.font = `${bold ? 'bold ' : ''}${size}px ${font}`;
+  // ドット文字は太字にしない（にじむため）。影は 2px の硬い影
+  ctx.font = `${Math.round(size)}px ${font}`;
   ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
-  if (shadow) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillText(str, x + 1, y + 1); }
+  x = Math.round(x); y = Math.round(y);
+  if (shadow) { ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillText(str, x + 2, y + 2); }
   ctx.fillStyle = color; ctx.fillText(str, x, y);
 }
 // 折り返し（日本語は文字単位）
@@ -29,8 +32,12 @@ function wrap(ctx, str, maxW, size, font = FONT) {
   return lines;
 }
 function panel(ctx, x, y, w, h, border = 'rgba(255,255,255,0.18)', bg = 'rgba(12,9,18,0.92)') {
+  // ドット絵風の枠：外側の黒ふち＋2px の線
+  x = Math.round(x); y = Math.round(y); w = Math.round(w); h = Math.round(h);
+  ctx.fillStyle = '#05040a'; ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
   ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = border; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.fillStyle = border;
+  ctx.fillRect(x, y, w, 2); ctx.fillRect(x, y + h - 2, w, 2); ctx.fillRect(x, y, 2, h); ctx.fillRect(x + w - 2, y, 2, h);
 }
 
 // ───────── HUD ─────────
@@ -276,21 +283,9 @@ export function drawJournal(ctx, game, m) {
 // ───────── タイトル ─────────
 export function drawTitle(ctx, game) {
   const t = game.time;
-  const g = ctx.createLinearGradient(0, 0, 0, VIEW_H);
-  g.addColorStop(0, '#1b1426'); g.addColorStop(1, '#07060b');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  // 時計塔のシルエット
-  ctx.fillStyle = '#0d0a12';
-  ctx.fillRect(VIEW_W / 2 - 70, 140, 140, VIEW_H - 140);
-  ctx.beginPath(); ctx.moveTo(VIEW_W / 2 - 90, 145); ctx.lineTo(VIEW_W / 2, 60); ctx.lineTo(VIEW_W / 2 + 90, 145); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#e8dcc4'; ctx.beginPath(); ctx.arc(VIEW_W / 2, 200, 44, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#1a1420'; ctx.lineWidth = 3;
-  const a1 = -t * 0.6 - Math.PI / 2, a2 = -t * 0.05 - Math.PI / 2; // 逆回り
-  ctx.beginPath(); ctx.moveTo(VIEW_W / 2, 200); ctx.lineTo(VIEW_W / 2 + Math.cos(a1) * 36, 200 + Math.sin(a1) * 36); ctx.stroke();
-  ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(VIEW_W / 2, 200); ctx.lineTo(VIEW_W / 2 + Math.cos(a2) * 24, 200 + Math.sin(a2) * 24); ctx.stroke();
-  ctx.fillStyle = C.gold; ctx.beginPath(); ctx.moveTo(VIEW_W / 2 - 6, 248); ctx.lineTo(VIEW_W / 2 + 6, 248); ctx.lineTo(VIEW_W / 2, 290); ctx.closePath(); ctx.fill();
-  text(ctx, '夜明けの楔', VIEW_W / 2, 340, { size: 46, align: 'center', bold: true, font: SERIF, color: '#f3e7cf' });
-  text(ctx, 'WEDGE OF DAWN', VIEW_W / 2, 364, { size: 12, align: 'center', color: C.gold });
+  // 背景（星空の時計塔）は render.js がドット絵で描く
+  text(ctx, '夜明けの楔', VIEW_W / 2, 352, { size: 56, align: 'center', bold: true, font: SERIF, color: '#f3e7cf' });
+  text(ctx, 'WEDGE OF DAWN', VIEW_W / 2, 378, { size: 12, align: 'center', color: C.gold });
   if (game.titleConfirm) {
     panel(ctx, VIEW_W / 2 - 200, 390, 400, 80, '#e35d5d');
     text(ctx, '記録をすべて消して、はじめから遊びますか？', VIEW_W / 2, 422, { size: 14, align: 'center' });

@@ -4,7 +4,7 @@ export const DT = 1 / 60; // 固定更新幅
 export const TILE = 30;
 export const VIEW_W = 960;
 export const VIEW_H = 540;
-export const ZOOM = 1.3; // 世界の表示倍率（キャラクターを大きく見せる）
+export const ZOOM = 1.5; // 世界の表示倍率。640×360 の世界を 320×180 のドット絵に描き、3 倍で表示する
 
 export const PLAYER = {
   w: 16,

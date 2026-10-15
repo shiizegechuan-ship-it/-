@@ -1,74 +1,116 @@
-// 世界の描画（仮素材：図形とシルエット。輪郭・色・予備動作の読みやすさを優先）
-import { TILE, VIEW_W, VIEW_H, ZOOM, COLORS as C, PLAYER as PC } from './config.js';
+// 描画（ドット絵）。世界は 320×180 の低解像度バッファに描き、3 倍に拡大して表示する。
+// 文字（ダメージ数値・調べる表示）と HUD は拡大後の画面にドット文字フォントで描く。
+import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC } from './config.js';
 import { SOLID, ONEWAY } from './tilemap.js';
 import { cx, cy, clamp } from './util.js';
 import { drawHud, drawModal, drawTitle, drawRewind, drawEnding, FONT } from './ui.js';
-import { drawPlayer, drawSoldier, drawBat, drawTurret, drawKnight, drawBoss, drawLira, drawGlen } from './characters.js';
+import { PW, PH, makeCanvas, rect, pset, line, dashLine, circle, disc, wedge, arc, drawSprite } from './pix.js';
+import { drawBackground, backgroundFor, gearFrame, TS } from './background.js';
+import { spr } from './sprites.js';
 
-const FLOOR_SKY = [
-  ['#2a1b2e', '#140e19'],
-  ['#162327', '#0b1214'],
-  ['#141a33', '#07080f'],
-];
+const SC = VIEW_W / PW; // 3
+let buf = null, b = null;
+function buffer() {
+  if (!buf) { buf = makeCanvas(PW, PH); b = buf.getContext('2d'); }
+  b.imageSmoothingEnabled = false;
+  return b;
+}
+let camPX = 0, camPY = 0;
+// 世界座標 → 拡大後の画面座標
+const SX = (wx) => (wx / 2 - camPX) * SC;
+const SY = (wy) => (wy / 2 - camPY) * SC;
+const W = (v) => Math.round(v / 2);
 
 export function render(ctx, game) {
   ctx.save();
+  ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = C.bg0;
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  if (game.scene === 'title') drawTitle(ctx, game);
+  if (game.scene === 'title') { drawTitleScene(ctx, game); drawTitle(ctx, game); }
   else if (game.scene === 'play') renderPlay(ctx, game);
   else if (game.scene === 'rewind') drawRewind(ctx, game);
   else if (game.scene === 'ending') drawEnding(ctx, game);
   ctx.restore();
 }
 
+// タイトル：星空の時計塔（ドット絵）
+function drawTitleScene(ctx, game) {
+  const b = buffer();
+  const t = game.time;
+  drawBackground(b, 2, t * 6, 30, t, 2);
+  // 時計塔
+  const tx = PW / 2;
+  rect(b, tx - 22, 52, 44, 140, '#0a0d1e');
+  for (let i = 0; i < 26; i++) rect(b, tx - 26 + i, 52 - i, 52 - i * 2, 1, '#0a0d1e');
+  rect(b, tx - 1, 18, 2, 10, '#0a0d1e');
+  for (let y = 104; y < 180; y += 16) for (const dx of [-12, 9]) rect(b, tx + dx, y, 3, 6, (Math.floor(t * 0.4 + y * 0.37 + dx) % 4) ? '#1c2244' : '#f2c14e');
+  disc(b, tx, 70, 13, '#e8dcc4'); circle(b, tx, 70, 13, '#8c6d2a');
+  for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; pset(b, tx + Math.cos(a) * 11, 70 + Math.sin(a) * 11, '#5a4a3a'); }
+  // 逆回りの針
+  const a1 = -t * 0.6 - Math.PI / 2, a2 = -t * 0.05 - Math.PI / 2;
+  line(b, tx, 70, tx + Math.cos(a1) * 10, 70 + Math.sin(a1) * 10, '#1a1420');
+  line(b, tx, 70, tx + Math.cos(a2) * 7, 70 + Math.sin(a2) * 7, '#1a1420', 2);
+  // 楔
+  for (let i = 0; i < 9; i++) rect(b, tx - 4 + Math.floor(i / 2), 86 + i, 9 - Math.floor(i / 2) * 2, 1, '#f2c14e');
+  ctx.drawImage(buf, 0, 0, VIEW_W, VIEW_H);
+  // 文字を読みやすくする帯
+  ctx.fillStyle = 'rgba(5,6,16,0.55)'; ctx.fillRect(0, 300, VIEW_W, 240);
+}
+
 function renderPlay(ctx, game) {
-  const fx = game.fx;
+  const fx = game.fx, b = buffer();
+  camPX = Math.round(game.cam.x / 2); camPY = Math.round(game.cam.y / 2);
   let sx = 0, sy = 0;
-  if (fx.shakeT > 0) { sx = (Math.random() - 0.5) * fx.shakeMag * 2; sy = (Math.random() - 0.5) * fx.shakeMag * 2; }
-  const camX = game.cam.x + sx / ZOOM, camY = game.cam.y + sy / ZOOM;
-  drawBackground(ctx, game, camX);
-  ctx.save();
-  ctx.scale(ZOOM, ZOOM);
-  ctx.translate(-Math.round(camX * ZOOM) / ZOOM, -Math.round(camY * ZOOM) / ZOOM);
+  if (fx.shakeT > 0) { sx = Math.round((Math.random() - 0.5) * fx.shakeMag); sy = Math.round((Math.random() - 0.5) * fx.shakeMag); }
+  const fi = game.run.fi;
   if (game.silhouette) {
-    // 検証用：キャラクターを黒一色の影絵にして、輪郭だけで敵味方が分かるか確かめる
-    ctx.fillStyle = '#e9e3d6'; ctx.fillRect(camX - 50, camY - 50, VIEW_W, VIEW_H);
-    ctx.filter = 'brightness(0)';
-    for (const it of game.room.items) if (it.kind === 'npc') drawItem(ctx, game, it);
-    for (const e of game.room.enemies) drawEnemy(ctx, game, e);
-    drawPlayer(ctx, game, game.player);
-    ctx.filter = 'none';
-    ctx.restore();
+    rect(b, 0, 0, PW, PH, '#e9e3d6');
+    b.save(); b.translate(-camPX, -camPY); b.filter = 'brightness(0)';
+    for (const it of game.room.items) if (it.kind === 'npc') drawItem(b, game, it);
+    for (const e of game.room.enemies) drawEnemy(b, game, e);
+    drawPlayer(b, game, game.player);
+    b.filter = 'none'; b.restore();
+    ctx.drawImage(buf, 0, 0, VIEW_W, VIEW_H);
     return;
   }
-  drawTiles(ctx, game.map, camX);
-  for (const it of game.room.items) drawItem(ctx, game, it);
-  for (const g of fx.ghosts) drawGhost(ctx, g);
-  for (const e of game.room.enemies) drawEnemy(ctx, game, e);
-  drawPlayer(ctx, game, game.player);
-  for (const s of fx.slashes) drawSlash(ctx, s);
-  for (const pr of game.room.projectiles) drawProjectile(ctx, pr);
+  drawBackground(b, fi, camPX, camPY, game.time);
+  b.save();
+  b.translate(-camPX, -camPY);
+  drawTiles(b, game, fi);
+  for (const it of game.room.items) drawItem(b, game, it);
+  for (const g of fx.ghosts) { b.globalAlpha = 0.45 * (1 - g.t / g.life); drawSprite(b, spr('hero', 'dodge', 'ghost'), (g.x + g.w / 2) / 2, (g.y + g.h) / 2, g.face); }
+  b.globalAlpha = 1;
+  for (const e of game.room.enemies) drawEnemy(b, game, e);
+  drawPlayer(b, game, game.player);
+  for (const s of fx.slashes) drawSlash(b, s);
+  for (const pr of game.room.projectiles) drawProjectile(b, pr, game.time);
   for (const r of fx.rings) {
     const k = r.t / r.life;
-    ctx.strokeStyle = r.color; ctx.globalAlpha = 1 - k; ctx.lineWidth = 3 * (1 - k) + 1;
-    ctx.beginPath(); ctx.arc(r.x, r.y, r.r * (0.3 + 0.7 * k), 0, Math.PI * 2); ctx.stroke();
+    b.globalAlpha = 1 - k;
+    circle(b, r.x / 2, r.y / 2, (r.r * (0.3 + 0.7 * k)) / 2, r.color);
   }
-  ctx.globalAlpha = 1;
+  b.globalAlpha = 1;
   for (const p of fx.parts) {
-    ctx.globalAlpha = 1 - p.t / p.life; ctx.fillStyle = p.color;
-    ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    b.globalAlpha = Math.min(1, 1.6 * (1 - p.t / p.life));
+    const s = Math.max(1, Math.round(p.size / 2));
+    rect(b, p.x / 2 - s / 2, p.y / 2 - s / 2, s, s, p.color);
   }
-  ctx.globalAlpha = 1;
+  b.globalAlpha = 1;
+  b.restore();
+  ctx.drawImage(buf, sx * SC, sy * SC, VIEW_W, VIEW_H);
+
+  // ここから拡大後の画面
+  drawWorldLabels(ctx, game);
   drawPrompt(ctx, game);
   for (const t of fx.texts) {
     ctx.globalAlpha = 1 - Math.max(0, t.t / t.life - 0.5) * 2;
-    ctx.font = `bold ${t.size}px ${FONT}`; ctx.textAlign = 'center';
-    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.strokeText(t.str, t.x, t.y);
-    ctx.fillStyle = t.color; ctx.fillText(t.str, t.x, t.y);
+    ctx.font = `${Math.round(t.size * 1.25)}px ${FONT}`; ctx.textAlign = 'center';
+    const x = Math.round(SX(t.x)), y = Math.round(SY(t.y));
+    ctx.fillStyle = '#0a0610';
+    for (const [dx, dy] of [[-2, 0], [2, 0], [0, -2], [0, 2]]) ctx.fillText(t.str, x + dx, y + dy);
+    ctx.fillStyle = t.color; ctx.fillText(t.str, x, y);
   }
   ctx.globalAlpha = 1;
-  ctx.restore();
   // 時止め：彩度を落とす
   if (game.timeStopT > 0) {
     ctx.save();
@@ -78,26 +120,17 @@ function renderPlay(ctx, game) {
     ctx.restore();
     ctx.fillStyle = 'rgba(180,200,255,0.08)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
-  if (game.slowT > 0 && game.slowScale < 0.5) { ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
-  if (fx.vignette > 0) {
-    const g = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.35, VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.85);
-    g.addColorStop(0, 'rgba(200,20,20,0)'); g.addColorStop(1, `rgba(200,20,20,${0.45 * fx.vignette})`);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  }
-  // 低HPの警告
+  if (fx.vignette > 0) pixelVignette(ctx, `rgba(200,20,20,${0.5 * fx.vignette})`, 1);
   const p = game.player;
-  if (p.hp > 0 && p.hp / p.maxHp < 0.3) {
-    const a = 0.12 + Math.sin(game.time * 6) * 0.06;
-    const g = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.45, VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.9);
-    g.addColorStop(0, 'rgba(150,0,0,0)'); g.addColorStop(1, `rgba(150,0,0,${a})`);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  }
+  if (p.hp > 0 && p.hp / p.maxHp < 0.3) pixelVignette(ctx, `rgba(150,0,0,${0.18 + Math.sin(game.time * 6) * 0.08})`, 0.8);
   if (fx.flash > 0) { ctx.globalAlpha = fx.flash; ctx.fillStyle = fx.flashColor; ctx.fillRect(0, 0, VIEW_W, VIEW_H); ctx.globalAlpha = 1; }
   drawHud(ctx, game);
   if (game.transition) {
+    // 縦じまのワイプ
     const t = game.transition.t;
-    const a = t < 0.22 ? t / 0.22 : 1 - (t - 0.22) / 0.22;
-    ctx.fillStyle = `rgba(5,4,8,${clamp(a, 0, 1)})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    const k = clamp(t < 0.22 ? t / 0.22 : 1 - (t - 0.22) / 0.22, 0, 1);
+    ctx.fillStyle = '#05040a';
+    for (let x = 0; x < VIEW_W; x += 24) ctx.fillRect(x, 0, Math.ceil(24 * k), VIEW_H);
   }
   if (p.state === 'dead') {
     const a = clamp(game.run.deathT / 1.6, 0, 1);
@@ -106,286 +139,439 @@ function renderPlay(ctx, game) {
   if (game.modal) drawModal(ctx, game);
 }
 
-function drawBackground(ctx, game, camX) {
-  const fi = game.run.fi;
-  const [top, bot] = FLOOR_SKY[fi] || FLOOR_SKY[0];
-  const g = ctx.createLinearGradient(0, 0, 0, VIEW_H);
-  g.addColorStop(0, top); g.addColorStop(1, bot);
-  ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  // 遠景の歯車（ゆっくり回る）
-  const t = game.time;
-  ctx.save();
-  for (let i = 0; i < 6; i++) {
-    const par = 0.2 + (i % 3) * 0.12;
-    const x = ((i * 233 + 80) - camX * par) % (VIEW_W + 300);
-    const y = 120 + (i * 97) % 300;
-    const r = 40 + (i * 37) % 70;
-    drawGear(ctx, x < -150 ? x + VIEW_W + 300 : x, y, r, (i % 2 ? 1 : -1) * t * 0.15 + i, `rgba(255,255,255,${0.025 + (i % 3) * 0.012})`);
-  }
-  // 窓の明かり／月
-  if (fi === 2) {
-    ctx.fillStyle = 'rgba(230,230,255,0.12)';
-    ctx.beginPath(); ctx.arc(760 - camX * 0.05, 110, 46, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.restore();
-}
-
-export function drawGear(ctx, x, y, r, ang, color) {
+// 画面の縁を段々に塗る（にじまない周辺減光）
+function pixelVignette(ctx, color, strength) {
   ctx.fillStyle = color;
-  ctx.beginPath();
-  const teeth = Math.max(8, Math.round(r / 6));
-  for (let i = 0; i < teeth * 2; i++) {
-    const a = ang + (i / (teeth * 2)) * Math.PI * 2;
-    const rr = i % 2 ? r : r * 1.14;
-    ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  const steps = 4;
+  for (let i = 0; i < steps; i++) {
+    const m = 12 * (i + 1) * strength;
+    ctx.globalAlpha = (steps - i) / steps;
+    ctx.fillRect(0, 0, VIEW_W, m / 2); ctx.fillRect(0, VIEW_H - m / 2, VIEW_W, m / 2);
+    ctx.fillRect(0, 0, m, VIEW_H); ctx.fillRect(VIEW_W - m, 0, m, VIEW_H);
   }
-  ctx.closePath();
-  ctx.arc(x, y, r * 0.35, 0, Math.PI * 2, true);
-  ctx.fill('evenodd');
-}
-
-function drawTiles(ctx, map, camX) {
-  const x0 = Math.max(0, Math.floor(camX / TILE) - 1), x1 = Math.min(map.w, Math.ceil((camX + VIEW_W / ZOOM) / TILE) + 1);
-  for (let ty = 0; ty < map.h; ty++) for (let tx = x0; tx < x1; tx++) {
-    const t = map.get(tx, ty);
-    const x = tx * TILE, y = ty * TILE;
-    if (t === SOLID) {
-      ctx.fillStyle = C.stone; ctx.fillRect(x, y, TILE, TILE);
-      // 石積みの目地
-      ctx.fillStyle = 'rgba(0,0,0,0.18)';
-      ctx.fillRect(x, y + TILE / 2, TILE, 1);
-      ctx.fillRect(x + ((ty % 2) ? TILE / 2 : 0), y, 1, TILE / 2);
-      ctx.fillRect(x + ((ty % 2) ? 0 : TILE / 2), y + TILE / 2, 1, TILE / 2);
-      if (map.get(tx, ty - 1) !== SOLID && ty > 0) { ctx.fillStyle = C.stoneHi; ctx.fillRect(x, y, TILE, 3); }
-      if (map.get(tx - 1, ty) !== SOLID && tx > 0) { ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(x, y, 2, TILE); }
-    } else if (t === ONEWAY) {
-      ctx.fillStyle = C.platform; ctx.fillRect(x, y, TILE, 6);
-      ctx.fillStyle = 'rgba(255,230,180,0.25)'; ctx.fillRect(x, y, TILE, 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(x + TILE / 2 - 1, y + 6, 2, 8);
-    }
-  }
-}
-
-function drawGhost(ctx, g) {
-  ctx.globalAlpha = 0.35 * (1 - g.t / g.life);
-  ctx.fillStyle = '#9fe3ff';
-  ctx.fillRect(g.x, g.y + 8, g.w, g.h - 8);
-  ctx.beginPath(); ctx.arc(g.x + g.w / 2, g.y + 6, 6, 0, Math.PI * 2); ctx.fill();
   ctx.globalAlpha = 1;
 }
 
-function drawSlash(ctx, s) {
-  const p = s.owner;
-  const k = s.t / s.life;
-  const heavy = s.name === 'heavy';
-  const spin = s.name === 'combo4';
-  const r = heavy ? 48 : s.name === 'combo3' ? 42 : 34;
-  const x = cx(p) + (spin ? 0 : s.face * 10), y = cy(p) - 2;
-  ctx.save();
-  ctx.globalAlpha = 1 - k;
-  ctx.strokeStyle = heavy ? C.gold : '#fff8e6';
-  ctx.lineWidth = heavy ? 9 : 6;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  if (spin) ctx.arc(x, y, r, 0, Math.PI * 2 * (0.4 + k * 0.6));
-  else if (s.name === 'combo2') ctx.arc(x, y, r, s.face > 0 ? Math.PI * 0.35 : Math.PI * 0.65, s.face > 0 ? -Math.PI * 0.45 : Math.PI * 1.45, s.face > 0);
-  else if (s.name === 'air') ctx.arc(x, y, r, s.face > 0 ? -Math.PI * 0.6 : Math.PI * 1.6, s.face > 0 ? Math.PI * 0.6 : Math.PI * 0.4, s.face < 0);
-  else ctx.arc(x, y, r, s.face > 0 ? -Math.PI * 0.45 : Math.PI * 1.45, s.face > 0 ? Math.PI * 0.35 : Math.PI * 0.65, s.face < 0);
-  ctx.stroke();
-  ctx.restore();
+// ───────── タイル ─────────
+function drawTiles(b, game, fi) {
+  const map = game.map, tiles = backgroundFor(fi).tiles;
+  const x0 = Math.max(0, Math.floor(camPX / TS) - 1), x1 = Math.min(map.w, Math.ceil((camPX + PW) / TS) + 1);
+  const y0 = Math.max(0, Math.floor(camPY / TS) - 1), y1 = Math.min(map.h, Math.ceil((camPY + PH) / TS) + 1);
+  for (let ty = y0; ty < y1; ty++) for (let tx = x0; tx < x1; tx++) {
+    const t = map.get(tx, ty);
+    const x = tx * TS, y = ty * TS;
+    if (t === SOLID) {
+      const top = ty > 0 && map.get(tx, ty - 1) !== SOLID;
+      const v = (tx * 7 + ty * 13) % tiles.variants;
+      b.drawImage(tiles.canvas, v * TS, top ? 0 : TS, TS, TS, x, y, TS, TS);
+      // 側面と天井の影
+      if (tx > 0 && map.get(tx - 1, ty) !== SOLID) rect(b, x, y, 1, TS, tiles.P.hi);
+      if (tx < map.w - 1 && map.get(tx + 1, ty) !== SOLID) rect(b, x + TS - 1, y, 1, TS, tiles.P.under);
+      if (ty < map.h - 1 && map.get(tx, ty + 1) === 0) rect(b, x, y + TS - 2, TS, 2, tiles.P.under);
+    } else if (t === ONEWAY) {
+      b.drawImage(tiles.canvas, 0, TS * 2, TS, 10, x, y, TS, 10);
+    }
+  }
 }
 
-function hpBar(ctx, e, w = 30) {
-  if (e.hp >= e.maxHp || e.boss) return;
-  const x = cx(e) - w / 2, y = e.y - 9;
-  ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 1, y - 1, w + 2, 5);
-  ctx.fillStyle = e.elite ? C.gold : '#e35d5d'; ctx.fillRect(x, y, w * clamp(e.hp / e.maxHp, 0, 1), 3);
+// ───────── プレイヤー ─────────
+function heroFrame(p, t) {
+  if (p.state === 'dead') return 'dead';
+  if (p.state === 'hurt') return 'hurt';
+  if (p.state === 'dodge') return 'dodge';
+  if (p.state === 'attack') return 'attack';
+  if (p.state === 'charge') return 'charge';
+  if (!p.onGround) return p.vy < 0 ? 'up' : 'down';
+  if (Math.abs(p.vx) > 30) return 'run' + (Math.floor(p.runAnim * 0.55) % 4);
+  return Math.floor(t * 1.6) % 2 ? 'idle1' : 'idle0';
+}
+function drawPlayer(b, game, p) {
+  const blink = p.state === 'hurt' || (p.iframeT > 0 && !p.dodging && p.state !== 'dead');
+  if (blink && Math.floor(game.time * 20) % 2 === 0) return;
+  const f = p.face, t = game.time;
+  const bx = Math.round(cx(p) / 2), by = Math.round((p.y + p.h) / 2);
+  const frame = heroFrame(p, t);
+  b.save();
+  if (p.state === 'dead') b.globalAlpha = clamp(1 - game.run.deathT / 1.4, 0, 1);
+  if (p.state !== 'dead') {
+    // マフラー（風になびく 2 ドット幅の布）
+    const sway = Math.sin(t * 9);
+    const back = clamp(Math.abs(p.vx) / 80, 0, 3) + (p.dodging ? 3 : 0);
+    const nx = bx - f * 2, ny = by - 9 + (frame === 'charge' ? 1 : 0);
+    const mx = nx - f * (4 + back), my = ny - 1 + Math.round(sway - p.vy / 300);
+    const ex = nx - f * (8 + back * 2), ey = ny + 1 + Math.round(sway * 1.6 - p.vy / 160);
+    line(b, nx, ny, mx, my, '#d24d3a', 2);
+    line(b, mx, my, ex, ey, '#d24d3a', 2);
+    pset(b, ex, ey + 1, '#8e2a22'); pset(b, ex - f, ey + 1, '#8e2a22');
+  }
+  // 溜めの光
+  if (p.state === 'charge') {
+    const k = clamp(p.holdT / PC.heavyCharge, 0, 1);
+    if (p.charged) { b.globalAlpha = 0.6 + Math.sin(t * 30) * 0.3; circle(b, bx, by - 8, 11, '#f2c14e'); b.globalAlpha = 1; }
+    else arc(b, bx, by - 8, 11, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k, '#c9a052');
+  }
+  if (p.dodging) b.globalAlpha = 0.75;
+  drawSprite(b, spr('hero', frame), bx, by, f);
+  b.globalAlpha = p.state === 'dead' ? b.globalAlpha : 1;
+  // 剣：攻撃中は前へ、ふだんは背中
+  if (p.state === 'attack' && p.atk) {
+    const d = p.atk.def, active = p.atk.t >= d.startup && p.atk.t < d.startup + d.active;
+    if (p.atk.name === 'heavy' || active) line(b, bx + f * 4, by - 7, bx + f * 13, by - (p.atk.name === 'air' ? 3 : 8), '#e8eef6');
+    else line(b, bx + f * 2, by - 9, bx - f * 3, by - 14, '#cfd6e0');
+  } else if (p.state !== 'dead') {
+    line(b, bx - f * 2, by - 6, bx - f * 6, by - 1, '#9aa4b4');
+  }
+  // 楔を打つ動作
+  if (p.state === 'channel') {
+    const k = clamp(p.stateT / p.channel.duration, 0, 1);
+    arc(b, bx, by - 8, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k, '#f2c14e', 2);
+  }
+  b.restore();
 }
 
-let flashCanvas = null;
-function drawEnemy(ctx, game, e) {
+function drawSlash(b, s) {
+  const p = s.owner, k = s.t / s.life;
+  const heavy = s.name === 'heavy', spin = s.name === 'combo4';
+  const r = heavy ? 24 : s.name === 'combo3' ? 21 : 17;
+  const x = cx(p) / 2 + (spin ? 0 : s.face * 5), y = cy(p) / 2 - 1;
+  const col = heavy ? '#f2c14e' : '#fff8e6';
+  const th = heavy ? 4 : 3;
+  b.globalAlpha = 1 - k * 0.8;
+  if (spin) arc(b, x, y, r, 0, Math.PI * 2 * (0.4 + k * 0.6), col, th);
+  else {
+    const f = s.face;
+    let a0, a1;
+    if (s.name === 'combo2') { a0 = -0.45 * Math.PI; a1 = 0.35 * Math.PI; }
+    else if (s.name === 'air') { a0 = -0.6 * Math.PI; a1 = 0.6 * Math.PI; }
+    else { a0 = -0.45 * Math.PI; a1 = 0.35 * Math.PI; }
+    if (f < 0) { const t0 = Math.PI - a1, t1 = Math.PI - a0; a0 = t0; a1 = t1; }
+    arc(b, x, y, r, a0, a1, col, th);
+    arc(b, x, y, r - th, a0 + 0.2, a1 - 0.2, 'rgba(255,255,255,0.35)', 1);
+  }
+  b.globalAlpha = 1;
+}
+
+// ───────── 敵 ─────────
+// 予備動作（赤）や遅延（青）の縁取りを、スプライトの 1 ドット外側に描く
+function outlined(b, group, frame, x, y, face, glow, glowColor, duel) {
+  if (glow > 0) {
+    b.globalAlpha = clamp(glow, 0, 1);
+    const g = spr(group, frame, glowColor, duel);
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) drawSprite(b, g, x + dx, y + dy, face);
+    b.globalAlpha = 1;
+  }
+}
+function drawEnemy(b, game, e) {
   const t = game.time;
-  const drawBody = (c) => {
-    // 遅延・時歪の表示
-    if (e.slowed) {
-      c.strokeStyle = e.warp > 0 ? 'rgba(90,169,230,0.9)' : 'rgba(90,169,230,0.5)';
-      c.lineWidth = 2; c.setLineDash([4, 4]);
-      c.strokeRect(e.x - 4, e.y - 4, e.w + 8, e.h + 8);
-      c.setLineDash([]);
-    }
-    switch (e.kind) {
-      case 'soldier': drawSoldier(c, e, t); break;
-      case 'bat': drawBat(c, e, t); break;
-      case 'turret': drawTurret(c, e, t); break;
-      case 'knight': drawKnight(c, e, t, drawGear); break;
-      case 'boss': drawBoss(c, game, e, t, FONT); break;
-    }
+  const bx = Math.round(cx(e) / 2), by = Math.round((e.y + e.h) / 2), f = e.face;
+  const slowGlow = e.slowed ? 0.7 : 0;
+  const flash = e.hitFlash > 0;
+  const body = (group, frame, tell, duel) => {
+    if (tell > 0) outlined(b, group, frame, bx, by, f, 0.3 + tell * 0.7, 'red', duel);
+    else outlined(b, group, frame, bx, by, f, slowGlow, 'blue', duel);
+    drawSprite(b, spr(group, frame, flash ? 'white' : null, duel), bx, by, f);
   };
-  ctx.save();
-  if (e.hitFlash > 0 && typeof document !== 'undefined') {
-    // 被弾の白フラッシュ：別キャンバスに描いて輪郭だけ白く塗る
-    const W = 480, H = 360;
-    if (!flashCanvas) { flashCanvas = document.createElement('canvas'); flashCanvas.width = W; flashCanvas.height = H; }
-    const fc = flashCanvas.getContext('2d');
-    fc.setTransform(1, 0, 0, 1, 0, 0); fc.clearRect(0, 0, W, H);
-    const ox = W / 2 - cx(e), oy = H / 2 - cy(e);
-    fc.translate(ox, oy);
-    drawBody(fc);
-    fc.setTransform(1, 0, 0, 1, 0, 0);
-    fc.globalCompositeOperation = 'source-atop';
-    fc.fillStyle = 'rgba(255,255,255,0.85)'; fc.fillRect(0, 0, W, H);
-    fc.globalCompositeOperation = 'source-over';
-    ctx.drawImage(flashCanvas, -ox, -oy);
-  } else drawBody(ctx);
-  ctx.restore();
-  hpBar(ctx, e, e.elite ? 50 : 30);
-}
-
-function drawProjectile(ctx, pr) {
-  ctx.save();
-  if (pr.delay > 0) ctx.globalAlpha = 0.55 + Math.sin(pr.t * 30) * 0.2;
-  if (pr.kind === 'bolt') {
-    ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.arc(pr.x + 5, pr.y + 5, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,180,70,0.3)'; ctx.beginPath(); ctx.arc(pr.x + 5 - pr.vx * 0.03, pr.y + 5 - pr.vy * 0.03, 4, 0, Math.PI * 2); ctx.fill();
-  } else if (pr.kind === 'hand') {
-    const vx = pr.vx || (pr.homing ? 0 : 1), vy = pr.vy || (pr.homing ? 1 : 0);
-    const a = Math.atan2(vy, vx);
-    ctx.translate(pr.x + 6, pr.y + 6); ctx.rotate(a);
-    ctx.fillStyle = pr.delay > 0 ? '#e8e8ff' : '#f2c14e';
-    ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-8, -3); ctx.lineTo(-8, 3); ctx.closePath(); ctx.fill();
-    ctx.fillRect(-12, -1, 6, 2);
-  } else if (pr.kind === 'wave') {
-    ctx.fillStyle = 'rgba(255,170,90,0.85)';
-    ctx.beginPath(); ctx.moveTo(pr.x, pr.y + pr.h); ctx.quadraticCurveTo(pr.x + pr.w / 2, pr.y - 6, pr.x + pr.w, pr.y + pr.h); ctx.closePath(); ctx.fill();
-  }
-  ctx.restore();
-}
-
-function causalMark(ctx, x, y, t, wedged) {
-  // 時計の針の金の印（因果点）
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.strokeStyle = C.gold; ctx.fillStyle = C.gold;
-  ctx.globalAlpha = wedged ? 0.75 + Math.sin(t * 3) * 0.25 : 0.8;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -5); ctx.moveTo(0, 0); ctx.lineTo(4, 2); ctx.stroke();
-  if (wedged) { ctx.beginPath(); ctx.moveTo(-3, 10); ctx.lineTo(3, 10); ctx.lineTo(0, 20); ctx.closePath(); ctx.fill(); }
-  ctx.restore();
-}
-
-const REWARD_ICON = { boon: '◆', boon2: '◆◆', heal: '✚', hourglass: '⧗' };
-const REWARD_COLOR = { boon: '#f2c14e', boon2: '#f2c14e', heal: '#5fd18b', hourglass: '#e8dcc4' };
-
-function drawItem(ctx, game, it) {
-  const t = game.time;
-  if (it.vault && !game.run.vaultOpen) {
-    // 封印中は輪郭だけ
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.strokeRect(it.x, it.y, it.w, it.h);
-    return;
-  }
-  ctx.font = `12px ${FONT}`; ctx.textAlign = 'center';
-  switch (it.kind) {
-    case 'door': {
-      ctx.fillStyle = '#120d18'; ctx.fillRect(it.x, it.y, it.w, it.h);
-      ctx.strokeStyle = it.causal ? C.gold : it.boss ? '#e35d5d' : '#8c7a5a'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(it.x, it.y + it.h); ctx.lineTo(it.x, it.y + 12); ctx.arc(cx(it), it.y + 12, it.w / 2, Math.PI, 0); ctx.lineTo(it.x + it.w, it.y + it.h); ctx.stroke();
-      ctx.fillStyle = `rgba(255,220,150,${0.15 + Math.sin(t * 3) * 0.05})`; ctx.fillRect(it.x + 4, it.y + 14, it.w - 8, it.h - 14);
-      if (it.reward) {
-        ctx.font = `bold 18px ${FONT}`; ctx.fillStyle = REWARD_COLOR[it.reward];
-        ctx.fillText(REWARD_ICON[it.reward], cx(it), it.y - 8 + Math.sin(t * 3) * 2);
-      } else if (it.label) {
-        ctx.font = `bold 12px ${FONT}`; ctx.fillStyle = it.causal ? C.gold : it.boss ? '#ff8a6a' : '#efe6d2';
-        ctx.fillText(it.label, cx(it), it.y - 8);
-        if (it.causal) causalMark(ctx, cx(it), it.y - 30, t, false);
+  switch (e.kind) {
+    case 'soldier': {
+      const frame = e.state === 'windup' ? 'crouch' : Math.abs(e.vx) > 10 ? (Math.floor(t * 8) % 2 ? 'walk0' : 'walk1') : 'stand';
+      body('soldier', frame, e.state === 'windup' ? e.tell : 0);
+      // ギザギザの剣
+      const hx = bx + f * 3, hy = by - 8;
+      let ang = f > 0 ? 0.35 : Math.PI - 0.35;
+      if (e.state === 'windup') ang = f > 0 ? -Math.PI * 0.5 - e.tell * 0.5 : -Math.PI * 0.5 + e.tell * 0.5;
+      if (e.state === 'slash') ang = f > 0 ? 0.1 : Math.PI - 0.1;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      line(b, hx, hy, hx + ca * 13, hy + sa * 13, '#b9a58a');
+      for (const d of [5, 8, 11]) pset(b, hx + ca * d - sa * 1.6, hy + sa * d + ca * 1.6, '#d8c8a8');
+      if (e.state === 'windup' && e.tell < 0.4) {
+        const gx = hx + ca * 13, gy = hy + sa * 13, s = Math.round(5 * (1 - e.tell / 0.4));
+        rect(b, gx - s, gy, s * 2 + 1, 1, '#ffffff'); rect(b, gx, gy - s, 1, s * 2 + 1, '#ffffff');
+      }
+      if (e.state === 'slash') arc(b, bx + f * 4, by - 8, 15, f > 0 ? -1 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 1, '#ff8a5a', 2);
+      if (e.state === 'recover') { pset(b, bx - 2, by - 19, '#9a8fa6'); pset(b, bx, by - 19, '#9a8fa6'); pset(b, bx + 2, by - 19, '#9a8fa6'); }
+      break;
+    }
+    case 'bat': {
+      const ccx = Math.round(cx(e) / 2), ccy = Math.round(cy(e) / 2);
+      if (e.state === 'tell' && e.target) {
+        dashLine(b, ccx, ccy, e.target.x / 2, e.target.y / 2, e.tell > 0.6 ? '#ff4a2a' : '#c0402a');
+        circle(b, e.target.x / 2, e.target.y / 2, Math.round(5 - e.tell * 2), '#ff4a2a');
+      }
+      const frame = e.state === 'dive' ? 'down' : ['up', 'mid', 'down', 'mid'][Math.floor(t * 12 + e.id) % 4];
+      const yb = ccy + 5;
+      if (e.state === 'tell') outlined(b, 'bat', frame, ccx, yb, 1, 0.3 + e.tell * 0.7, 'red');
+      else outlined(b, 'bat', frame, ccx, yb, 1, slowGlow, 'blue');
+      drawSprite(b, spr('bat', frame, flash ? 'white' : null), ccx, yb, 1);
+      if (e.state === 'stunned') for (let i = 0; i < 3; i++) { const a = t * 6 + i * 2.1; pset(b, ccx + Math.cos(a) * 6, ccy - 7 + Math.sin(a) * 2, '#ffffff'); }
+      break;
+    }
+    case 'turret': {
+      const ccx = bx, ccy = by - 7;
+      rect(b, ccx - 6, by - 3, 13, 3, '#2c2531'); rect(b, ccx - 6, by - 3, 13, 1, '#5c5068');
+      const img = gearFrame(6, 8, flash ? '#ffffff' : e.tell > 0 ? '#8a3a2a' : '#4a3f4c', false, 0);
+      if (e.slowed) outlinedImg(b, img, ccx, ccy, '#5aa9e6');
+      b.drawImage(img, Math.round(ccx - img.width / 2), Math.round(ccy - img.height / 2));
+      disc(b, ccx, ccy, 4, e.tell > 0 ? (e.tell > 0.6 ? '#ff8a6a' : '#e8b090') : '#d9ceb2');
+      pset(b, ccx, ccy - 4, '#ff3b2f');
+      const a = e.hand * Math.PI * 2 - Math.PI / 2;
+      line(b, ccx, ccy, ccx + Math.cos(a) * 3, ccy + Math.sin(a) * 3, '#1a1420');
+      break;
+    }
+    case 'knight': {
+      const frame = e.state === 'stagger' ? 'stagger' : Math.abs(e.vx) > 10 ? (Math.floor(t * 6) % 2 ? 'walk0' : 'walk1') : 'stand';
+      const tell = (e.tellKind === 'shield' || e.tellKind === 'hammer') ? e.tell : 0;
+      body('knight', frame, tell);
+      // 盾（前面のトゲ）
+      if (e.state !== 'stagger') {
+        const glow = e.tellKind === 'shield' ? e.tell : 0;
+        const sx = bx + f * 6, col = glow > 0 ? `rgb(255,${Math.round(180 - glow * 100)},${Math.round(80 - glow * 60)})` : e.guarding ? '#8a7a62' : '#4e4438';
+        const x0 = f > 0 ? sx : sx - 3;
+        rect(b, x0, by - 17, 4, 15, '#120c14'); rect(b, x0 + 1, by - 16, 2, 13, col);
+        rect(b, f > 0 ? x0 + 4 : x0 - 2, by - 11, 2, 2, col); pset(b, f > 0 ? x0 + 6 : x0 - 3, by - 10, col);
+        if (e.guarding) rect(b, x0 + (f > 0 ? 2 : 1), by - 15, 1, 11, '#d8ccb4');
+      }
+      if (e.state === 'slamWind' || e.state === 'slam') {
+        const up = e.state === 'slamWind';
+        const hx = bx + f * (up ? -2 : 15), hy = up ? by - 26 - Math.round(e.tell * 4) : by - 7;
+        line(b, bx, by - 13, hx, hy, '#6a5a44', 2);
+        rect(b, hx - 5, hy - 3, 11, 7, '#120c14'); rect(b, hx - 4, hy - 2, 9, 5, flash ? '#fff' : '#7a6a52'); rect(b, hx - 4, hy - 2, 9, 1, '#a89878');
+        if (up && e.tell > 0.2) { rect(b, bx, by - 34, 1, 4, '#ff4a2a'); pset(b, bx, by - 29, '#ff4a2a'); }
       }
       break;
     }
+    case 'boss': drawBoss(b, game, e, bx, by, t, flash, slowGlow); break;
+  }
+  hpBar(b, e);
+}
+function outlinedImg(b, img, x, y, color) {
+  b.save(); b.globalAlpha = 0.8; b.filter = 'none';
+  const w = img.width, h = img.height;
+  b.fillStyle = color;
+  b.fillRect(Math.round(x - w / 2) - 1, Math.round(y - h / 2) - 1, w + 2, 1);
+  b.fillRect(Math.round(x - w / 2) - 1, Math.round(y + h / 2), w + 2, 1);
+  b.restore();
+}
+
+function drawBoss(b, game, e, bx, by, t, flash, slowGlow) {
+  const f = e.face, duel = e.trueDuel;
+  const wind = ['swingWind', 'handsWind', 'stopWind', 'stepWind', 'antiAirWind', 'leapWind'].includes(e.state);
+  // 予告（範囲）は体より先に
+  if (e.state === 'leap') {
+    const gx = Math.round(e.leapX / 2), gy = Math.round(game.map.groundBelow(e.leapX, e.y + e.h) / 2);
+    for (let i = -23; i <= 23; i++) if ((i + Math.floor(t * 20)) % 2 === 0) pset(b, gx + i, gy - 1, '#ff4a2a');
+    rect(b, gx - 14, gy - 2, 29, 1, '#ff4a2a');
+  }
+  if (e.state === 'swingWind') wedge(b, bx, Math.round(cy(e) / 2) - 2, 59, f > 0 ? -0.9 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 0.9, e.tell > 0.6 ? 'rgba(255,74,42,0.55)' : 'rgba(255,90,60,0.32)');
+  if (e.state === 'handsWind' && e.targets) for (const tg of e.targets) dashLine(b, bx, by - 21, tg.x / 2, tg.y / 2, e.tell > 0.6 ? '#ff4a2a' : '#c0402a');
+  if (e.ringT > 0) circle(b, bx, Math.round(cy(e) / 2), 22 + Math.round(Math.sin(t * 8)), '#b67cf0');
+  // 時計の針の冠
+  const hx = bx + f * 1, hy = by - 24;
+  const spin = e.phase === 3 ? -t * 0.8 : 0;
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2 + spin, len = i % 3 === 0 ? 12 : 8;
+    line(b, hx + Math.cos(a) * 5, hy + Math.sin(a) * 5, hx + Math.cos(a) * len, hy + Math.sin(a) * len, duel ? '#ffd38a' : '#c9a052');
+  }
+  const frame = e.state === 'defeated' ? 'kneel' : (e.state === 'swing' || e.state === 'riposte' || e.state === 'step') ? 'lunge' : wind ? 'wind' : 'stand';
+  if (wind) outlined(b, 'boss', frame, bx, by, f, 0.3 + e.tell * 0.7, 'red', duel);
+  else if (e.state === 'parry') outlined(b, 'boss', frame, bx, by, f, 1, 'blue', duel);
+  else outlined(b, 'boss', frame, bx, by, f, slowGlow, 'blue', duel);
+  drawSprite(b, spr('boss', frame, flash ? 'white' : null, duel), bx, by, f);
+  // 振り子の剣
+  if (e.state !== 'defeated') {
+    let ang = f > 0 ? 0.6 : Math.PI - 0.6;
+    if (e.state === 'swingWind') ang = f > 0 ? Math.PI + 0.6 + e.tell * 0.5 : -0.6 - e.tell * 0.5;
+    if (e.state === 'swing' || e.state === 'riposte' || e.state === 'step') ang = f > 0 ? 0.1 : Math.PI - 0.1;
+    const sx = bx + f * 5, sy = by - 15;
+    const ex = sx + Math.cos(ang) * 30, ey = sy + Math.sin(ang) * 30;
+    line(b, sx, sy, ex, ey, '#e2d6b8', 2);
+    for (let i = 0; i < 4; i++) rect(b, ex - i, ey - 3 + i, i * 2 + 1, 1, '#f2c14e'), rect(b, ex - i, ey + 3 - i, i * 2 + 1, 1, '#f2c14e');
+    if (e.state === 'swing') arc(b, bx, Math.round(cy(e) / 2) - 2, 50, f > 0 ? -0.9 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 0.9, '#ffc878', 4);
+  }
+  // 懐中時計
+  if (e.state === 'stopWind') {
+    const k = e.tell, wx = bx - f * 3, wy = by - 34 - Math.round(k * 5);
+    disc(b, wx, wy, 4 + Math.round(k * 2), '#ffffff'); circle(b, wx, wy, 4 + Math.round(k * 2), '#8c6d2a');
+    line(b, wx, wy, wx + Math.cos(t * 12) * 3, wy + Math.sin(t * 12) * 3, '#1a1420');
+    b.globalAlpha = k * 0.6; circle(b, bx, Math.round(cy(e) / 2), 20 + Math.round(k * 40), '#ffffff'); b.globalAlpha = 1;
+  }
+  if (e.state === 'antiAirWind') for (let i = 0; i < 6; i++) rect(b, bx - i, by - 46 + i, i * 2 + 1, 1, e.tell > 0.5 ? '#ff4a2a' : '#c0402a');
+  if (e.state === 'leapWind') rect(b, bx - 12, by - 1, 25, 1, '#ff4a2a');
+}
+
+function hpBar(b, e) {
+  if (e.hp >= e.maxHp || e.boss || e.hp <= 0) return;
+  const w = e.elite ? 24 : 14, x = Math.round(cx(e) / 2 - w / 2), y = Math.round(e.y / 2) - 6;
+  rect(b, x - 1, y - 1, w + 2, 4, '#0a0610');
+  rect(b, x, y, Math.max(1, Math.round(w * clamp(e.hp / e.maxHp, 0, 1))), 2, e.elite ? '#f2c14e' : '#e35d5d');
+}
+
+function drawProjectile(b, pr, t) {
+  const x = Math.round((pr.x + pr.w / 2) / 2), y = Math.round((pr.y + pr.h / 2) / 2);
+  if (pr.delay > 0 && Math.floor(t * 16) % 2) b.globalAlpha = 0.5;
+  if (pr.kind === 'bolt') {
+    disc(b, x, y, 2, '#ffb347'); pset(b, x - 1, y - 1, '#fff0c0');
+    pset(b, x - Math.sign(pr.vx) * 3, y - Math.sign(pr.vy) * 2, '#ff8a3c');
+  } else if (pr.kind === 'hand') {
+    const vx = pr.vx || (pr.homing ? 0 : 1), vy = pr.vy || (pr.homing ? 1 : 0), d = Math.hypot(vx, vy) || 1;
+    const ux = vx / d, uy = vy / d;
+    const col = pr.delay > 0 ? '#e8e8ff' : '#f2c14e';
+    line(b, x - ux * 5, y - uy * 5, x + ux * 4, y + uy * 4, col);
+    pset(b, x + ux * 5, y + uy * 5, '#ffffff');
+    pset(b, x - uy * 1 + ux * 2, y + ux * 1 + uy * 2, col); pset(b, x + uy * 1 + ux * 2, y - ux * 1 + uy * 2, col);
+  } else if (pr.kind === 'wave') {
+    const bx = Math.round(pr.x / 2), by = Math.round((pr.y + pr.h) / 2);
+    for (let i = 0; i < 8; i++) { const h = Math.round(Math.sin(i / 7 * Math.PI) * 8); rect(b, bx + i, by - h, 1, h, i % 2 ? '#ffaa5a' : '#ffd08a'); }
+  }
+  b.globalAlpha = 1;
+}
+
+// ───────── 小物・仕掛け ─────────
+function causalMark(b, x, y, t, wedged) {
+  x = Math.round(x); y = Math.round(y);
+  circle(b, x, y, 3, '#f2c14e');
+  line(b, x, y, x, y - 2, '#f2c14e'); pset(b, x + 1, y + 1, '#f2c14e');
+  if (wedged) {
+    const on = Math.sin(t * 3) > -0.3;
+    for (let i = 0; i < 5; i++) rect(b, x - 2 + Math.floor(i / 2), y + 5 + i, 5 - Math.floor(i / 2) * 2, 1, on ? '#f2c14e' : '#c9a052');
+  }
+}
+function glyph(b, kind, x, y, col) {
+  x = Math.round(x); y = Math.round(y);
+  if (kind === 'boon' || kind === 'boon2') {
+    const n = kind === 'boon2' ? 2 : 1;
+    for (let k = 0; k < n; k++) { const ox = x + (n === 2 ? (k ? 3 : -3) : 0); for (let i = 0; i < 3; i++) rect(b, ox - i, y - 2 + i, i * 2 + 1, 1, col), rect(b, ox - i, y + 2 - i, i * 2 + 1, 1, col); }
+  } else if (kind === 'heal') { rect(b, x - 1, y - 3, 3, 7, col); rect(b, x - 3, y - 1, 7, 3, col); }
+  else if (kind === 'hourglass') { rect(b, x - 3, y - 3, 7, 1, col); rect(b, x - 3, y + 3, 7, 1, col); for (let i = 0; i < 3; i++) rect(b, x - 2 + i, y - 2 + i, 5 - i * 2, 1, col), rect(b, x - 2 + i, y + 2 - i, 5 - i * 2, 1, col); }
+}
+const REWARD_COLOR = { boon: '#f2c14e', boon2: '#f2c14e', heal: '#5fd18b', hourglass: '#efe4cc' };
+
+function drawItem(b, game, it) {
+  const t = game.time;
+  const x = Math.round(it.x / 2), y = Math.round(it.y / 2), w = Math.round(it.w / 2), h = Math.round(it.h / 2);
+  const bot = y + h, mid = x + Math.round(w / 2);
+  if (it.vault && !game.run.vaultOpen) { dashLine(b, x, bot, x + w, bot, '#3a3242'); return; }
+  switch (it.kind) {
+    case 'door': {
+      const frame = it.causal ? '#f2c14e' : it.boss ? '#e35d5d' : '#8c7a5a';
+      rect(b, x, y + 4, w, h - 4, '#0a0610');
+      for (let i = 0; i < Math.ceil(w / 2); i++) { const hh = Math.round(Math.sqrt(Math.max(0, (w / 2) ** 2 - (i - w / 2) ** 2)) * 0.6); rect(b, x + i, y + 4 - hh, 1, hh, '#0a0610'); rect(b, x + w - 1 - i, y + 4 - hh, 1, hh, '#0a0610'); }
+      // 枠
+      for (let yy = y + 4; yy < bot; yy++) { pset(b, x - 1, yy, frame); pset(b, x + w, yy, frame); }
+      for (let i = 0; i <= w; i++) { const hh = Math.round(Math.sqrt(Math.max(0, (w / 2) ** 2 - (i - w / 2) ** 2)) * 0.6); pset(b, x + i, y + 3 - hh, frame); }
+      // 奥の光
+      const glow = Math.sin(t * 3) > 0 ? '#3a2a1a' : '#4a3420';
+      for (let yy = y + 6; yy < bot; yy += 2) rect(b, x + 2, yy, w - 4, 1, glow);
+      if (it.reward) glyph(b, it.reward, mid, y - 8 + Math.round(Math.sin(t * 3)), REWARD_COLOR[it.reward]);
+      if (it.causal) causalMark(b, mid, y - 10, t, false);
+      break;
+    }
     case 'reward': {
-      const y = it.y + Math.sin(it.bob * 4) * 4;
-      ctx.fillStyle = 'rgba(242,193,78,0.25)'; ctx.beginPath(); ctx.arc(it.x + 12, y + 12, 18 + Math.sin(t * 6) * 2, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = REWARD_COLOR[it.reward]; ctx.font = `bold 22px ${FONT}`; ctx.fillText(REWARD_ICON[it.reward], it.x + 12, y + 20);
+      const yy = y + Math.round(Math.sin((it.bob || 0) * 4) * 2) + 6;
+      const r = 6 + (Math.floor(t * 6) % 2);
+      b.globalAlpha = 0.35; disc(b, mid, yy, r, REWARD_COLOR[it.reward]); b.globalAlpha = 1;
+      glyph(b, it.reward, mid, yy, '#ffffff');
+      if (Math.floor(t * 8) % 4 === 0) pset(b, mid + 5, yy - 6, '#ffffff');
       break;
     }
     case 'sign':
-      ctx.fillStyle = '#5a4a36'; ctx.fillRect(it.x + 10, it.y + 16, 4, 24);
-      ctx.fillStyle = '#8c7556'; ctx.fillRect(it.x, it.y + 4, 24, 14);
+      rect(b, x + 5, y + 8, 2, 12, '#4a3626'); rect(b, x, y + 2, 12, 7, '#2e2016'); rect(b, x + 1, y + 3, 10, 5, '#8c7556');
+      rect(b, x + 2, y + 4, 6, 1, '#5a4836'); rect(b, x + 2, y + 6, 8, 1, '#5a4836');
       break;
-    case 'npc': drawNpc(ctx, game, it, t); break;
+    case 'npc': {
+      const bob = Math.floor(t * 1.5 + it.x) % 2;
+      if (it.who === 'lira') drawSprite(b, spr('lira', 'a'), mid, bot - bob * 0, 1);
+      else drawSprite(b, spr('glen', 'a'), mid, bot, 1);
+      if (it.who === 'glen' && it.inDanger && game.run.glen === 'attacked') {
+        const k = clamp(game.room.glenHp / 60, 0, 1);
+        rect(b, mid - 11, y - 8, 22, 4, '#0a0610'); rect(b, mid - 10, y - 7, Math.round(20 * k), 2, k < 0.35 ? '#ff5a3c' : '#5fd18b');
+      }
+      if (it.causal) causalMark(b, mid, y - (it.inDanger ? 15 : 7), t, it.wedged || (it.who === 'lira' && game.meta.wedges.some((wd) => wd.target === 'lira')));
+      break;
+    }
     case 'corpse':
-      ctx.fillStyle = '#5a4436'; ctx.fillRect(it.x, it.y + 4, it.w, 10);
-      ctx.fillStyle = '#7a2a22'; ctx.fillRect(it.x - 8, it.y + 11, it.w + 16, 3);
+      rect(b, x - 4, bot - 2, w + 8, 2, '#5a1a16');
+      rect(b, x, bot - 6, w, 5, '#1c1424'); rect(b, x + 1, bot - 5, w - 2, 3, '#7a5a44'); rect(b, x + w - 5, bot - 6, 4, 4, '#f3dcc0');
       break;
     case 'codedoor': {
       const open = game.run.vaultOpen;
-      ctx.fillStyle = open ? '#120d18' : '#3a3242'; ctx.fillRect(it.x, it.y, it.w, it.h);
-      ctx.strokeStyle = C.gold; ctx.lineWidth = 2; ctx.strokeRect(it.x, it.y, it.w, it.h);
-      if (!open) for (let i = 0; i < 3; i++) { ctx.fillStyle = '#1a1420'; ctx.fillRect(it.x + 8 + i * 12, it.y + 22, 10, 14); }
-      causalMark(ctx, cx(it), it.y - 12, t, false);
+      rect(b, x, y, w, h, '#120c14'); rect(b, x + 1, y + 1, w - 2, h - 1, open ? '#0a0610' : '#3a3242');
+      if (!open) {
+        for (let i = 0; i < 3; i++) { disc(b, x + 6 + i * 7, y + 13, 2, '#8c6d2a'); pset(b, x + 6 + i * 7, y + 11, '#f2c14e'); }
+        rect(b, x + 3, y + 3, w - 6, 1, '#5c5068'); rect(b, x + 3, bot - 4, w - 6, 1, '#5c5068');
+      } else for (let yy = y + 3; yy < bot; yy += 2) rect(b, x + 3, yy, w - 6, 1, '#1a1426');
+      for (let yy = y; yy < bot; yy++) { pset(b, x - 1, yy, '#f2c14e'); pset(b, x + w, yy, '#f2c14e'); }
+      causalMark(b, mid, y - 6, t, false);
       break;
     }
-    case 'diary': ctx.fillStyle = '#6b4a3a'; ctx.fillRect(it.x, it.y + 12, it.w, it.h - 12); ctx.fillStyle = '#efe6d2'; ctx.fillRect(it.x + 4, it.y + 8, it.w - 8, 6); break;
-    case 'altar': {
-      ctx.fillStyle = '#3a4a6a'; ctx.fillRect(it.x, it.y + 10, it.w, it.h - 10);
-      if (!game.run.altarUsed) { ctx.fillStyle = '#5aa9e6'; ctx.font = `bold 18px ${FONT}`; ctx.fillText('◆', cx(it), it.y + 4 + Math.sin(t * 3) * 3); }
+    case 'diary': rect(b, x + 3, bot - 7, 6, 7, '#3a2618'); rect(b, x, bot - 10, 12, 3, '#6b4a3a'); rect(b, x + 1, bot - 11, 10, 1, '#efe4cc'); break;
+    case 'altar':
+      rect(b, x + 2, bot - 10, 11, 10, '#2a3a5a'); rect(b, x + 1, bot - 11, 13, 2, '#3a4a6a');
+      if (!game.run.altarUsed) glyph(b, 'boon', mid, bot - 17 + Math.round(Math.sin(t * 3)), '#5aa9e6');
       break;
-    }
-    case 'note': ctx.fillStyle = '#4a3a2a'; ctx.fillRect(it.x, it.y + 14, it.w, it.h - 14); ctx.fillStyle = '#efe6d2'; ctx.fillRect(it.x + 6, it.y + 8, 16, 8); break;
+    case 'note': rect(b, x, bot - 8, 15, 8, '#3a2a1e'); rect(b, x, bot - 9, 15, 1, '#5a4030'); rect(b, x + 3, bot - 12, 7, 3, '#efe4cc'); pset(b, x + 4, bot - 11, '#5a4a3a'); pset(b, x + 6, bot - 11, '#5a4a3a'); break;
     case 'fountain': {
       const used = game.run.fountainUsed[it.id];
-      ctx.fillStyle = '#4a4a58'; ctx.fillRect(it.x, it.y + 14, it.w, it.h - 14);
-      ctx.fillStyle = used ? '#2a2a33' : `rgba(95,209,139,${0.6 + Math.sin(t * 4) * 0.2})`; ctx.fillRect(it.x + 4, it.y + 12, it.w - 8, 5);
+      rect(b, x, bot - 7, 15, 7, '#3a3a48'); rect(b, x + 1, bot - 8, 13, 1, '#5a5a6a');
+      rect(b, x + 2, bot - 7, 11, 2, used ? '#20202a' : (Math.floor(t * 4) % 2 ? '#5fd18b' : '#3fa86b'));
+      if (!used && Math.floor(t * 5) % 3 === 0) pset(b, mid, bot - 11, '#9ff0c0');
       break;
     }
     case 'brake': {
-      drawGear(ctx, cx(it), it.y + 22, 16, it.wedged ? 0 : t * 1.5, '#8a7a5a');
-      ctx.fillStyle = '#5b5060'; ctx.fillRect(it.x + 12, it.y + 36, 16, 24);
-      causalMark(ctx, cx(it), it.y - 6, t, it.wedged);
+      const img = gearFrame(8, 10, '#8a7a5a', true, it.wedged ? 0 : Math.floor(t * 6) % 8);
+      b.drawImage(img, mid - img.width / 2, y + 2);
+      rect(b, mid - 4, y + 18, 8, h - 18, '#4a3f4c'); rect(b, mid - 4, y + 18, 8, 1, '#5c5068');
+      causalMark(b, mid, y - 4, t, it.wedged);
       break;
     }
     case 'wreck': {
-      ctx.fillStyle = '#4a4050'; ctx.fillRect(it.x, it.y + 8, it.w, it.h - 8);
-      drawGear(ctx, cx(it), it.y + 10, 10, it.wedged ? 0 : t, '#6a5a44');
-      if (!it.permanent && !it.wedged) { ctx.fillStyle = C.gold; ctx.fillRect(it.x, it.y - 8, it.w * clamp(it.life / 12, 0, 1), 3); }
-      causalMark(ctx, cx(it), it.y - 20, t, it.wedged);
+      rect(b, x + 2, bot - 5, w - 4, 5, '#2c2531'); rect(b, x + 4, bot - 8, 6, 3, '#4a3f4c'); rect(b, x + w - 8, bot - 7, 5, 2, '#8a4a2e');
+      const img = gearFrame(4, 6, '#a08a60', false, it.wedged ? 0 : Math.floor(t * 8) % 8);
+      b.drawImage(img, mid - img.width / 2, bot - 12);
+      if (!it.permanent && !it.wedged) rect(b, x, y - 5, Math.round(w * clamp(it.life / 12, 0, 1)), 1, '#f2c14e');
+      causalMark(b, mid, y - 12, t, it.wedged);
       break;
     }
     case 'lift': {
-      ctx.strokeStyle = it.dead ? '#3a3242' : C.gold; ctx.lineWidth = 2; ctx.strokeRect(it.x, it.y, it.w, it.h);
-      ctx.fillStyle = it.dead ? '#1a1420' : `rgba(242,193,78,${0.12 + Math.sin(t * 3) * 0.06})`; ctx.fillRect(it.x + 2, it.y + 2, it.w - 4, it.h - 4);
-      ctx.fillStyle = it.dead ? '#555' : C.gold; ctx.font = `bold 12px ${FONT}`; ctx.fillText('▲', cx(it), it.y - 6);
+      const col = it.dead ? '#3a3242' : '#f2c14e';
+      for (let yy = y; yy < bot; yy++) { pset(b, x, yy, col); pset(b, x + w - 1, yy, col); }
+      rect(b, x, y, w, 1, col); rect(b, x + 1, bot - 2, w - 2, 2, it.dead ? '#2c2531' : '#8a6a34');
+      if (!it.dead) { const yy = y + 4 + (Math.floor(t * 4) % 3); for (let i = 0; i < 3; i++) rect(b, mid - i, yy + i, i * 2 + 1, 1, '#f2c14e'); }
       break;
     }
   }
 }
 
-function drawNpc(ctx, game, it, t) {
-  const x = cx(it), by = it.y + it.h;
-  if (it.who === 'lira') drawLira(ctx, x, by, t);
-  else {
-    drawGlen(ctx, x, by, t);
-    if (it.inDanger && game.run.glen === 'attacked') {
-      const k = clamp(game.room.glenHp / 60, 0, 1);
-      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 22, it.y - 16, 44, 6);
-      ctx.fillStyle = k < 0.35 ? '#ff5a3c' : '#5fd18b'; ctx.fillRect(x - 21, it.y - 15, 42 * k, 4);
-    }
-  }
-  if (it.causal) causalMark(ctx, x, it.y - (it.inDanger ? 30 : 14), t, it.wedged || (it.who === 'lira' && hasLiraWedge(game)) );
+// ───────── 拡大後の画面に描く文字 ─────────
+function label(ctx, str, x, y, color, size = 15) {
+  ctx.font = `${size}px ${FONT}`; ctx.textAlign = 'center';
+  x = Math.round(x); y = Math.round(y);
+  ctx.fillStyle = '#0a0610';
+  for (const [dx, dy] of [[-2, 0], [2, 0], [0, -2], [0, 2]]) ctx.fillText(str, x + dx, y + dy);
+  ctx.fillStyle = color; ctx.fillText(str, x, y);
 }
-const hasLiraWedge = (game) => game.meta.wedges.some((w) => w.target === 'lira');
-
+function drawWorldLabels(ctx, game) {
+  for (const it of game.room.items) {
+    if (it.kind === 'door' && !it.reward && it.label) label(ctx, it.label, SX(it.x + it.w / 2), SY(it.y) - 40, it.causal ? '#f2c14e' : it.boss ? '#ff8a6a' : '#efe6d2', 14);
+  }
+  for (const e of game.room.enemies) {
+    if (e.state === 'stagger') label(ctx, '崩れ', SX(cx(e)), SY(e.y) - 22, '#f2c14e', 15);
+    if (e.boss && e.state === 'parry') label(ctx, '受', SX(cx(e)), SY(e.y) - 34, '#5aa9e6', 18);
+    if (e.kind === 'knight' && e.state === 'slamWind' && e.tell > 0.3) label(ctx, '！', SX(cx(e)), SY(e.y) - 44, '#ff4a2a', 20);
+  }
+}
 function drawPrompt(ctx, game) {
   const p = game.player;
   if (game.modal || p.state !== 'normal') return;
   const it = game.nearestInteractable();
   if (!it) return;
-  const label = game.interactPrompt(it);
-  if (!label) return;
-  ctx.font = `bold 13px ${FONT}`; ctx.textAlign = 'center';
-  const w = ctx.measureText(label).width + 40;
-  const x = cx(it), y = it.y - (it.kind === 'door' ? 34 : it.causal ? 40 : 18);
-  ctx.fillStyle = 'rgba(10,8,14,0.85)'; ctx.fillRect(x - w / 2, y - 16, w, 22);
-  ctx.strokeStyle = it.causal ? C.gold : 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1; ctx.strokeRect(x - w / 2 + 0.5, y - 15.5, w - 1, 21);
-  ctx.fillStyle = C.gold; ctx.fillText('↑', x - w / 2 + 12, y);
-  ctx.fillStyle = C.text; ctx.fillText(label, x + 8, y);
+  const text = game.interactPrompt(it);
+  if (!text) return;
+  ctx.font = `15px ${FONT}`; ctx.textAlign = 'center';
+  const w = Math.ceil(ctx.measureText(text).width) + 42;
+  const x = Math.round(SX(it.x + it.w / 2)), y = Math.round(SY(it.y) - (it.kind === 'door' ? 54 : it.causal ? 46 : 18));
+  ctx.fillStyle = '#0a0610'; ctx.fillRect(x - w / 2 - 3, y - 21, w + 6, 30);
+  ctx.fillStyle = it.causal ? '#f2c14e' : '#6a5a7a'; ctx.fillRect(x - w / 2, y - 18, w, 24);
+  ctx.fillStyle = '#140f1c'; ctx.fillRect(x - w / 2 + 3, y - 15, w - 6, 18);
+  ctx.fillStyle = '#f2c14e'; ctx.fillText(game.touch ? '◆' : '↑', x - w / 2 + 14, y);
+  ctx.fillStyle = C.text; ctx.fillText(text, x + 8, y);
 }

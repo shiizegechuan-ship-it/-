@@ -4,10 +4,10 @@ const CSS = `
 #touch > * { pointer-events: auto; }
 #touch .t-hint { pointer-events: none; }
 #touch { --t-bg: rgba(20,16,28,0.55); --t-line: rgba(242,193,78,0.55); --t-ink: #efe6d2; --t-on: rgba(242,193,78,0.45);
-  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif; }
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; font-family: 'DotGothic16', 'Hiragino Sans', sans-serif; }
 #touch .t-pad { position: absolute; width: 132px; height: 132px; border-radius: 50%; background: var(--t-bg); border: 1.5px solid var(--t-line); touch-action: none; }
 #touch .t-knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(239,230,210,0.35); pointer-events: none; }
-#touch .t-btn { position: absolute; border-radius: 50%; background: var(--t-bg); border: 1.5px solid var(--t-line); color: var(--t-ink);
+#touch .t-btn { position: absolute; border-radius: 50%; background: var(--t-bg); border: 2px solid var(--t-line); color: var(--t-ink);
   display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; touch-action: none; }
 #touch .t-btn.on, #touch .t-pad.on { background: var(--t-on); }
 #touch .t-btn small { display: block; font-size: 9px; font-weight: 400; opacity: 0.75; }
