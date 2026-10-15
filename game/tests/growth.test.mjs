@@ -323,7 +323,7 @@ test('経験値とレベル：敵を倒すと経験値、レベルアップで�
   // 倒した敵からも経験値が入る
   const g2 = newGame(12); g2.enterRoom(0, 1); g2.modal = null;
   for (const e of g2.room.enemies) { e.hp = 0; e.alive = false; }
-  new Driver(g2).frame(2);
+  new Driver(g2).frame(120); // 経験値の粒が主人公へ集まるまで
   assert.ok(g2.run.exp > 0 || g2.run.level > 1);
 });
 
@@ -396,7 +396,7 @@ test('金貨：敵を倒すと貯まる。店で強化・回復薬・アーテ�
   const g = newGame(4);
   g.enterRoom(0, 1); g.modal = null;
   for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
-  new Driver(g).frame(2);
+  new Driver(g).frame(240); // 制圧すると金貨が集まってくる
   assert.ok(g.run.gold > 0, 'gold from kills');
   const si = g.run.plan.floors[0].findIndex((r) => r.type === 'shop');
   assert.ok(si > 0, 'shop room in floor 0');
@@ -446,3 +446,23 @@ test('アーティファクトの効果：守りの歯車・跳ね靴・王者�
   g.damagePlayer(99999, { fromX: 0 });
   assert.equal(p.state, 'normal'); assert.equal(p.hp, p.maxHp);
 });
+
+test('拾い物：経験値の粒は自動で主人公に集まり、金貨は床に落ちて触れると拾える', () => {
+  const { g, d } = arena(RustSoldier, 400);
+  g.room.cleared = false; // 制圧前（金貨は自動では集まらない）
+  const p = g.player;
+  const exp0 = g.run.exp, lv0 = g.run.level;
+  g.dropExp(10, cx0(p) + 150, p.y - 40);
+  d.frame(90);
+  assert.ok(g.run.exp > exp0 || g.run.level > lv0, 'exp orbs home in');
+  assert.equal(g.room.pickups.filter((k) => k.type === 'exp').length, 0);
+  g.dropGold(20, cx0(p) + 200, p.y - 40);
+  d.frame(90);
+  const coins = g.room.pickups.filter((k) => k.type === 'coin');
+  assert.ok(coins.length > 0 && coins.every((k) => !k.magnet), 'coins rest on the floor');
+  assert.equal(g.run.gold, 0);
+  // 歩いて近づくと拾える
+  d.until(() => g.run.gold >= 20, 240, ['right']);
+  assert.equal(g.run.gold, 20);
+});
+function cx0(e) { return e.x + e.w / 2; }

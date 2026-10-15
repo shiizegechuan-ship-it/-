@@ -94,6 +94,7 @@ function renderPlay(ctx, game) {
     line(b, x - ux * 3, y - uy * 3, x + ux * 3, y + uy * 3, '#f2c14e', 2);
     pset(b, x + ux * 4, y + uy * 4, '#ffffff');
   }
+  for (const k of game.room.pickups || []) drawPickup(b, k, game.time);
   for (const s of fx.slashes) drawSlash(b, s);
   for (const sp of game.room.spells || []) drawSpell(b, sp, game.time);
   for (const im of fx.impacts || []) drawImpact(b, im);
@@ -335,6 +336,28 @@ function drawSlash(b, s) {
       sweep(b, x, y, 17, mir(-0.45 * Math.PI), mir(0.35 * Math.PI), k, '#fff8e6', 3);
   }
   b.globalAlpha = 1;
+}
+
+// 拾い物：回る金貨（キラッと光る）と、尾を引く経験値の粒
+function drawPickup(b, k, t) {
+  const x = Math.round(k.x / 2), y = Math.round(k.y / 2);
+  if (k.type === 'coin') {
+    const f = Math.floor(t * 10 + k.phase) % 6; // 回転：幅が 5→3→1→3
+    const w = [5, 4, 2, 1, 2, 4][f];
+    rect(b, x - Math.floor(w / 2), y - 2, w, 5, '#b8862a');
+    if (w > 2) { rect(b, x - Math.floor(w / 2) + 1, y - 2, w - 2, 5, '#ffd84a'); pset(b, x - Math.floor(w / 2) + 1, y - 1, '#fff6c0'); }
+    else rect(b, x - Math.floor(w / 2), y - 2, w, 5, '#ffe680');
+    // キラキラ：ときどき十字の光
+    const tw = (t * 3 + k.phase) % 2;
+    if (tw < 0.25) { const s = tw < 0.12 ? 2 : 1; pset(b, x + 2, y - 3, '#ffffff'); for (let i = 1; i <= s; i++) { pset(b, x + 2 + i, y - 3, '#fff6c0'); pset(b, x + 2 - i, y - 3, '#fff6c0'); pset(b, x + 2, y - 3 + i, '#fff6c0'); pset(b, x + 2, y - 3 - i, '#fff6c0'); } }
+  } else {
+    const len = Math.min(4, Math.hypot(k.vx, k.vy) / 120);
+    const ux = k.vx / (Math.hypot(k.vx, k.vy) || 1), uy = k.vy / (Math.hypot(k.vx, k.vy) || 1);
+    b.globalAlpha = 0.35; disc(b, x, y, 2, '#7fd85a'); b.globalAlpha = 0.6;
+    for (let i = 1; i <= len; i++) pset(b, x - ux * i * 1.5, y - uy * i * 1.5, '#a8f07a');
+    b.globalAlpha = 1;
+    rect(b, x, y, 1, 1, '#e8ffd0'); pset(b, x + 1, y, '#a8f07a'); pset(b, x, y + 1, '#a8f07a');
+  }
 }
 
 // 命中の閃光（4 方向の星）

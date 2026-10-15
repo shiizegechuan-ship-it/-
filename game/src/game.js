@@ -142,8 +142,9 @@ export class Game {
     const prevFloor = run.fi;
     run.fi = fi; run.ri = ri;
     const desc = override || this.roomDesc();
+    if (this.room) this.flushPickups(); // 拾い残しは部屋を出るときに受け取る
     this.map = new TileMap(layoutRows(desc));
-    this.room = { desc, cleared: false, rewardSpawned: false, enemies: [], projectiles: [], echoes: [], items: [], spells: [], t: 0, boss: null, glenHp: 0 };
+    this.room = { desc, cleared: false, rewardSpawned: false, enemies: [], projectiles: [], echoes: [], items: [], spells: [], pickups: [], t: 0, boss: null, glenHp: 0 };
     this.player.vx = 0; this.player.vy = 0; this.player.state = 'normal'; this.player.atk = null;
     const spawn = this.map.markers.find((m) => m.c === 'P') || { x: TILE * 2, y: this.map.pxH - TILE * 4 };
     this.player.x = spawn.x + (TILE - this.player.w) / 2;
@@ -357,6 +358,8 @@ export class Game {
     if (p.onGround) p.airHits = 0;
     this.updateEchoes(dt);
     this.handleDeaths();
+    this.updatePickups(dt);
+    if (this.hudPop) { this.hudPop.gold = Math.max(0, this.hudPop.gold - dt * 4); this.hudPop.exp = Math.max(0, this.hudPop.exp - dt * 4); }
     room.projectiles = room.projectiles.filter((x) => x.alive);
     this.updateItems(dt);
     this.updateRoomLogic(dt);
@@ -472,12 +475,12 @@ export class Game {
     if (info.spell) {
       this.sfx.play(crit ? 'heavyHit' : 'hit');
       this.hitstop = Math.max(this.hitstop, crit ? 2 / 60 : 1 / 60);
-      this.fx.shake(crit ? 3 : 1.5, 0.06);
+      this.fx.shake(crit ? 3 * 1.5 : 1.5, 0.06); // 会心はさらに 1.5 倍
     } else if (!info.echo) {
       this.hitstop = Math.max(this.hitstop, (info.stop || 3 / 60) + (crit ? 2 / 60 : 0));
       this.sfx.play(info.heavy || crit || (info.shake || 0) >= 3 ? 'heavyHit' : 'hit');
       // 命中で画面を小さく揺らす（重い一撃・会心ほど大きく）
-      this.fx.shake(Math.max(info.shake || 0, crit ? 4 : info.heavy ? 5 : 2), crit || info.heavy ? 0.14 : 0.07);
+      this.fx.shake(Math.max(info.shake || 0, crit ? 4 : info.heavy ? 5 : 2) * (crit ? 1.5 : 1), crit || info.heavy ? 0.14 : 0.07); // 会心はさらに 1.5 倍
       if (crit) this.fx.ring(cx(e), cy(e), '#ffe14a', 28, 0.2);
       p.gauge = Math.min(PC.gaugeMax, p.gauge + PC.gaugePerHit * st.gaugeMul);
       if (st.lagTime) e.lag = Math.max(e.lag, st.lagTime);
@@ -505,6 +508,80 @@ export class Game {
     if (c.n % 10 === 0 && this.player.stats.procs.secondhand) PROCS.secondhand(this, this.player.stats.procs.secondhand);
     if (c.n % 25 === 0) { this.fx.setBanner(`${c.n} HIT`, `与ダメージ +${Math.round(c.n * this.player.stats.comboPer * 100)}%`, '#ff9a3c', 0.9); this.sfx.play('charged'); }
   }
+  // ───────── 拾い物：経験値の粒（自動で主人公へ集まる）と金貨（触れて拾う） ─────────
+  dropExp(n, x, y) {
+    if (n <= 0) return;
+    const rnd = this.fx.rand, k = Math.min(6, Math.max(2, Math.ceil(n / 6)));
+    for (let i = 0; i < k; i++) {
+      const v = Math.floor(n / k) + (i < n % k ? 1 : 0);
+      if (v <= 0) continue;
+      const a = rnd() * Math.PI * 2, s = 120 + rnd() * 140;
+      this.room.pickups.push({ type: 'exp', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 90, v, t: 0 });
+    }
+    this.fx.text(x, y - 30, `+${n} EXP`, '#a8f07a', 10);
+  }
+  dropGold(n, x, y, burst = 1) {
+    if (n <= 0) return;
+    const rnd = this.fx.rand, k = Math.min(10, Math.max(1, Math.ceil(n / 4)));
+    for (let i = 0; i < k; i++) {
+      const v = Math.floor(n / k) + (i < n % k ? 1 : 0);
+      if (v <= 0) continue;
+      this.room.pickups.push({ type: 'coin', x: x + (rnd() - 0.5) * 8, y, vx: (rnd() - 0.5) * 220 * burst, vy: -200 - rnd() * 180, v, t: 0, phase: rnd() * 8 });
+    }
+  }
+  collectPickup(k) {
+    const p = this.player;
+    k.got = true;
+    this.hudPop ||= { gold: 0, exp: 0 };
+    if (k.type === 'exp') {
+      this.gainExp(k.v);
+      this.hudPop.exp = 1;
+      this.fx.sparks(cx(p), cy(p), '#c8ff9a', 3, 110);
+      this.sfx.play('exp');
+    } else {
+      this.addGold(k.v);
+      this.hudPop.gold = 1;
+      this.fx.sparks(k.x, k.y, '#fff2a0', 5, 150);
+      this.fx.text(k.x, k.y - 12, `+${k.v}`, '#ffd84a', 10);
+      this.sfx.play('coin');
+    }
+  }
+  updatePickups(dt) {
+    const p = this.player, room = this.room, map = this.map;
+    if (p.state === 'dead') return;
+    const px = cx(p), py = cy(p);
+    for (const k of room.pickups) {
+      k.t += dt;
+      const dx = px - k.x, dy = py - k.y, d = Math.hypot(dx, dy) || 1;
+      const home = (sp, turn) => { k.vx += (dx / d * sp - k.vx) * Math.min(1, dt * turn); k.vy += (dy / d * sp - k.vy) * Math.min(1, dt * turn); k.x += k.vx * dt; k.y += k.vy * dt; };
+      if (k.type === 'exp') {
+        // 弾けて広がったあと、主人公へ吸い寄せられる
+        if (k.t < 0.35) { k.vx *= 0.9; k.vy *= 0.9; k.x += k.vx * dt; k.y += k.vy * dt; }
+        else home(320 + (k.t - 0.35) * 900, 10);
+        if (k.t > 0.35 && d < 14) this.collectPickup(k);
+        continue;
+      }
+      // 金貨：跳ねて床に落ちる。近づくと吸い寄せられる。部屋を制圧すると少しして集まってくる
+      if (!k.magnet && ((k.t > 0.35 && d < 56) || (room.cleared && k.t > 1.2))) k.magnet = true;
+      if (k.magnet) home(380 + k.t * 160, 12);
+      else {
+        k.vy = Math.min(k.vy + 1400 * dt, 700);
+        const nx = k.x + k.vx * dt;
+        if (map.solidAt(nx, k.y)) k.vx = -k.vx * 0.5; else k.x = nx;
+        const gy = map.groundBelow(k.x, k.y - 4);
+        k.y += k.vy * dt;
+        if (gy >= map.pxH) { if (k.y > map.pxH - 10) k.magnet = true; } // 穴に落ちた金貨は主人公のもとへ
+        else if (k.y >= gy - 3 && k.vy > 0) { k.y = gy - 3; k.vy = k.vy > 140 ? -k.vy * 0.45 : 0; k.vx *= 0.7; }
+      }
+      if (k.t > 0.25 && d < 18) this.collectPickup(k);
+    }
+    room.pickups = room.pickups.filter((k) => !k.got);
+  }
+  flushPickups() {
+    for (const k of this.room.pickups || []) { if (k.type === 'exp') this.gainExp(k.v); else this.addGold(k.v); }
+    this.room.pickups = [];
+  }
+
   // ───────── 金貨・店・アーティファクト ─────────
   addGold(n, x, y) {
     if (n <= 0) return;
@@ -568,7 +645,7 @@ export class Game {
   }
   openArtifactPick(rarity, n, thenDoors) {
     const offer = rollArtifacts(this.run.rareRng, this.player.artifacts, rarity, n);
-    if (!offer.length) { this.addGold(80, cx(this.player), this.player.y - 30); if (thenDoors) this.openDoors(); return; }
+    if (!offer.length) { this.dropGold(80, cx(this.player), this.player.y - 10, 1.6); if (thenDoors) this.openDoors(); return; }
     this.modal = { type: 'artifact', offer, sel: 0, rarity, thenDoors, t: 0 };
     this.sfx.play('pickup');
   }
@@ -782,8 +859,8 @@ export class Game {
       this.run.kills++;
       this.run.killStacks += p.stats.killStack;
       this.addShards((e.elite ? 12 : 2) + Math.floor(this.run.scale.level / 2), cx(e), e.y - 20);
-      this.gainExp(expFor(e, this.run.scale), cx(e), e.y - 34);
-      this.addGold(Math.round((GOLD[e.kind] || 5) * (1 + 0.25 * this.run.scale.level) * p.stats.goldMul), cx(e), e.y - 46);
+      this.dropExp(expFor(e, this.run.scale), cx(e), cy(e));
+      this.dropGold(Math.round((GOLD[e.kind] || 5) * (1 + 0.25 * this.run.scale.level) * p.stats.goldMul), cx(e), cy(e));
       this.sfx.play('kill');
       this.fx.burst(cx(e), cy(e), e.elite ? '#f2c14e' : '#e8dcc4', e.elite ? 30 : 16);
       this.hitstop = Math.max(this.hitstop, (e.elite ? 10 : 4) / 60);
@@ -885,7 +962,7 @@ export class Game {
       this.sfx.play('heal'); this.fx.text(cx(p), p.y - 20, `+${amt}`, '#5fd18b', 16); this.fx.ring(cx(p), cy(p), '#5fd18b', 40);
       this.openDoors();
     } else if (kind === 'gold') {
-      this.addGold(Math.round((40 + 15 * this.run.fi) * (1 + 0.25 * this.run.scale.level)), cx(p), p.y - 30);
+      this.dropGold(Math.round((40 + 15 * this.run.fi) * (1 + 0.25 * this.run.scale.level)), cx(p), p.y - 10, 1.6);
       this.fx.sparks(cx(p), cy(p), '#ffd84a', 18, 260);
       this.openDoors();
     } else if (kind === 'artifact') {
@@ -1225,6 +1302,7 @@ export class Game {
   endRun(cause) {
     const run = this.run, p = this.player;
     if (run.ended) return;
+    if (this.room) this.flushPickups();
     run.ended = true;
     const report = endLoop(this.meta, {
       cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock, shards: run.shards, dodges: p.dodgeCount || 0, level: run.level || 1, gold: run.gold || 0, artifacts: p.artifacts || [],

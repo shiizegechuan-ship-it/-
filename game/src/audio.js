@@ -59,6 +59,8 @@ export class Sfx {
     switch (name) {
       case 'jump': this.tone('square', 220, 420, 0.09, 0.08); break;
       case 'airJump': this.tone('square', 330, 660, 0.08, 0.07); this.tone('triangle', 990, 1320, 0.1, 0.06, 0.03); break;
+      case 'coin': this.tone('square', 1568, 1568, 0.04, 0.05); this.tone('square', 2093, 2093, 0.08, 0.05, 0.04); break;
+      case 'exp': this.tone('sine', 900 + Math.random() * 300, 1500, 0.06, 0.05); break;
       case 'land': this.noiseHit(0.06, 400, 0.12, 0.8, 'lowpass'); break;
       case 'dodge': this.noiseHit(0.18, 2400, 0.16, 0.7, 'bandpass', 500); break;
       case 'swing': this.noiseHit(0.08, 3000, 0.12, 1.2, 'bandpass', 1200); break;

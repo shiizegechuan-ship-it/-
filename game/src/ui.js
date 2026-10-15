@@ -92,7 +92,9 @@ export function drawHud(ctx, game) {
   if (p.dodgeCd > 0) { ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(22, 50, hpW * clamp(1 - p.dodgeCd / 0.8, 0, 1), 2); }
   // レベルと経験値
   const lv = run.level || 1, need = expToNext(lv);
-  text(ctx, `Lv ${lv}`, 22, 70, { size: 13, color: '#a8f07a' });
+  const ep = game.hudPop ? game.hudPop.exp : 0;
+  text(ctx, `Lv ${lv}`, 22, 70, { size: 13, color: ep > 0 ? '#e8ffd0' : '#a8f07a' });
+  if (ep > 0) { ctx.fillStyle = `rgba(200,255,160,${0.5 * ep})`; ctx.fillRect(64, 58, hpW - 40, 11); }
   ctx.fillStyle = '#1c2616'; ctx.fillRect(66, 60, hpW - 44, 7);
   ctx.fillStyle = '#7fd85a'; ctx.fillRect(66, 60, (hpW - 44) * clamp((run.exp || 0) / need, 0, 1), 7);
   const toRare = LEVEL.rareEvery - (lv % LEVEL.rareEvery);
@@ -148,7 +150,8 @@ export function drawHud(ctx, game) {
   text(ctx, `◆ 欠片 ${meta.shards + (run.shards || 0)}`, 22, 98, { size: 12, color: '#9fd0ff' });
   if (run.killStacks > 0) text(ctx, `血の秒針 +${Math.round(run.killStacks * 100)}%`, 120, 98, { size: 11, color: '#ff9a3c' });
   // 金貨・鍵・アーティファクト（その夜だけ）
-  text(ctx, `● 金貨 ${run.gold || 0}` + (run.keys ? `　黄金の鍵 ×${run.keys}` : ''), 22, 116, { size: 12, color: '#ffd84a' });
+  const gp = game.hudPop ? game.hudPop.gold : 0;
+  text(ctx, `● 金貨 ${run.gold || 0}` + (run.keys ? `　黄金の鍵 ×${run.keys}` : ''), 22, 116, { size: 12 + Math.round(gp * 4), color: gp > 0 ? '#fff6c0' : '#ffd84a' });
   (p.artifacts || []).forEach((id, i) => { const a = ARTIFACTS[id]; text(ctx, '◆ ' + a.name, 22, 134 + i * 15, { size: 11, color: ARTIFACT_COLOR[a.rarity] }); });
   // コンボ
   const cb = game.combo;

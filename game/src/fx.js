@@ -17,6 +17,7 @@ export class Fx {
   }
   shake(mag, t = 0.18) {
     if (!this.settings.shake) return;
+    mag *= 1.25; // 画面の揺れは全体に 1.25 倍
     if (mag >= this.shakeMag || this.shakeT <= 0) { this.shakeMag = mag; this.shakeT = t; }
   }
   screenFlash(color, a = 0.5) { this.flash = a; this.flashColor = color; }
