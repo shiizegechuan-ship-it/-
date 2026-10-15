@@ -238,7 +238,7 @@ export function updatePassives(game, dt) {
   dt *= p.stats.passiveSpeed || 1; // 星の心臓：常時の術が速く回る
   const px = cx(p), py = cy(p);
   const owned = PASSIVE_IDS.filter((id) => pv[id]).length;
-  const syn = passiveSynergy(owned);
+  const syn = passiveSynergy(owned) * (p.stats.passiveMul || 1); // 星界の地図
   p.passiveSyn = syn;
   const dmg = (base, id) => base * lvMul(pv[id]) * syn;
   const tick = (id, period) => { T[id] = (T[id] || 0) + dt; if (T[id] >= period) { T[id] = 0; return true; } return false; };
@@ -310,6 +310,11 @@ export function updatePassives(game, dt) {
       }
     }
   } else p.cloud = null;
+  // 雷冠（アーティファクト）：常時の術ではないので脅威には数えない
+  if (p.stats.stormcrown && (T.crown = (T.crown || 0) + dt) >= 2.5) {
+    const e = nearestTargets(game, px, py, 300)[0];
+    if (e) { T.crown = 0; PROCS.thunderbell(game, 1, e, 50 / 45, true); }
+  }
   if (pv.wake && p.onGround && Math.abs(p.vx) > 150 && tick('wake', 0.12)) {
     game.room.spells.push(new Spell('trail', px, p.y + p.h - 6, { passive: true, life: 1.4, dmg: dmg(7, 'wake') }));
   }

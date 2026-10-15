@@ -7,7 +7,8 @@ import { addWedge, learn } from '../src/meta.js';
 function clearAndAdvance(g, d, pickDoor = 0) {
   for (let guard = 0; guard < 400; guard++) {
     if (g.modal) {
-      if (g.modal.type === 'boon') { d.frame(20); d.frame(1, ['confirm']); d.frame(1); continue; }
+      if (g.modal.type === 'boon' || g.modal.type === 'artifact') { d.frame(20); d.frame(1, ['confirm']); d.frame(1); continue; }
+      if (g.modal.type === 'shop') { g.modal = null; continue; }
       if (g.modal.type === 'dialog') { d.frame(10); d.frame(1, ['confirm']); d.frame(1); continue; }
     }
     if (g.transition) { d.frame(1); continue; }

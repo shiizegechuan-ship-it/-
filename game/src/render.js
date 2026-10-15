@@ -775,9 +775,12 @@ function glyph(b, kind, x, y, col) {
     const n = kind === 'boon2' ? 2 : 1;
     for (let k = 0; k < n; k++) { const ox = x + (n === 2 ? (k ? 3 : -3) : 0); for (let i = 0; i < 3; i++) rect(b, ox - i, y - 2 + i, i * 2 + 1, 1, col), rect(b, ox - i, y + 2 - i, i * 2 + 1, 1, col); }
   } else if (kind === 'heal') { rect(b, x - 1, y - 3, 3, 7, col); rect(b, x - 3, y - 1, 7, 3, col); }
+  else if (kind === 'gold') { disc(b, x, y, 3, col); rect(b, x - 1, y - 1, 2, 1, '#fff6c0'); pset(b, x, y, '#8c6d2a'); }
+  else if (kind === 'artifact') { for (let i = 0; i < 4; i++) rect(b, x - 3 + i, y - i, 7 - i * 2, 1, col), rect(b, x - 3 + i, y + i, 7 - i * 2, 1, col); pset(b, x - 1, y - 1, '#ffffff'); }
+  else if (kind === 'key') { disc(b, x - 2, y - 1, 2, col); pset(b, x - 2, y - 1, '#0a0610'); rect(b, x, y - 1, 4, 1, col); rect(b, x + 2, y, 1, 2, col); rect(b, x + 3, y, 1, 1, col); }
   else if (kind === 'hourglass') { rect(b, x - 3, y - 3, 7, 1, col); rect(b, x - 3, y + 3, 7, 1, col); for (let i = 0; i < 3; i++) rect(b, x - 2 + i, y - 2 + i, 5 - i * 2, 1, col), rect(b, x - 2 + i, y + 2 - i, 5 - i * 2, 1, col); }
 }
-const REWARD_COLOR = { boon: '#f2c14e', boon2: '#f2c14e', heal: '#5fd18b', hourglass: '#efe4cc' };
+const REWARD_COLOR = { boon: '#f2c14e', boon2: '#f2c14e', heal: '#5fd18b', hourglass: '#efe4cc', gold: '#ffd84a', artifact: '#7fe0d0', key: '#ffd84a' };
 
 function drawItem(b, game, it) {
   const t = game.time;
@@ -786,14 +789,15 @@ function drawItem(b, game, it) {
   if (it.vault && !game.run.vaultOpen) { dashLine(b, x, bot, x + w, bot, '#3a3242'); return; }
   switch (it.kind) {
     case 'door': {
-      const frame = it.causal ? '#f2c14e' : it.boss ? '#e35d5d' : '#8c7a5a';
+      const frame = it.golden ? '#ffd84a' : it.causal ? '#f2c14e' : it.boss ? '#e35d5d' : '#8c7a5a';
       rect(b, x, y + 4, w, h - 4, '#0a0610');
       for (let i = 0; i < Math.ceil(w / 2); i++) { const hh = Math.round(Math.sqrt(Math.max(0, (w / 2) ** 2 - (i - w / 2) ** 2)) * 0.6); rect(b, x + i, y + 4 - hh, 1, hh, '#0a0610'); rect(b, x + w - 1 - i, y + 4 - hh, 1, hh, '#0a0610'); }
       // 枠
       for (let yy = y + 4; yy < bot; yy++) { pset(b, x - 1, yy, frame); pset(b, x + w, yy, frame); }
       for (let i = 0; i <= w; i++) { const hh = Math.round(Math.sqrt(Math.max(0, (w / 2) ** 2 - (i - w / 2) ** 2)) * 0.6); pset(b, x + i, y + 3 - hh, frame); }
       // 奥の光
-      const glow = Math.sin(t * 3) > 0 ? '#3a2a1a' : '#4a3420';
+      const glow = it.golden ? (Math.sin(t * 4) > 0 ? '#6a5418' : '#8a6c20') : Math.sin(t * 3) > 0 ? '#3a2a1a' : '#4a3420';
+      if (it.golden) glyph(b, 'key', mid, y - 8 + Math.round(Math.sin(t * 3)), '#ffd84a');
       for (let yy = y + 6; yy < bot; yy += 2) rect(b, x + 2, yy, w - 4, 1, glow);
       if (it.reward) glyph(b, it.reward, mid, y - 8 + Math.round(Math.sin(t * 3)), REWARD_COLOR[it.reward]);
       if (it.causal) causalMark(b, mid, y - 10, t, false);
@@ -805,6 +809,32 @@ function drawItem(b, game, it) {
       b.globalAlpha = 0.35; disc(b, mid, yy, r, REWARD_COLOR[it.reward]); b.globalAlpha = 1;
       glyph(b, it.reward, mid, yy, '#ffffff');
       if (Math.floor(t * 8) % 4 === 0) pset(b, mid + 5, yy - 6, '#ffffff');
+      break;
+    }
+    case 'merchant': { // 行商人の屋台：縞の日よけ・品物の並ぶ台・頭巾の商人
+      const sx = x, sw = w;
+      for (let i = 0; i < sw; i += 4) rect(b, sx + i, y, 2, 4, '#c94a3a'), rect(b, sx + i + 2, y, 2, 4, '#efe4cc');
+      rect(b, sx, y + 4, sw, 1, '#7a2a22');
+      rect(b, sx + 1, y + 5, 1, h - 5, '#4a3626'); rect(b, sx + sw - 2, y + 5, 1, h - 5, '#4a3626');
+      // 商人（頭巾）
+      const mx = sx + Math.round(sw / 2), bob = Math.floor(t * 2) % 2;
+      rect(b, mx - 3, y + 7 + bob, 7, 6, '#3a5a4a'); rect(b, mx - 2, y + 9 + bob, 5, 3, '#e8c8a0'); pset(b, mx - 1, y + 10 + bob, '#1a1018'); pset(b, mx + 1, y + 10 + bob, '#1a1018');
+      rect(b, mx - 4, y + 13, 9, 5, '#2e4a3c');
+      // 台と品物
+      rect(b, sx + 2, bot - 8, sw - 4, 8, '#5a4030'); rect(b, sx + 2, bot - 9, sw - 4, 1, '#8c6a4a');
+      disc(b, sx + 7, bot - 11, 2, '#5fd18b'); disc(b, sx + 13, bot - 11, 2, '#ff6a6a');
+      for (let i = 0; i < 3; i++) rect(b, sx + sw - 14 + i * 3, bot - 12 - (i % 2), 2, 3, '#ffd84a');
+      if (Math.floor(t * 3) % 3 === 0) pset(b, sx + sw - 11, bot - 14, '#ffffff');
+      break;
+    }
+    case 'goldchest': {
+      const open = it.opened;
+      b.globalAlpha = 0.25 + 0.15 * Math.sin(t * 3); disc(b, mid, bot - 8, 14, '#ffd84a'); b.globalAlpha = 1;
+      rect(b, x + 2, bot - 10, w - 4, 10, '#8a6420'); rect(b, x + 3, bot - 9, w - 6, 8, '#c9962e');
+      rect(b, x + 2, bot - 6, w - 4, 1, '#ffd84a');
+      if (!open) { rect(b, x + 2, bot - 14, w - 4, 4, '#ffd84a'); rect(b, x + 3, bot - 15, w - 6, 1, '#fff2b0'); rect(b, mid - 1, bot - 11, 3, 3, '#5a3a10'); }
+      else { rect(b, x + 2, bot - 18, w - 4, 3, '#8a6420'); for (let i = 0; i < 4; i++) pset(b, mid - 4 + i * 3, bot - 13 - (Math.floor(t * 6 + i) % 3), '#fff2b0'); }
+      if (!open && Math.floor(t * 6) % 4 === 0) pset(b, x + w - 3, bot - 16, '#ffffff');
       break;
     }
     case 'sign':
@@ -885,7 +915,7 @@ function label(ctx, str, x, y, color, size = 15) {
 }
 function drawWorldLabels(ctx, game) {
   for (const it of game.room.items) {
-    if (it.kind === 'door' && !it.reward && it.label) label(ctx, it.label, SX(it.x + it.w / 2), SY(it.y) - 40, it.causal ? '#f2c14e' : it.boss ? '#ff8a6a' : '#efe6d2', 14);
+    if (it.kind === 'door' && !it.reward && it.label) label(ctx, it.label, SX(it.x + it.w / 2), SY(it.y) - 40, it.golden ? '#ffd84a' : it.causal ? '#f2c14e' : it.boss ? '#ff8a6a' : '#efe6d2', 14);
   }
   for (const e of game.room.enemies) {
     if (e.state === 'stagger') label(ctx, '崩れ', SX(cx(e)), SY(e.y) - 22, '#f2c14e', 15);

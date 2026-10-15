@@ -5,7 +5,8 @@ import { TileMap } from './tilemap.js';
 import { Player } from './player.js';
 import { makeEnemy, RustSoldier, GearKnight } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
-import { castArt, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave } from './arts.js';
+import { castArt, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell } from './arts.js';
+import { ARTIFACTS, rollArtifacts } from './artifacts.js';
 import { Fx } from './fx.js';
 import { NullSfx } from './audio.js';
 import { BOONS, rollOffer, rollRare, boonMax, PASSIVE_IDS } from './boons.js';
@@ -21,7 +22,9 @@ import {
 const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
 // 脅威 1 段あたりの上がり幅（常時の術 3 つごとに 1 段）
 export const THREAT = { per: 3, hp: 0.7, dmg: 0.18, bossHp: 0.55, extraCap: 4 };
-const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourglass: '砂時計' };
+const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourglass: '砂時計', gold: '金貨', artifact: 'アーティファクト' };
+// 敵ごとの金貨（夜が深いほど多い）
+const GOLD = { soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
 
 export class Game {
   constructor(opts = {}) {
@@ -99,6 +102,7 @@ export class Game {
       critRng: makeRng(plan.offerSeed ^ 0xc817),
       rareRng: makeRng(plan.offerSeed ^ 0x7a2e),
       level: 1, exp: 0, pendingRare: 0, phoenixUsed: false,
+      gold: 0, keys: 0, shops: {}, firstDoorDone: false, aegisUsed: false,
       scale: enemyScale(meta),
     };
     // 発動する術は 1 つだけ（楔と継承で重なったら Lv の高い方）
@@ -132,11 +136,12 @@ export class Game {
 
   roomDesc(fi = this.run.fi, ri = this.run.ri) { return this.run.plan.floors[fi] && this.run.plan.floors[fi][ri]; }
 
-  enterRoom(fi, ri) {
+  // override：計画にない特別な部屋（黄金の部屋）。fi/ri はそのままなので、出口は元の次の部屋へ続く
+  enterRoom(fi, ri, override = null) {
     const run = this.run;
     const prevFloor = run.fi;
     run.fi = fi; run.ri = ri;
-    const desc = this.roomDesc();
+    const desc = override || this.roomDesc();
     this.map = new TileMap(layoutRows(desc));
     this.room = { desc, cleared: false, rewardSpawned: false, enemies: [], projectiles: [], echoes: [], items: [], spells: [], t: 0, boss: null, glenHp: 0 };
     this.player.vx = 0; this.player.vy = 0; this.player.state = 'normal'; this.player.atk = null;
@@ -158,8 +163,12 @@ export class Game {
       archive: () => this.setupArchive(),
       study: () => this.setupStudy(),
       boss: () => this.setupBoss(),
+      shop: () => this.setupShop(),
+      golden: () => this.setupGolden(),
     }[desc.type];
     setup();
+    // 鐘の欠片：敵のいる部屋に入ると衝撃
+    if (this.player.stats.bellshard && this.room.enemies.some((e) => !e.boss)) this.room.spells.push(new Spell('toll', cx(this.player), cy(this.player), { r: 0, maxR: 220, dmg: 40 }));
     for (const m of this.map.markers) if (m.c === 'Q' && this.meta.loop <= 2) this.addSign(m);
     // 敵のいない部屋はすぐに出口が開く
     if (!this.room.enemies.length && desc.type !== 'boss' && desc.type !== 'forge') this.clearRoom(true);
@@ -323,6 +332,7 @@ export class Game {
     run.clock += dt;
     room.t += dt;
     if (this.combo.n > 0 && !this.player.stats.eternal) { this.combo.t -= dt; if (this.combo.t <= 0) this.combo.n = 0; }
+    if (p.stats.regen && p.state !== 'dead') p.hp = Math.min(p.maxHp, p.hp + p.maxHp * p.stats.regen * dt);
     if (this.combo.pop > 0) this.combo.pop = Math.max(0, this.combo.pop - dt * 6);
     if (this.timeStopT > 0) {
       this.timeStopT -= dt;
@@ -377,11 +387,14 @@ export class Game {
       if (!overlap(hb, e)) continue;
       a.hitIds.add(e.id);
       const dir = a.def.spin || a.def.dir ? sign(cx(e) - cx(p)) || p.face : p.face;
-      this.dealDamage(e, { base: a.def.dmg, cat: a.def.cat, knock: a.def.knock, dir, stop: a.def.stop, breaks: !!a.def.breaks, shake: a.def.shake || 0, heavy: a.name === 'heavy', parry: !!a.def.parry, lift: a.def.lift || 0 });
+      const info = { base: a.def.dmg, cat: a.def.cat, knock: a.def.knock, dir, stop: a.def.stop, breaks: !!a.def.breaks, shake: a.def.shake || 0, heavy: a.name === 'heavy', parry: !!a.def.parry, lift: a.def.lift || 0 };
+      this.dealDamage(e, info);
+      // 双牙：もう一度当たる
+      if (p.stats.twinfang && e.alive && this.run.critRng.next() < p.stats.twinfang) { this.dealDamage(e, { ...info, parry: false }); this.fx.text(cx(e), e.y - 46, '双牙', '#ffd84a', 12); }
       // 下突き：当たったら跳ね上がる（2段ジャンプと空中回避も回復）
       if (a.def.bounce && !p.onGround && !a.bounced) {
         a.bounced = true;
-        p.vy = -a.def.bounce; p.airJumpsLeft = PC.airJumps; p.airDodgeUsed = false;
+        p.vy = -a.def.bounce; p.airJumpsLeft = p.airJumpMax; p.airDodgeUsed = false;
         this.fx.ring(cx(p), p.y + p.h, '#9fe3ff', 26, 0.25);
         this.fx.sparks(cx(p), p.y + p.h, '#ffffff', 8, 240);
       }
@@ -492,6 +505,86 @@ export class Game {
     if (c.n % 10 === 0 && this.player.stats.procs.secondhand) PROCS.secondhand(this, this.player.stats.procs.secondhand);
     if (c.n % 25 === 0) { this.fx.setBanner(`${c.n} HIT`, `与ダメージ +${Math.round(c.n * this.player.stats.comboPer * 100)}%`, '#ff9a3c', 0.9); this.sfx.play('charged'); }
   }
+  // ───────── 金貨・店・アーティファクト ─────────
+  addGold(n, x, y) {
+    if (n <= 0) return;
+    this.run.gold += n;
+    if (x != null) this.fx.text(x, y, `+${n}G`, '#ffd84a', 11);
+    this.emit('gold', { n });
+  }
+  setupShop() {
+    const V = this.marker('V');
+    this.addItem({ kind: 'merchant', x: V.x - 20, y: V.y + TILE - 46, w: 70, h: 46 });
+    // 敵のいない部屋なので、出口は enterRoom の最後で開く
+  }
+  setupGolden() {
+    const J = this.marker('J');
+    this.addItem({ kind: 'goldchest', x: J.x - 4, y: J.y + TILE - 26, w: 38, h: 26, opened: false });
+    this.fx.setBanner('黄金の部屋', '宝箱から、強いアーティファクトを 1 つ選べる', '#ffd84a', 1.8);
+  }
+  // 店の品ぞろえ（その店に最初に入ったときに決まる）
+  shopStock() {
+    const run = this.run, key = run.fi;
+    if (run.shops[key]) return run.shops[key];
+    const rng = makeRng((run.plan.offerSeed ^ (0x5b0b + key * 131)) >>> 0);
+    const k = 1 + 0.25 * run.scale.level, f = run.fi;
+    const price = (n) => Math.round(n * k);
+    const stock = [];
+    for (const id of rollOffer(rng, this.player.boons, this.meta.unlocked, 2)) stock.push({ kind: 'boon', id, price: price(60 + 20 * f) });
+    stock.push({ kind: 'potion', size: 0.3, price: price(25) });
+    stock.push({ kind: 'potion', size: 0.7, price: price(50) });
+    const art = rollArtifacts(rng, this.player.artifacts, 'normal', 1)[0];
+    if (art) stock.push({ kind: 'artifact', id: art, price: price(110 + 30 * f) });
+    stock.push({ kind: 'key', price: price(130 + 20 * f) });
+    run.shops[key] = stock;
+    return stock;
+  }
+  shopLabel(s) {
+    if (s.kind === 'boon') { const d = BOONS[s.id], own = this.player.boons.find((b) => b.id === s.id); return { name: `強化：${d.name}` + (own && d.max ? ` Lv${own.tier}→${own.tier + 1}` : ''), desc: d.desc(own ? own.tier + 1 : 1) }; }
+    if (s.kind === 'potion') return { name: s.size > 0.5 ? '大きな回復薬' : '小さな回復薬', desc: `HP を最大HPの ${Math.round(s.size * 100)}% 回復する` };
+    if (s.kind === 'artifact') return { name: `遺物：${ARTIFACTS[s.id].name}`, desc: 'アーティファクト：' + ARTIFACTS[s.id].desc };
+    return { name: '黄金の鍵', desc: '次の扉の選択に「黄金の部屋」が加わる。強いアーティファクトを 1 つ選べる' };
+  }
+  openShop() {
+    this.modal = { type: 'shop', stock: this.shopStock(), sel: 0, t: 0, scroll: 0 };
+    if (!this.run.shopGreeted) { this.run.shopGreeted = true; this.fx.text(cx(this.player), this.player.y - 40, '行商人「夜が明けねえもんで、商売あがったりさ」', '#ffd84a', 12); }
+    this.sfx.play('select');
+  }
+  buyShop(m) {
+    const s = m.stock[m.sel], p = this.player, run = this.run;
+    if (!s || s.sold) { this.sfx.play('deny'); return; }
+    if (run.gold < s.price) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 30, '金貨が足りない', '#9a8fa6', 12); return; }
+    if (s.kind === 'artifact' && p.artifacts.includes(s.id)) { this.sfx.play('deny'); return; }
+    run.gold -= s.price;
+    s.sold = true;
+    if (s.kind === 'boon') this.grantBoon(s.id);
+    else if (s.kind === 'potion') { const amt = Math.round(p.maxHp * s.size * p.stats.healMul); p.hp = Math.min(p.maxHp, p.hp + amt); this.fx.text(cx(p), p.y - 20, `+${amt}`, '#5fd18b', 16); this.fx.ring(cx(p), cy(p), '#5fd18b', 40); }
+    else if (s.kind === 'artifact') { p.addArtifact(s.id); this.fx.setBanner(ARTIFACTS[s.id].name, ARTIFACTS[s.id].desc, '#7fe0d0', 1.4); }
+    else if (s.kind === 'key') { run.keys++; this.fx.setBanner('黄金の鍵', '次の扉の選択に「黄金の部屋」が加わる', '#ffd84a', 1.4); }
+    this.sfx.play('pickup');
+    this.emit('buy', { kind: s.kind });
+    // 鍵を買った直後なら、この部屋の出口にも黄金の扉を足す
+    if (s.kind === 'key' && this.room.doorsOpen) { this.room.doorsOpen = false; this.room.items = this.room.items.filter((it) => it.kind !== 'door'); this.openDoors(); }
+  }
+  openArtifactPick(rarity, n, thenDoors) {
+    const offer = rollArtifacts(this.run.rareRng, this.player.artifacts, rarity, n);
+    if (!offer.length) { this.addGold(80, cx(this.player), this.player.y - 30); if (thenDoors) this.openDoors(); return; }
+    this.modal = { type: 'artifact', offer, sel: 0, rarity, thenDoors, t: 0 };
+    this.sfx.play('pickup');
+  }
+  // 強化を 1 つ得る（Lv アップ・発動する術の持ち替えを含む）
+  grantBoon(id) {
+    const p = this.player;
+    const own = p.boons.find((b) => b.id === id);
+    if (own) p.setBoons(p.boons.map((b) => (b.id === id ? { ...b, tier: Math.min(boonMax(id), b.tier + 1) } : b)));
+    else if (BOONS[id].active) p.setBoons([...p.boons.filter((b) => !BOONS[b.id].active), { id, tier: 1 }]);
+    else p.setBoons([...p.boons, { id, tier: 1 }]);
+    const nowTier = p.boons.find((b) => b.id === id).tier;
+    this.fx.ring(cx(p), cy(p), BOON_COLORS[BOONS[id].school], 50, 0.4);
+    this.fx.setBanner(BOONS[id].name + (BOONS[id].max ? ` Lv${nowTier}` : ''), BOONS[id].desc(nowTier), BOON_COLORS[BOONS[id].school], 1.4);
+    this.emit('boon', { id });
+  }
+
   // ───────── 経験値とレベル ─────────
   gainExp(n, x, y) {
     const run = this.run, p = this.player;
@@ -509,7 +602,7 @@ export class Game {
     // 最大HPを伸ばし、少し回復
     p.baseMaxHp += LEVEL.hpPer;
     p.setBoons(p.boons);
-    p.hp = Math.min(p.maxHp, p.hp + LEVEL.hpPer + Math.round(p.maxHp * LEVEL.healOnUp));
+    p.hp = Math.min(p.maxHp, p.hp + Math.round((LEVEL.hpPer + p.maxHp * LEVEL.healOnUp) * p.stats.healMul));
     const rare = run.level % LEVEL.rareEvery === 0;
     if (rare) run.pendingRare++;
     this.fx.ring(cx(p), cy(p), '#a8f07a', 60, 0.5);
@@ -611,6 +704,7 @@ export class Game {
     const p = this.player;
     if (p.state === 'dead') return;
     if (!pit && p.invulnerable) return;
+    if (!pit) dmg = Math.max(1, Math.round(dmg * (p.stats.dmgTaken || 1))); // 守りの歯車
     p.hurt(dmg, fromX ?? cx(p));
     // 落下からの復帰では吹き飛ばさない（同じ穴へ落ち続けないように）
     if (pit && p.state !== 'dead') { p.vx = 0; p.vy = 0; }
@@ -635,6 +729,14 @@ export class Game {
       p.hp = Math.round(p.maxHp * 0.5); p.state = 'normal'; p.stateT = 0; p.iframeT = 2; p.vx = 0;
       this.fx.burst(cx(p), cy(p), '#ffd84a', 34); this.fx.screenFlash('#ffd84a', 0.4);
       this.fx.setBanner('不死鳥の砂時計', '砂が逆さに落ちる――立ち上がった', '#ffd84a', 1.6);
+      this.sfx.play('perfect'); this.slowT = 0.6; this.slowScale = 0.3;
+    }
+    // 不滅の歯車：一度だけ HP100% で立ち上がる
+    if (p.state === 'dead' && p.stats.aegis && !this.run.aegisUsed) {
+      this.run.aegisUsed = true;
+      p.hp = p.maxHp; p.state = 'normal'; p.stateT = 0; p.iframeT = 2; p.vx = 0;
+      this.fx.burst(cx(p), cy(p), '#ffd84a', 40); this.fx.screenFlash('#ffd84a', 0.45);
+      this.fx.setBanner('不滅の歯車', '歯車が回り直す――立ち上がった', '#ffd84a', 1.6);
       this.sfx.play('perfect'); this.slowT = 0.6; this.slowScale = 0.3;
     }
     if (p.state === 'dead') {
@@ -681,6 +783,7 @@ export class Game {
       this.run.killStacks += p.stats.killStack;
       this.addShards((e.elite ? 12 : 2) + Math.floor(this.run.scale.level / 2), cx(e), e.y - 20);
       this.gainExp(expFor(e, this.run.scale), cx(e), e.y - 34);
+      this.addGold(Math.round((GOLD[e.kind] || 5) * (1 + 0.25 * this.run.scale.level) * p.stats.goldMul), cx(e), e.y - 46);
       this.sfx.play('kill');
       this.fx.burst(cx(e), cy(e), e.elite ? '#f2c14e' : '#e8dcc4', e.elite ? 30 : 16);
       this.hitstop = Math.max(this.hitstop, (e.elite ? 10 : 4) / 60);
@@ -739,11 +842,22 @@ export class Game {
     const X = this.marker('X');
     if (!next || !X) return;
     const doorY = X.y + TILE - 50;
+    const dir = X.x > this.map.pxW / 2 ? -1 : 1; // 2枚目以降の扉は部屋の内側へ
+    let n = 0;
     if (next.desc.type === 'combat') {
-      const dir = X.x > this.map.pxW / 2 ? -1 : 1; // 2枚目の扉は部屋の内側へ
-      next.desc.rewardChoices.forEach((rw, i) => this.addItem({ kind: 'door', x: X.x + dir * i * 90 - 6, y: doorY, w: 36, h: 50, to: next, reward: rw }));
+      // 夜の最初の扉と、HP が満タンのときは「回復」を出さない（アーティファクトか金貨に替える）
+      const p = this.player, noHeal = !this.run.firstDoorDone || p.hp >= p.maxHp;
+      const choices = [];
+      for (const rw of next.desc.rewardChoices) choices.push(rw === 'heal' && noHeal ? (choices.includes('artifact') || next.desc.rewardChoices.includes('artifact') ? 'gold' : 'artifact') : rw);
+      choices.forEach((rw) => this.addItem({ kind: 'door', x: X.x + dir * (n++) * 90 - 6, y: doorY, w: 36, h: 50, to: next, reward: rw }));
     } else {
-      this.addItem({ kind: 'door', x: X.x - 6, y: doorY, w: 36, h: 50, to: next, reward: null, label: next.stairs ? '階段' : { forge: '鍛冶場', elite: '強敵', archive: '書庫', study: '書斎', boss: '鐘楼', entry: '' }[next.desc.type], causal: ['forge', 'archive', 'study'].includes(next.desc.type), boss: next.desc.type === 'boss', elite: next.desc.type === 'elite' });
+      n++;
+      this.addItem({ kind: 'door', x: X.x - 6, y: doorY, w: 36, h: 50, to: next, reward: null, label: next.stairs ? '階段' : { forge: '鍛冶場', elite: '強敵', archive: '書庫', study: '書斎', boss: '鐘楼', shop: '店', entry: '' }[next.desc.type], causal: ['forge', 'archive', 'study'].includes(next.desc.type), boss: next.desc.type === 'boss', elite: next.desc.type === 'elite' });
+    }
+    this.run.firstDoorDone = true;
+    // 黄金の鍵があれば、黄金の部屋への扉が増える（鐘楼の前は除く）
+    if (this.run.keys > 0 && next.desc.type !== 'boss' && this.room.desc.type !== 'golden') {
+      this.addItem({ kind: 'door', golden: true, x: X.x + dir * n * 90 - 6, y: doorY, w: 36, h: 50, to: { fi: this.run.fi, ri: this.run.ri, override: { type: 'golden', layout: 'vault' } }, reward: null, label: '黄金の部屋' });
     }
     this.sfx.play('door');
   }
@@ -767,9 +881,15 @@ export class Game {
     const p = this.player;
     this.emit('reward', { kind });
     if (kind === 'heal') {
-      const amt = Math.round(120 * (1 + 0.2 * upLv(this.meta, 'heal'))); p.hp = Math.min(p.maxHp, p.hp + amt);
+      const amt = Math.round(120 * (1 + 0.2 * upLv(this.meta, 'heal')) * p.stats.healMul); p.hp = Math.min(p.maxHp, p.hp + amt);
       this.sfx.play('heal'); this.fx.text(cx(p), p.y - 20, `+${amt}`, '#5fd18b', 16); this.fx.ring(cx(p), cy(p), '#5fd18b', 40);
       this.openDoors();
+    } else if (kind === 'gold') {
+      this.addGold(Math.round((40 + 15 * this.run.fi) * (1 + 0.25 * this.run.scale.level)), cx(p), p.y - 30);
+      this.fx.sparks(cx(p), cy(p), '#ffd84a', 18, 260);
+      this.openDoors();
+    } else if (kind === 'artifact') {
+      this.openArtifactPick('normal', 2, true);
     } else if (kind === 'hourglass') {
       p.baseMaxHp += 36; p.setBoons(p.boons); p.hp = Math.min(p.maxHp, p.hp + 60);
       this.sfx.play('heal'); this.fx.text(cx(p), p.y - 20, '最大HP+36', '#f2c14e', 15);
@@ -795,7 +915,7 @@ export class Game {
   }
   interactPrompt(it) {
     switch (it.kind) {
-      case 'door': return it.reward ? `進む（${REWARD_LABEL[it.reward]}）` : `進む${it.label ? '：' + it.label : ''}`;
+      case 'door': return it.golden ? '黄金の部屋へ（鍵を使う）' : it.reward ? `進む（${REWARD_LABEL[it.reward]}）` : `進む${it.label ? '：' + it.label : ''}`;
       case 'npc': return '話す';
       case 'sign': return '読む';
       case 'corpse': return '調べる';
@@ -807,6 +927,8 @@ export class Game {
       case 'brake': return '歯止めを調べる';
       case 'wreck': return it.wedged ? '' : '楔を打つ';
       case 'lift': return it.dead ? '動かない' : '昇降機に乗る（上層・書斎へ）';
+      case 'merchant': return '店を見る';
+      case 'goldchest': return it.opened ? '' : '黄金の宝箱を開ける';
     }
     return '';
   }
@@ -816,6 +938,13 @@ export class Game {
     const p = this.player;
     switch (it.kind) {
       case 'door': this.goDoor(it); break;
+      case 'merchant': this.openShop(); break;
+      case 'goldchest':
+        if (it.opened) break;
+        it.opened = true;
+        this.sfx.play('perfect'); this.fx.burst(cx(it), cy(it), '#ffd84a', 30); this.fx.screenFlash('#ffd84a', 0.3);
+        this.openArtifactPick('gold', 3, false);
+        break;
       case 'sign': this.openDialog([{ who: '', text: it.text }]); break;
       case 'npc': it.who === 'lira' ? this.talkLira(it) : this.talkGlen(it); break;
       case 'corpse':
@@ -840,8 +969,9 @@ export class Game {
       case 'fountain':
         if (this.run.fountainUsed[it.id]) break;
         this.run.fountainUsed[it.id] = true;
-        p.hp = Math.min(p.maxHp, p.hp + 105);
-        this.sfx.play('heal'); this.fx.ring(cx(p), cy(p), '#5fd18b', 40); this.fx.text(cx(p), p.y - 20, '+105', '#5fd18b', 16);
+        const fh = Math.round(105 * p.stats.healMul);
+        p.hp = Math.min(p.maxHp, p.hp + fh);
+        this.sfx.play('heal'); this.fx.ring(cx(p), cy(p), '#5fd18b', 40); this.fx.text(cx(p), p.y - 20, `+${fh}`, '#5fd18b', 16);
         break;
       case 'brake': this.talkBrake(it); break;
       case 'wreck':
@@ -859,6 +989,11 @@ export class Game {
   }
 
   goDoor(it) {
+    if (it.golden) {
+      if (this.run.keys <= 0) return;
+      this.run.keys--;
+      this.fx.setBanner('黄金の鍵を使った', '', '#ffd84a', 1.0);
+    }
     if (it.reward) this.run.nextReward = it.reward;
     this.sfx.play('door');
     this.startTransition(it.to);
@@ -867,7 +1002,7 @@ export class Game {
   updateTransition() {
     const tr = this.transition;
     tr.t += DT;
-    if (!tr.entered && tr.t >= 0.22) { tr.entered = true; this.enterRoom(tr.to.fi, tr.to.ri); if (tr.to.lift) this.fx.setBanner('昇降機', '上層・書斎へ', '#f2c14e', 1.4); }
+    if (!tr.entered && tr.t >= 0.22) { tr.entered = true; this.enterRoom(tr.to.fi, tr.to.ri, tr.to.override || null); if (tr.to.lift) this.fx.setBanner('昇降機', '上層・書斎へ', '#f2c14e', 1.4); }
     if (tr.t >= 0.44) this.transition = null;
   }
 
@@ -1092,7 +1227,7 @@ export class Game {
     if (run.ended) return;
     run.ended = true;
     const report = endLoop(this.meta, {
-      cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock, shards: run.shards, dodges: p.dodgeCount || 0, level: run.level || 1,
+      cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock, shards: run.shards, dodges: p.dodgeCount || 0, level: run.level || 1, gold: run.gold || 0, artifacts: p.artifacts || [],
     });
     this.save();
     this.sfx.play('rewind');
@@ -1290,6 +1425,14 @@ export class Game {
         if (last) this.modal = null; else { m.idx++; m.t = 0; }
         return false;
       }
+      case 'shop': {
+        const i = lbRowAt(m.stock.length, m.sel, x, y, m);
+        if (i === -2) { this.modal = null; return false; }
+        if (i < 0) return false;
+        if (i === m.sel) { this.buyShop(m); return false; }
+        m.sel = i; this.sfx.play('select'); return false;
+      }
+      case 'artifact':
       case 'boon': {
         if (m.t < 0.25) return false;
         const cw = m.offer.length > 3 ? 214 : 250, gap = 18, total = m.offer.length * cw + (m.offer.length - 1) * gap;
@@ -1397,22 +1540,40 @@ export class Game {
         if (input.pressed('confirm') || input.pressed('jump')) {
           const id = m.offer[m.sel];
           const threat0 = this.threatStep();
-          const own = this.player.boons.find((b) => b.id === id);
-          if (own) this.player.setBoons(this.player.boons.map((b) => (b.id === id ? { ...b, tier: Math.min(boonMax(id), b.tier + 1) } : b)));
-          // 発動する術は 1 つだけ：別の術に持ち替える
-          else if (BOONS[id].active) this.player.setBoons([...this.player.boons.filter((b) => !BOONS[b.id].active), { id, tier: 1 }]);
-          else this.player.setBoons([...this.player.boons, { id, tier: 1 }]);
-          const nowTier = this.player.boons.find((b) => b.id === id).tier;
+          this.grantBoon(id); // 発動する術は 1 つだけ：別の術なら持ち替える
           this.sfx.play('pickup');
-          this.fx.ring(cx(this.player), cy(this.player), BOON_COLORS[BOONS[id].school], 50, 0.4);
-          this.fx.setBanner(BOONS[id].name + (BOONS[id].max ? ` Lv${nowTier}` : ''), BOONS[id].desc(nowTier), BOON_COLORS[BOONS[id].school], 1.4);
-          this.emit('boon', { id });
           const threat1 = this.threatStep();
           if (threat1 > threat0) this.fx.text(cx(this.player), this.player.y - 48, `脅威 ${threat1}：敵が強く・多くなる`, '#ff7a5a', 14);
           input.consume('jump'); input.consume('attack');
           if (m.rare) { this.modal = null; }
           else if (m.count > 1) { this.modal = null; this.openBoonPick(m.count - 1, m.school); }
           else { this.modal = null; this.openDoors(); }
+        }
+        break;
+      }
+      case 'shop': {
+        const n = m.stock.length;
+        if (input.pressed('up')) { m.sel = (m.sel + n - 1) % n; this.sfx.play('select'); }
+        if (input.pressed('down')) { m.sel = (m.sel + 1) % n; this.sfx.play('select'); }
+        if (back) { this.modal = null; return; }
+        if ((input.pressed('confirm') || input.pressed('jump')) && m.t > 0.15) this.buyShop(m);
+        break;
+      }
+      case 'artifact': {
+        if (m.t < 0.25) return;
+        if (input.pressed('left')) { m.sel = (m.sel + m.offer.length - 1) % m.offer.length; this.sfx.play('select'); }
+        if (input.pressed('right')) { m.sel = (m.sel + 1) % m.offer.length; this.sfx.play('select'); }
+        if (input.pressed('confirm') || input.pressed('jump')) {
+          const id = m.offer[m.sel];
+          this.player.addArtifact(id);
+          const a = ARTIFACTS[id];
+          this.fx.setBanner(a.name, a.desc, a.rarity === 'gold' ? '#ffd84a' : '#7fe0d0', 1.6);
+          this.fx.ring(cx(this.player), cy(this.player), a.rarity === 'gold' ? '#ffd84a' : '#7fe0d0', 60, 0.5);
+          this.sfx.play('pickup');
+          this.emit('artifact', { id });
+          input.consume('jump'); input.consume('attack');
+          this.modal = null;
+          if (m.thenDoors) this.openDoors();
         }
         break;
       }

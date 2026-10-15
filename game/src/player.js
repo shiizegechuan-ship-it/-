@@ -2,6 +2,7 @@ import { PLAYER as P, ATTACKS, F } from './config.js';
 import { approach, sign } from './util.js';
 import { moveBody, standingOnOneway } from './tilemap.js';
 import { computeStats } from './boons.js';
+import { applyArtifacts } from './artifacts.js';
 import { spawnWave } from './arts.js';
 
 export class Player {
@@ -27,7 +28,8 @@ export class Player {
     this.holdT = 0; // 攻撃ボタンを押し続けている時間
     this.charged = false;
     this.boons = [];
-    this.stats = computeStats([]);
+    this.artifacts = []; // その夜だけのアーティファクト
+    this.stats = applyArtifacts(computeStats([]), []);
     this.baseMaxHp = P.maxHp;
     this.maxHp = P.maxHp;
     this.hp = P.maxHp;
@@ -48,10 +50,20 @@ export class Player {
   setBoons(boons) {
     const ratio = this.hp / this.maxHp;
     this.boons = boons;
-    this.stats = computeStats(boons);
-    this.maxHp = Math.round(this.baseMaxHp * this.stats.maxHpMul);
+    this.stats = applyArtifacts(computeStats(boons), this.artifacts || []);
+    this.maxHp = Math.round((this.baseMaxHp + this.stats.hpAdd) * this.stats.maxHpMul);
     this.hp = Math.max(1, Math.min(this.maxHp, Math.round(this.maxHp * ratio)));
   }
+
+  addArtifact(id) {
+    if (this.artifacts.includes(id)) return false;
+    const hp = this.hp;
+    this.artifacts = [...this.artifacts, id];
+    this.setBoons(this.boons);
+    this.hp = Math.min(this.maxHp, hp + (this.stats.hpAdd && id === 'timeheart' ? this.stats.hpAdd : 0));
+    return true;
+  }
+  get airJumpMax() { return P.airJumps + (this.stats.extraAirJumps || 0); }
 
   get invulnerable() { return this.iframeT > 0 || this.state === 'dead'; }
   get dodging() { return this.state === 'dodge'; }
@@ -101,7 +113,7 @@ export class Player {
     if (this.onGround) {
       this.coyoteT = P.coyote;
       this.airDodgeUsed = false;
-      this.airJumpsLeft = P.airJumps;
+      this.airJumpsLeft = this.airJumpMax;
       if (!wasGround) {
         this.landedThisFrame = true;
         this.squash = -0.35;

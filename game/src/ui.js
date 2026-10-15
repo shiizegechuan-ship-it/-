@@ -3,6 +3,7 @@ import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC } from './config.js';
 import { clamp } from './util.js';
 import { BOONS, SCHOOLS, RESONANCE, synergyHints, schoolCounts } from './boons.js';
 import { ACTIVE_ARTS } from './arts.js';
+import { ARTIFACTS, ARTIFACT_COLOR } from './artifacts.js';
 import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, openQuestions, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritCount, enemyScale, DAWN_STEPS, dawnProgress } from './meta.js';
 import { FLOOR_NAMES } from './world.js';
 import { expToNext, LEVEL } from './level.js';
@@ -109,6 +110,7 @@ export function drawHud(ctx, game) {
     ctx.fillStyle = i === run.ri ? '#fff' : i < run.ri ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.15)';
     if (causal) ctx.fillStyle = i === run.ri ? C.gold : i < run.ri ? C.goldDim : 'rgba(242,193,78,0.35)';
     if (r.type === 'boss') ctx.fillStyle = i === run.ri ? '#ff8a6a' : 'rgba(227,93,93,0.5)';
+    if (r.type === 'shop') ctx.fillStyle = i === run.ri ? '#ffd84a' : 'rgba(255,216,74,0.45)';
     ctx.beginPath(); ctx.arc(sx + i * dotW, 52, i === run.ri ? 4 : 3, 0, Math.PI * 2); ctx.fill();
   });
 
@@ -145,6 +147,9 @@ export function drawHud(ctx, game) {
   // 時の欠片
   text(ctx, `◆ 欠片 ${meta.shards + (run.shards || 0)}`, 22, 98, { size: 12, color: '#9fd0ff' });
   if (run.killStacks > 0) text(ctx, `血の秒針 +${Math.round(run.killStacks * 100)}%`, 120, 98, { size: 11, color: '#ff9a3c' });
+  // 金貨・鍵・アーティファクト（その夜だけ）
+  text(ctx, `● 金貨 ${run.gold || 0}` + (run.keys ? `　黄金の鍵 ×${run.keys}` : ''), 22, 116, { size: 12, color: '#ffd84a' });
+  (p.artifacts || []).forEach((id, i) => { const a = ARTIFACTS[id]; text(ctx, '◆ ' + a.name, 22, 134 + i * 15, { size: 11, color: ARTIFACT_COLOR[a.rarity] }); });
   // コンボ
   const cb = game.combo;
   if (cb && cb.n >= 2) {
@@ -207,6 +212,8 @@ export function drawModal(ctx, game) {
   ctx.fillStyle = 'rgba(5,4,8,0.7)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   if (m.type === 'boon') drawBoonPick(ctx, game, m);
   if (m.type === 'forge') drawForge(ctx, game, m);
+  if (m.type === 'shop') drawShop(ctx, game, m);
+  if (m.type === 'artifact') drawArtifactPick(ctx, game, m);
   if (m.type === 'code') drawCode(ctx, game, m);
   if (m.type === 'pause') drawPause(ctx, game, m);
   if (m.type === 'analysis') drawAnalysis(ctx, game, m);
@@ -270,6 +277,34 @@ function drawBoonPick(ctx, game, m) {
   text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定', VIEW_W / 2, 412, { size: 12, align: 'center', color: C.muted });
   // 現在の手持ち
   if (p.boons.length) text(ctx, '手持ち：' + p.boons.map((b) => BOONS[b.id].name + (BOONS[b.id].max ? ` Lv${b.tier}` : b.tier > 1 ? 'II' : '')).join('・'), VIEW_W / 2, 440, { size: 11, align: 'center', color: '#bbb' });
+}
+
+function drawShop(ctx, game, m) {
+  const items = m.stock.map((s) => { const l = game.shopLabel(s); const can = !s.sold && game.run.gold >= s.price; return { label: l.name, color: s.sold ? '#5a5260' : s.kind === 'key' ? '#ffd84a' : s.kind === 'artifact' ? '#7fe0d0' : '#d8d0c4', right: s.sold ? '売り切れ' : `${s.price} G`, rightColor: s.sold ? '#5a5260' : can ? '#ffd84a' : '#8a6a7a', desc: l.desc }; });
+  drawLightbox(ctx, game, { title: '行商人の店', right: `● 金貨 ${game.run.gold}`, items, sel: m.sel, color: '#ffd84a', st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: game.touch ? 'タップで選択、もう一度タップで買う／枠の外で閉じる' : '↑↓ 選ぶ　Z 買う　C 閉じる' });
+}
+
+// アーティファクトの選択（カード）
+function drawArtifactPick(ctx, game, m) {
+  const gold = m.rarity === 'gold';
+  text(ctx, gold ? '黄金の宝箱 ― アーティファクトを 1 つ選ぶ' : 'アーティファクトを 1 つ選ぶ', VIEW_W / 2, 92, { size: 22, align: 'center', color: gold ? '#ffd84a' : '#7fe0d0' });
+  text(ctx, 'アーティファクトはその夜だけ有効', VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });
+  const cw = 250, ch = 240, gap = 18, total = m.offer.length * cw + (m.offer.length - 1) * gap;
+  m.offer.forEach((id, i) => {
+    const a = ARTIFACTS[id], col = ARTIFACT_COLOR[a.rarity];
+    const appear = clamp((m.t - i * 0.07) / 0.2, 0, 1);
+    if (appear <= 0) return;
+    ctx.globalAlpha = appear;
+    const sel = i === m.sel;
+    const x = VIEW_W / 2 - total / 2 + i * (cw + gap), y = 140 - (sel ? 8 : 0) + (1 - appear) * 24;
+    panel(ctx, x, y, cw, ch, sel ? col : 'rgba(255,255,255,0.15)', sel ? 'rgba(24,18,32,0.98)' : 'rgba(14,11,20,0.95)');
+    ctx.fillStyle = col; ctx.fillRect(x, y, cw, 5);
+    text(ctx, gold ? '黄金のアーティファクト' : 'アーティファクト', x + 16, y + 28, { size: 11, color: col });
+    text(ctx, a.name, x + 16, y + 58, { size: 20 });
+    wrap(ctx, a.desc, cw - 28, 15).forEach((l, j) => text(ctx, l, x + 14, y + 90 + j * 21, { size: 15, color: '#e8e0d0' }));
+    ctx.globalAlpha = 1;
+  });
+  text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定', VIEW_W / 2, 412, { size: 12, align: 'center', color: C.muted });
 }
 
 function drawForge(ctx, game, m) {

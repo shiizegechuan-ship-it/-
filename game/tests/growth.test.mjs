@@ -5,6 +5,7 @@ import { RustSoldier, GearRoller, ClockArcher, Phantom, BellRinger, PendulumBat,
 import { newMeta, buyUpgrade, upLv, enemyScale, endLoop, inheritCount, UPGRADES } from '../src/meta.js';
 import { computeStats, rollOffer, BOONS } from '../src/boons.js';
 import { makeRng } from '../src/util.js';
+import { ARTIFACTS } from '../src/artifacts.js';
 
 function arena(E, dx = 120, tier = 1) {
   const g = sandbox(FLAT); const d = new Driver(g);
@@ -370,4 +371,78 @@ test('常時の術は敵を怯ませない（積んでも敵が攻撃してく�
   for (let i = 0; i < 60 * 4; i++) { d.frame(1); if (e.state === 'flinch') flinched = true; }
   assert.ok(e.hp < e.maxHp, 'takes damage');
   assert.ok(!flinched, 'never flinches from passives');
+});
+
+test('回復の扉：夜の最初の扉と、HP 満タンのときは出ない（アーティファクトか金貨に替わる）', () => {
+  const g = newGame(3);
+  // 計画上の報酬に回復を混ぜておく
+  for (const f of g.run.plan.floors) for (const r of f) if (r.type === 'combat') r.rewardChoices = ['heal', 'boon'];
+  g.room.doorsOpen = false; g.room.items = g.room.items.filter((i) => i.kind !== 'door'); g.openDoors();
+  let doors = g.room.items.filter((i) => i.kind === 'door' && i.reward);
+  assert.ok(doors.length && !doors.some((d) => d.reward === 'heal'), 'first door: no heal');
+  assert.ok(doors.some((d) => d.reward === 'artifact'));
+  // 2 回目以降：満タンなら出ない、減っていれば出る
+  g.enterRoom(0, 1); g.modal = null;
+  for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
+  g.room.doorsOpen = false; g.player.hp = g.player.maxHp; g.openDoors();
+  doors = g.room.items.filter((i) => i.kind === 'door' && i.reward);
+  assert.ok(!doors.some((d) => d.reward === 'heal'), 'full hp: no heal');
+  g.room.doorsOpen = false; g.room.items = g.room.items.filter((i) => i.kind !== 'door'); g.player.hp = 10; g.openDoors();
+  doors = g.room.items.filter((i) => i.kind === 'door' && i.reward);
+  assert.ok(doors.some((d) => d.reward === 'heal'), 'hurt: heal offered');
+});
+
+test('金貨：敵を倒すと貯まる。店で強化・回復薬・アーティファクト・黄金の鍵を買える', () => {
+  const g = newGame(4);
+  g.enterRoom(0, 1); g.modal = null;
+  for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
+  new Driver(g).frame(2);
+  assert.ok(g.run.gold > 0, 'gold from kills');
+  const si = g.run.plan.floors[0].findIndex((r) => r.type === 'shop');
+  assert.ok(si > 0, 'shop room in floor 0');
+  g.enterRoom(0, si); g.modal = null;
+  assert.ok(g.room.items.some((i) => i.kind === 'merchant'));
+  g.openShop();
+  const m = g.modal;
+  assert.deepEqual([...new Set(m.stock.map((s) => s.kind))].sort(), ['artifact', 'boon', 'key', 'potion']);
+  g.run.gold = 10000;
+  const nb = g.player.boons.length;
+  for (let i = 0; i < m.stock.length; i++) { m.sel = i; g.buyShop(m); }
+  assert.ok(m.stock.every((s) => s.sold));
+  assert.ok(g.player.boons.length > nb);
+  assert.equal(g.player.artifacts.length, 1);
+  assert.equal(g.run.keys, 1);
+  // 売り切れは買えない／金貨が足りないと買えない
+  const gold = g.run.gold; m.sel = 0; g.buyShop(m); assert.equal(g.run.gold, gold);
+  // 鍵があると黄金の部屋への扉が出る
+  const gd = g.room.items.find((i) => i.kind === 'door' && i.golden);
+  assert.ok(gd, 'golden door');
+  g.goDoor(gd);
+  const d = new Driver(g); d.until(() => !g.transition, 60);
+  assert.equal(g.room.desc.type, 'golden');
+  assert.equal(g.run.keys, 0);
+  const chest = g.room.items.find((i) => i.kind === 'goldchest');
+  g.player.x = chest.x; g.player.y = chest.y + chest.h - g.player.h; g.tryInteract();
+  assert.equal(g.modal.type, 'artifact');
+  assert.ok(g.modal.offer.every((id) => ARTIFACTS[id].rarity === 'gold'));
+  g.modal.t = 1; d.frame(1, ['confirm']);
+  assert.equal(g.player.artifacts.length, 2);
+  // 黄金の部屋の出口は、元の次の部屋へ続く
+  assert.ok(g.room.items.some((i) => i.kind === 'door' && !i.golden));
+});
+
+test('アーティファクトの効果：守りの歯車・跳ね靴・王者の剣・不滅の歯車', () => {
+  const { g, d } = arena(RustSoldier, 400);
+  const p = g.player; p.hp = p.maxHp = 300; p.baseMaxHp = 300;
+  p.addArtifact('guardgear'); p.iframeT = 0;
+  const hp0 = p.hp; g.damagePlayer(100, { fromX: 0 });
+  assert.equal(hp0 - p.hp, 85);
+  p.addArtifact('springboots');
+  assert.equal(p.airJumpMax, 2);
+  const base = computeStats([]).dmgMul;
+  p.addArtifact('kingsword');
+  assert.ok(Math.abs(p.stats.dmgMul - base * 1.4) < 1e-9);
+  p.addArtifact('aegis'); p.iframeT = 0; d.frame(60);
+  g.damagePlayer(99999, { fromX: 0 });
+  assert.equal(p.state, 'normal'); assert.equal(p.hp, p.maxHp);
 });

@@ -4,6 +4,7 @@ import { makeRng } from './util.js';
 import { hasWedge } from './meta.js';
 
 // 18行。 '#'壁 '='すり抜け床 P出現 X出口 g地上敵枠 a空中敵枠 t砲台枠
+// 店：V行商人 J黄金の宝箱
 // 因果・固定物：L少女 G鍛冶屋 C番号扉 Y日誌 R歯止め M刻守 K騎士 H回復の泉 U昇降機 O祭壇 Q看板 W書斎メモ
 const W = '#';
 const SHELL_TOP = '################################';
@@ -190,6 +191,22 @@ export const LAYOUTS = {
     '..........====..........====..................',
     'P...g......................................X..',
   ], 48), ...floorRows(48, '#'.repeat(9) + '.'.repeat(30) + '#'.repeat(9))],
+  // 店：行商人の屋台
+  shop: [...frame([
+    '..............................',
+    '..............................',
+    '.....=====..........=====.....',
+    '..............................',
+    'P..............V.............X',
+  ]), ...floorRows()],
+  // 黄金の部屋：鍵で開く。強いアーティファクトの宝箱
+  vault: [...frame([
+    '..............................',
+    '..............................',
+    '........==============........',
+    '..............................',
+    'P..............J.............X',
+  ]), ...floorRows()],
   // 因果部屋・固定部屋
   entry: [...frame([
     '..............................',
@@ -273,9 +290,10 @@ function fillEnemies(layoutName, floor, rng, nl) {
   return chosen.map((s) => ({ type: rng.pick(t[s.c]), x: s.x, y: s.y }));
 }
 
+// 扉の報酬：強化・回復・砂時計・金貨袋・アーティファクト
 function rollReward(rng) {
   const r = rng.next();
-  return r < 0.62 ? 'boon' : r < 0.86 ? 'heal' : 'hourglass';
+  return r < 0.46 ? 'boon' : r < 0.64 ? 'heal' : r < 0.74 ? 'hourglass' : r < 0.88 ? 'gold' : 'artifact';
 }
 
 // 周回の塔の構成を作る。seed は揺らぎだけに使い、因果は meta から決める。
@@ -298,6 +316,7 @@ export function buildPlan(meta, seed) {
     combat(p0[0], 0, rng), combat(p0[1], 0, rng),
     { type: 'forge', layout: 'forge' },
     combat(p0[2], 0, rng),
+    { type: 'shop', layout: 'shop' },
   ]);
   // 中層
   const p1 = rng.shuffle(COMBAT_POOLS[1]);
@@ -306,6 +325,7 @@ export function buildPlan(meta, seed) {
     { type: 'elite', layout: 'arena', knightWedged: hasWedge(meta, 'knight') },
     { type: 'archive', layout: 'archive' },
     combat(p1[1], 1, rng),
+    { type: 'shop', layout: 'shop' },
   ]);
   // 上層
   const p2 = rng.shuffle(COMBAT_POOLS[2]);

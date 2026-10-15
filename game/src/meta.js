@@ -1,6 +1,7 @@
 // 周回をまたいで残る状態（保持）と、周回の終わりに起きる変化の計算。DOM に依存しない純粋なモジュール。
 import { makeRng } from './util.js';
 import { BOONS } from './boons.js';
+import { ARTIFACTS } from './artifacts.js';
 
 export const SAVE_VERSION = 1;
 export const MAX_SLOTS = 3;
@@ -195,6 +196,8 @@ export function endLoop(m, run) {
   const lostBoons = (run.boons || []).filter((b) => !wedgedBoonIds.has(b.id) && !inheritedIds.has(b.id));
   if (lostBoons.length) report.reset.push({ text: `強化 ${lostBoons.length} 個`, sub: lostBoons.map((b) => BOONS[b.id].name).join('・') });
   report.reset.push({ text: 'HP・秒針ゲージ', sub: '' });
+  if ((run.artifacts || []).length) report.reset.push({ text: `アーティファクト ${run.artifacts.length} 個`, sub: run.artifacts.map((id) => ARTIFACTS[id].name).join('・') });
+  if (run.gold) report.reset.push({ text: `金貨 ${run.gold}`, sub: '金貨はその夜だけ。店で使い切ろう' });
   if ((run.level || 1) > 1) report.reset.push({ text: `レベル（Lv${run.level} → Lv1）`, sub: '経験値とレベルはその夜だけ' });
   report.reset.push({ text: '部屋の並び・敵・報酬', sub: '夜ごとに揺らぐ' });
   for (const w of run.newWedges || []) {
