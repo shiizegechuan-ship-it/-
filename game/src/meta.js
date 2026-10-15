@@ -74,7 +74,7 @@ export function newMeta(seed = (Date.now() & 0x7fffffff)) {
 const cost = (base, g) => (lv) => Math.round(base * Math.pow(g, lv));
 export const UPGRADES = {
   atk: { name: '刃の刻印', max: 30, desc: (lv) => `基礎攻撃 +${lv * 10}%`, cost: cost(12, 1.22) },
-  hp: { name: '命の刻印', max: 20, desc: (lv) => `最大HP +${lv * 10}`, cost: cost(10, 1.22) },
+  hp: { name: '命の刻印', max: 20, desc: (lv) => `最大HP +${lv * 30}`, cost: cost(10, 1.22) },
   inherit: { name: '継承の刻印', max: 4, desc: (lv) => `前の夜の強化を ${1 + lv} 個まで持ち越せる`, cost: cost(40, 1.9) },
   crit: { name: '会心の刻印', max: 10, desc: (lv) => `会心率 +${lv * 2}%`, cost: cost(16, 1.3) },
   combo: { name: '連撃の刻印', max: 5, desc: (lv) => `コンボの持続 +${(lv * 0.4).toFixed(1)}秒`, cost: cost(18, 1.4) },

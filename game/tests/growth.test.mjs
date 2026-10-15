@@ -125,7 +125,7 @@ test('時の欠片：倒すと貯まり、刻印で恒久強化。次の夜に�
   g.endRun('death');
   assert.equal(g.meta.inherit.length, 2, 'two boons inherited');
   g.startLoop();
-  assert.equal(g.player.maxHp, 110);
+  assert.equal(g.player.maxHp, 330);
   assert.ok(Math.abs(g.player.metaAtk - 1.1) < 1e-9);
   assert.deepEqual(g.player.boons.map((b) => b.id + b.tier).sort(), ['crit2', 'edge3']);
 });

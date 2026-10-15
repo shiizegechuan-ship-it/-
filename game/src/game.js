@@ -99,7 +99,7 @@ export class Game {
     const actives = wedgedBoons.filter((b) => BOONS[b.id].active).sort((a, b) => b.tier - a.tier);
     for (const extra of actives.slice(1)) wedgedBoons.splice(wedgedBoons.indexOf(extra), 1);
     this.player = new Player(0, 0);
-    this.player.baseMaxHp = PC.maxHp + 10 * upLv(meta, 'hp');
+    this.player.baseMaxHp = PC.maxHp + 30 * upLv(meta, 'hp');
     this.player.metaAtk = 1 + 0.1 * upLv(meta, 'atk');
     this.player.setBoons(wedgedBoons);
     this.player.hp = this.player.maxHp;
@@ -140,7 +140,7 @@ export class Game {
     this.player.lastSafe = { x: this.player.x, y: this.player.y };
     this.updateCamera(DT, true);
     if (fi !== prevFloor) {
-      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 15);
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 45);
       this.fx.setBanner(FLOOR_NAMES[fi], `夜 ${fmtClock(run.clock)}`, '#efe6d2', 1.8);
     }
     const setup = {
@@ -672,12 +672,12 @@ export class Game {
     const p = this.player;
     this.emit('reward', { kind });
     if (kind === 'heal') {
-      const amt = Math.round(40 * (1 + 0.2 * upLv(this.meta, 'heal'))); p.hp = Math.min(p.maxHp, p.hp + amt);
+      const amt = Math.round(120 * (1 + 0.2 * upLv(this.meta, 'heal'))); p.hp = Math.min(p.maxHp, p.hp + amt);
       this.sfx.play('heal'); this.fx.text(cx(p), p.y - 20, `+${amt}`, '#5fd18b', 16); this.fx.ring(cx(p), cy(p), '#5fd18b', 40);
       this.openDoors();
     } else if (kind === 'hourglass') {
-      p.baseMaxHp += 12; p.setBoons(p.boons); p.hp = Math.min(p.maxHp, p.hp + 20);
-      this.sfx.play('heal'); this.fx.text(cx(p), p.y - 20, '最大HP+12', '#f2c14e', 15);
+      p.baseMaxHp += 36; p.setBoons(p.boons); p.hp = Math.min(p.maxHp, p.hp + 60);
+      this.sfx.play('heal'); this.fx.text(cx(p), p.y - 20, '最大HP+36', '#f2c14e', 15);
       this.openDoors();
     } else {
       this.openBoonPick(kind === 'boon2' ? 2 : 1, null);
@@ -745,8 +745,8 @@ export class Game {
       case 'fountain':
         if (this.run.fountainUsed[it.id]) break;
         this.run.fountainUsed[it.id] = true;
-        p.hp = Math.min(p.maxHp, p.hp + 35);
-        this.sfx.play('heal'); this.fx.ring(cx(p), cy(p), '#5fd18b', 40); this.fx.text(cx(p), p.y - 20, '+35', '#5fd18b', 16);
+        p.hp = Math.min(p.maxHp, p.hp + 105);
+        this.sfx.play('heal'); this.fx.ring(cx(p), cy(p), '#5fd18b', 40); this.fx.text(cx(p), p.y - 20, '+105', '#5fd18b', 16);
         break;
       case 'brake': this.talkBrake(it); break;
       case 'wreck':
@@ -1230,7 +1230,7 @@ export class Game {
       const ids = Object.keys(BOONS).filter((id) => BOONS[id].school === school && !p.boons.some((b) => b.id === id));
       offer = this.run.offerRng.shuffle(ids).slice(0, 3);
     } else offer = rollOffer(this.run.offerRng, p.boons, this.meta.unlocked, 3 + upLv(this.meta, 'choice'));
-    if (!offer.length) { p.hp = Math.min(p.maxHp, p.hp + 30); this.openDoors(); return; }
+    if (!offer.length) { p.hp = Math.min(p.maxHp, p.hp + 90); this.openDoors(); return; }
     this.modal = { type: 'boon', offer, sel: 1 % offer.length, count, school, t: 0 };
     this.sfx.play('pickup');
   }

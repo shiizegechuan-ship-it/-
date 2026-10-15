@@ -184,9 +184,9 @@ export const LAYOUTS = {
     '..............................',
     '..............................',
     '..............................',
+    '..............................',
     '............................g.........',
-    '.............====..........====.......',
-    '.......g..............................',
+    '.......g.....====..........====.......',
     '......====..........====..............',
     'P...g...............................X.',
   ], 40), ...floorRows(40, '#'.repeat(5) + '.'.repeat(30) + '#'.repeat(5))],
@@ -318,7 +318,17 @@ export function buildPlan(meta, seed) {
 }
 
 // 部屋の行（反転を反映）
+// 反転した部屋でも、出現位置は左・出口は右になるよう P と X を入れ替える
+export function mirrorRows(rows) {
+  const m = rows.map((r) => [...r].reverse().join(''));
+  const find = (c) => { for (let y = 0; y < m.length; y++) { const x = m[y].indexOf(c); if (x >= 0) return { x, y }; } return null; };
+  const P = find('P'), X = find('X');
+  if (!P || !X || P.x < m[0].length / 2) return m;
+  const set = (pos, c) => { m[pos.y] = m[pos.y].slice(0, pos.x) + c + m[pos.y].slice(pos.x + 1); };
+  set(P, 'X'); set(X, 'P');
+  return m;
+}
 export function layoutRows(desc) {
   const rows = LAYOUTS[desc.layout];
-  return desc.mirror ? rows.map((r) => [...r].reverse().join('')) : rows;
+  return desc.mirror ? mirrorRows(rows) : rows;
 }

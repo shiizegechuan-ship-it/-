@@ -9,7 +9,7 @@ export const ZOOM = 1.5; // 世界の表示倍率。640×360 の世界を 320×1
 export const PLAYER = {
   w: 16,
   h: 28,
-  maxHp: 100,
+  maxHp: 300, // 初期HP（遊びやすさのため 3 倍）
   runSpeed: 235,
   groundAccel: 3200,
   groundDecel: 3600,

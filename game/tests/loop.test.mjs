@@ -195,8 +195,10 @@ test('知識：書庫の番号はセーブ固定で、知っていれば次の�
 
 // 到達可能性：出現位置から、すべての敵枠・仕掛け・出口へ歩き＋ジャンプ（上に3タイルまで）で届くこと
 import { TileMap, SOLID, ONEWAY } from '../src/tilemap.js';
-test('すべての部屋で、敵・仕掛け・出口にジャンプで到達できる（進行不能がない）', () => {
-  for (const [name, rows] of Object.entries(LAYOUTS)) {
+test('すべての部屋で（左右反転も含め）、敵・仕掛け・出口にジャンプで到達できる（進行不能がない）', async () => {
+  const { mirrorRows } = await import('../src/world.js');
+  const variants = Object.entries(LAYOUTS).flatMap(([n, r]) => [[n, r], [n + '(反転)', mirrorRows(r)]]);
+  for (const [name, rows] of variants) {
     const m = new TileMap(rows);
     const empty = (x, y) => m.get(x, y) !== SOLID;
     const stand = (x, y) => y >= 1 && y < m.h - 1 && empty(x, y) && m.get(x, y) !== ONEWAY && (m.get(x, y + 1) === SOLID || m.get(x, y + 1) === ONEWAY);
@@ -261,5 +263,19 @@ test('すべての部屋に出現位置が1つ、出口が1つある（刻守の
     const t = rows.join('');
     assert.equal(t.split('P').length - 1, 1, `${name} P`);
     if (name !== 'belfry') assert.equal(t.split('X').length - 1, 1, `${name} X`);
+  }
+});
+
+test('部屋に入ると主人公は左端から始まり、出口は右側（左右反転した部屋でも）', async () => {
+  const { mirrorRows } = await import('../src/world.js');
+  for (const [name, rows] of Object.entries(LAYOUTS)) {
+    if (name === 'belfry') continue;
+    for (const r of [rows, mirrorRows(rows)]) {
+      const w = r[0].length;
+      const px = r.map((row) => row.indexOf('P')).find((x) => x >= 0);
+      const xx = r.map((row) => row.indexOf('X')).find((x) => x >= 0);
+      assert.ok(px <= 4, `${name}: P at col ${px}`);
+      assert.ok(xx > w / 2, `${name}: X at col ${xx}`);
+    }
   }
 });
