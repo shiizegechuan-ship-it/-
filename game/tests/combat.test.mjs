@@ -133,3 +133,23 @@ test('砲台の弾は斬り落とせる', () => {
   assert.equal(g.player.hp, g.player.maxHp);
 });
 import * as awaitImport from '../src/enemies.js';
+
+test('ジャスト回避：後ろへ避けても、元の位置に当たるはずだった攻撃なら成立する', () => {
+  const { g, d, e } = withEnemy(RustSoldier, 46);
+  e.facePlayer(g.player);
+  e.setState('windup');
+  d.until(() => e.state === 'windup' && e.tell > 0.92, 60);
+  d.frame(1, ['dodge', 'left']);
+  d.frame(12);
+  assert.ok(g.run.perfects >= 1);
+});
+
+test('早すぎる回避は刹那にならない（無敵で避けるだけ）', () => {
+  const { g, d, e } = withEnemy(RustSoldier, 46);
+  e.facePlayer(g.player);
+  e.setState('windup');
+  d.frame(4);
+  d.frame(1, ['dodge', 'left']);
+  d.frame(40);
+  assert.equal(g.run.perfects, 0);
+});

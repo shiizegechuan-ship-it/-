@@ -157,6 +157,7 @@ export class Player {
     if (!this.onGround) this.airDodgeUsed = true;
     if (dirX !== 0) this.face = dirX;
     this.state = 'dodge'; this.stateT = 0;
+    this.dodgeFrom = { x: this.x, y: this.y, w: this.w, h: this.h }; // ジャスト回避の判定に使う
     this.atk = null;
     this.iframeT = this.stats.dodgeIframes ?? P.dodgeIframes;
     this.sinceDodge = 0;
@@ -209,7 +210,8 @@ export class Player {
     const def = this.attackDef(name);
     this.atk = { name, def, t: 0, hitIds: new Set(), queued: false, swung: false };
     this.state = 'attack'; this.stateT = 0;
-    if (this.onGround && def.lunge) this.vx = this.face * def.lunge;
+    // 踏み込み。走っている勢いは半分残す（急停止しない）
+    if (this.onGround && def.lunge) this.vx = this.face * Math.max(def.lunge, Math.abs(this.vx) * 0.5 * (sign(this.vx) === this.face ? 1 : 0));
     if (name === 'air' && this.vy > 0) this.vy *= 0.5; // 空中攻撃で少しだけ滞空
   }
 

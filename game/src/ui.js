@@ -170,7 +170,11 @@ function drawBoonPick(ctx, game, m) {
   const total = m.offer.length * cw + (m.offer.length - 1) * gap;
   m.offer.forEach((id, i) => {
     const def = BOONS[id], sc = SCHOOLS[def.school];
-    const x = VIEW_W / 2 - total / 2 + i * (cw + gap), y = 140 - (i === m.sel ? 8 : 0);
+    // 1枚ずつ滑り込む
+    const appear = clamp((m.t - i * 0.07) / 0.2, 0, 1);
+    if (appear <= 0) return;
+    ctx.globalAlpha = appear;
+    const x = VIEW_W / 2 - total / 2 + i * (cw + gap), y = 140 - (i === m.sel ? 8 : 0) + (1 - appear) * 24;
     const sel = i === m.sel;
     panel(ctx, x, y, cw, ch, sel ? sc.color : 'rgba(255,255,255,0.15)', sel ? 'rgba(24,18,32,0.98)' : 'rgba(14,11,20,0.95)');
     if (sel) { ctx.lineWidth = 2; ctx.strokeStyle = sc.color; ctx.strokeRect(x + 1, y + 1, cw - 2, ch - 2); }
@@ -182,6 +186,7 @@ function drawBoonPick(ctx, game, m) {
     let hy = y + 170;
     for (const h of hints) { wrap(ctx, h, cw - 32, 11).forEach((l) => { text(ctx, l, x + 16, hy, { size: 11, color: '#f2c14e' }); hy += 15; }); }
     if (!hints.length && def.school !== 'risk') text(ctx, `同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted });
+    ctx.globalAlpha = 1;
   });
   text(ctx, '← → 選ぶ　Z 決定', VIEW_W / 2, 412, { size: 12, align: 'center', color: C.muted });
   // 現在の手持ち
@@ -315,6 +320,7 @@ export function drawRewind(ctx, game) {
   const causeText = rep.cause === 'bell' ? '鐘が鳴った。夜が戻る。' : 'あなたは倒れた。夜が戻る。';
   text(ctx, causeText, VIEW_W / 2, 52, { size: 20, align: 'center', font: SERIF, color: rep.cause === 'bell' ? C.gold : '#efe6d2' });
   text(ctx, `第 ${rep.loop} 夜 → 第 ${meta.loop} 夜`, VIEW_W / 2, 76, { size: 12, align: 'center', color: C.muted });
+  if (rep.tip && t > 2.2) text(ctx, '◆ ' + rep.tip, VIEW_W / 2, 366, { size: 12, align: 'center', color: '#f2c14e' });
   const cols = [
     { title: '残ったもの', color: C.gold, items: rep.kept, at: 0.5 },
     { title: '戻ったもの', color: C.reset, items: rep.reset, at: 1.1 },
@@ -344,7 +350,7 @@ export function drawRewind(ctx, game) {
   ctx.globalAlpha = 1;
   if (t < 3.2) { text(ctx, 'Z：とばす', VIEW_W - 20, VIEW_H - 16, { size: 10, align: 'right', color: C.muted }); return; }
   // 選択肢
-  const by = 380;
+  const by = rep.tip ? 396 : 380;
   if (r.mode === 'view') {
     const opts = game.rewindOptions();
     opts.forEach((o, i) => text(ctx, (i === r.sel ? '▶ ' : '') + o.label, VIEW_W / 2, by + i * 26, { size: 15, align: 'center', color: i === r.sel ? C.gold : '#ccc', bold: i === r.sel }));

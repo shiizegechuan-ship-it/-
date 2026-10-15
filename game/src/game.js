@@ -236,8 +236,9 @@ export class Game {
   }
 
   updatePlay(input) {
-    if (this.modal) { this.updateModal(input); this.fx.update(DT * 0.5); return; }
+    // 暗転を先に終わらせる（部屋に入った直後の会話が黒い画面の上に出ないように）
     if (this.transition) { this.updateTransition(); this.fx.update(DT); return; }
+    if (this.modal) { this.updateModal(input); this.fx.update(DT * 0.5); return; }
     if (input.pressed('pause') && this.player.state !== 'dead') { this.openPause(); return; }
     if (input.pressed('journal')) { this.openJournal(); return; }
     // ヒットストップ中の入力は捨てずに持ち越す（連撃・回避の取りこぼし防止）
@@ -406,16 +407,14 @@ export class Game {
   hitPlayer(box, dmg, fromX, key) {
     const p = this.player;
     if (p.state === 'dead') return false;
-    // ジャスト回避の判定は少し広めに取る
-    const grow = p.dodging ? 8 : 0;
-    const pb = { x: p.x - grow, y: p.y - grow, w: p.w + grow * 2, h: p.h + grow * 2 };
-    if (!overlap(box, pb)) return false;
-    if (p.invulnerable) {
+    // ジャスト回避：回避を始めた位置か今の位置に、回避直後の攻撃が重なれば成立（少し広めに取る）
+    if (p.dodging && !p.perfectUsed) {
       const win = PC.perfectWindow + p.stats.perfectBonus / 60;
-      if (p.dodging && !p.perfectUsed && p.sinceDodge <= win) this.perfectDodge();
-      return false;
+      const g = 8, grow = (r) => ({ x: r.x - g, y: r.y - g, w: r.w + g * 2, h: r.h + g * 2 });
+      if (p.sinceDodge <= win && (overlap(box, grow(p)) || (p.dodgeFrom && overlap(box, grow(p.dodgeFrom))))) { this.perfectDodge(); return false; }
     }
     if (!overlap(box, p)) return false;
+    if (p.invulnerable) return false;
     this.damagePlayer(dmg, { fromX });
     return true;
   }
@@ -882,7 +881,7 @@ export class Game {
     this.sfx.play('rewind');
     this.scene = 'rewind';
     this.modal = null;
-    this.rewind = { report, t: 0, sel: 0, mode: 'view', sub: 0, fast: report.loop > 1 && this.meta.flags.seenRewind && report.loop > 2 };
+    this.rewind = { report, t: 0, sel: 0, mode: 'view', sub: 0, fast: report.loop >= 2 };
     this.emit('loopEnd', { cause });
   }
 
@@ -1117,7 +1116,7 @@ export class Game {
       case 'journal': {
         if (input.pressed('left')) { m.tab = (m.tab + 3) % 4; this.sfx.play('select'); }
         if (input.pressed('right')) { m.tab = (m.tab + 1) % 4; this.sfx.play('select'); }
-        if (m.t > 0.15 && (back || input.pressed('journal') || input.pressed('pause') || input.pressed('confirm'))) {
+        if (m.t > 0.03 && (back || input.pressed('journal') || input.pressed('pause') || input.pressed('confirm'))) {
           this.modal = m.prev && m.prev.type === 'pause' ? m.prev : null;
           input.consume('pause');
         }

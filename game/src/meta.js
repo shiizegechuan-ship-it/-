@@ -131,6 +131,8 @@ export function endLoop(m, run) {
     if (w.target !== 'boon') report.changed.push({ text: `代償：${t.cost}`, tone: 'risk' });
   }
   for (const k of run.learned || []) if (KNOWLEDGE[k] && KNOWLEDGE[k].cat !== '敵') report.changed.push({ text: `知った：${KNOWLEDGE[k].title}`, tone: 'blue' });
+  if (report.loop === 1) report.tip = '金の時計の印がついたもの（人・残骸・仕掛け）に楔を打つと、次の夜もその状態のまま残る。';
+  else if (!m.flags.bossBeaten && report.loop === 2 && m.wedges.length === 0) report.tip = '楔は「巻き戻り」のときに、最後に持っていた強化にも打てる。';
   m.lastLoop = { dmgByCat: { ...(run.dmgByCat || {}) }, cause: run.cause, floor: run.floor, boons: (run.boons || []).map((b) => ({ ...b })), loop: m.loop };
   const nextCounter = bossCounter(m.lastLoop);
   if (nextCounter && nextCounter !== prevCounter) report.changed.push({ text: `刻守はあなたの戦い方を覚えた：${COUNTERS[nextCounter].name}`, tone: 'risk' });

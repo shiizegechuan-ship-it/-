@@ -58,13 +58,13 @@ export function attachKeyboard(input, target) {
     if (a) { input.set(a, true); e.preventDefault(); }
     // メニュー操作用の別名
     if (e.code === 'KeyZ' || e.code === 'Enter' || e.code === 'Space') input.set('confirm', true);
-    if (e.code === 'KeyX' || e.code === 'Escape' || e.code === 'Backspace') input.set('back', true);
+    if (e.code === 'Escape' || e.code === 'Backspace') input.set('back', true);
   });
   target.addEventListener('keyup', (e) => {
     const a = KEYMAP[e.code];
     if (a) input.set(a, false);
     if (e.code === 'KeyZ' || e.code === 'Enter' || e.code === 'Space') input.set('confirm', false);
-    if (e.code === 'KeyX' || e.code === 'Escape' || e.code === 'Backspace') input.set('back', false);
+    if (e.code === 'Escape' || e.code === 'Backspace') input.set('back', false);
   });
   target.addEventListener('blur', () => input.clear());
 }
