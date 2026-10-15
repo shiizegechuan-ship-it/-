@@ -5,7 +5,7 @@ import { TileMap } from './tilemap.js';
 import { Player } from './player.js';
 import { makeEnemy, RustSoldier, GearKnight } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
-import { castArt, updateSpells, PROCS, ACTIVE_ARTS } from './arts.js';
+import { castArt, updateSpells, updatePassives, PROCS, ACTIVE_ARTS } from './arts.js';
 import { Fx } from './fx.js';
 import { NullSfx } from './audio.js';
 import { BOONS, rollOffer, boonMax } from './boons.js';
@@ -311,6 +311,7 @@ export class Game {
     this.resolveEnemyAttacks();
     for (const pr of room.projectiles) { updateHoming(pr, this); pr.update(this, this.timeStopT > 0 && !pr.homing ? dt * 0.3 : dt); }
     this.resolveProjectiles();
+    updatePassives(this, dt);
     updateSpells(this, dt);
     if (p.onGround) p.airHits = 0;
     this.updateEchoes(dt);
@@ -345,7 +346,7 @@ export class Game {
       if (!overlap(hb, e)) continue;
       a.hitIds.add(e.id);
       const dir = a.def.spin ? sign(cx(e) - cx(p)) || p.face : p.face;
-      this.dealDamage(e, { base: a.def.dmg, cat: a.def.cat, knock: a.def.knock, dir, stop: a.def.stop, breaks: !!a.def.breaks, shake: a.def.shake || 0, heavy: a.name === 'heavy' });
+      this.dealDamage(e, { base: a.def.dmg, cat: a.def.cat, knock: a.def.knock, dir, stop: a.def.stop, breaks: !!a.def.breaks, shake: a.def.shake || 0, heavy: a.name === 'heavy', parry: !!a.def.parry });
     }
     // 弾は斬り落とせる
     for (const pr of this.room.projectiles) {
@@ -373,7 +374,9 @@ export class Game {
     if (!info.echo) {
       if (e.hp >= e.maxHp && st.openerMul > 1) dmg *= st.openerMul;
       if (p.onGround && Math.abs(p.vx) > 150 && st.momentumMul > 1) dmg *= st.momentumMul;
-      if (run.critRng.next() < st.critChance + 0.02 * upLv(this.meta, 'crit')) { crit = true; dmg *= st.critMul; }
+      // パリィ斬りは必ず会心
+      if (info.parry || run.critRng.next() < st.critChance + 0.02 * upLv(this.meta, 'crit')) { crit = true; dmg *= st.critMul; }
+      if (info.parry) this.fx.text(cx(e), e.y - 34, 'パリィ', '#ffe14a', 16);
       if (direct && p.afterT > 0 && st.afterimageMul > 1) { dmg *= st.afterimageMul; p.afterT = 0; this.fx.text(cx(e), e.y - 18, '残影', '#5fd18b', 12); }
       if (direct && p.empowerNext > 1) { dmg *= p.empowerNext; p.empowerNext = 1; this.fx.text(cx(e), e.y - 30, '×3', '#e35d5d', 14); }
       if (info.heavy && e.slowed && st.shatterMul > 1) {

@@ -173,3 +173,45 @@ export function updateSpells(game, dt) {
   }
   room.spells = room.spells.filter((s) => s.alive);
 }
+
+// ───────── 常に発動する術（パッシブ） ─────────
+// orbit：体のまわりを秒針が回り、触れた敵を斬る／aura：周期的な炎の波動
+// seeker：定期的に追尾する星／chainlight：定期的に近くの敵へ雷
+export function updatePassives(game, dt) {
+  const p = game.player, pv = p.stats.passives;
+  if (!pv || p.state === 'dead') return;
+  const T = (p.passiveT ||= { aura: 0, seeker: 0, chainlight: 0, orbit: 0, orbitHit: {} });
+  const px = cx(p), py = cy(p);
+  if (pv.orbit) {
+    T.orbit += dt;
+    const n = 1 + pv.orbit, r = 34;
+    p.orbitHands = [];
+    for (let i = 0; i < n; i++) {
+      const a = T.orbit * 4 + i / n * Math.PI * 2;
+      const hx = px + Math.cos(a) * r, hy = py + Math.sin(a) * r * 0.8;
+      p.orbitHands.push({ x: hx, y: hy, a });
+      for (const e of game.room.enemies) {
+        if (!e.alive || (e.boss && e.defeated)) continue;
+        if (hx < e.x - 6 || hx > e.x + e.w + 6 || hy < e.y - 6 || hy > e.y + e.h + 6) continue;
+        const key = e.id;
+        if ((T.orbitHit[key] || 0) > T.orbit) continue;
+        T.orbitHit[key] = T.orbit + 0.45; // 同じ敵へは 0.45 秒おき
+        game.dealDamage(e, { base: 8 * lvMul(pv.orbit), cat: 'skill', knock: 60, dir: sign(cx(e) - px) || 1, spell: true });
+      }
+    }
+  } else p.orbitHands = null;
+  if (pv.aura && (T.aura += dt) >= 3) {
+    T.aura = 0;
+    game.room.spells.push(new Spell('ember', px, py, { r: 0, maxR: 80, dmg: 15 * lvMul(pv.aura) }));
+  }
+  if (pv.seeker && (T.seeker += dt) >= 2.4) {
+    if (game.room.enemies.some((e) => e.alive)) {
+      T.seeker = 0;
+      game.room.spells.push(new Spell('hand', px, py - 20, { vx: 0, vy: -180, life: 2, dmg: 20 * lvMul(pv.seeker), delay: 0 }));
+    }
+  }
+  if (pv.chainlight && (T.chainlight += dt) >= 4) {
+    const e = enemiesNear(game, px, py, 300).sort((a, b) => Math.abs(cx(a) - px) - Math.abs(cx(b) - px))[0];
+    if (e) { T.chainlight = 0; PROCS.thunderbell(game, pv.chainlight, e); }
+  }
+}

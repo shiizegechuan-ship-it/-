@@ -28,6 +28,7 @@ export const PLAYER = {
   dodgeSpeed: 430,
   dodgeCooldown: 28 * F,
   perfectWindow: 8 * F, // 被弾直前この時間内に回避するとジャスト回避
+  parryWindow: 0.3, // 回避が終わってからこの時間内の攻撃はパリィ斬り
   perfectSlowTime: 0.25,
   perfectSlowScale: 0.3,
   hurtIframes: 50 * F,
@@ -50,6 +51,8 @@ export const ATTACKS = {
   combo3: { startup: 7 * F, active: 4 * F, recovery: 16 * F, cancel: 14 * F, dmg: 18, w: 52, h: 34, ox: 6, oy: -4, knock: 260, stop: 6 * F, lunge: 110, cat: 'combo', shake: 3 },
   combo4: { startup: 6 * F, active: 6 * F, recovery: 16 * F, cancel: 14 * F, dmg: 26, w: 70, h: 40, ox: -14, oy: -6, knock: 300, stop: 6 * F, lunge: 40, cat: 'combo', shake: 4, spin: true },
   air: { startup: 4 * F, active: 4 * F, recovery: 8 * F, cancel: 8 * F, dmg: 11, w: 44, h: 34, ox: 4, oy: 0, knock: 110, stop: 3 * F, lunge: 0, cat: 'air' },
+  // パリィ斬り：回避の直後に攻撃。範囲が広く、当たれば必ず会心
+  parry: { startup: 3 * F, active: 6 * F, recovery: 12 * F, cancel: 12 * F, dmg: 16, w: 80, h: 50, ox: -6, oy: -6, knock: 240, stop: 7 * F, lunge: 120, cat: 'combo', shake: 5, parry: true },
   heavy: { startup: 6 * F, active: 5 * F, recovery: 20 * F, cancel: 18 * F, dmg: 40, w: 62, h: 40, ox: 4, oy: -6, knock: 380, stop: 7 * F, lunge: 150, cat: 'heavy', shake: 6, breaks: true },
 };
 

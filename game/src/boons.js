@@ -45,6 +45,11 @@ export const BOONS = {
   riposte: { school: 'arts', max: 5, name: '刹那返し', desc: (t) => `[条件] ジャスト回避で近くの敵を斬り抜ける（${Math.round(60 * (1 + 0.4 * (t - 1)))}）` },
   thunderbell: { school: 'arts', max: 5, name: '落雷の鐘', desc: (t) => `[条件] 重撃の命中に雷が落ち、もう1体へ連鎖（${Math.round(45 * (1 + 0.4 * (t - 1)))}）` },
   plunge: { school: 'arts', max: 5, name: '落下斬り', desc: (t) => `[条件] 空中で3回当てると急降下し、着地の衝撃波（${Math.round(32 * (1 + 0.4 * (t - 1)))}）` },
+  // 術：常に発動（パッシブ）
+  orbit: { school: 'arts', max: 5, name: '守りの秒針', desc: (t) => `[常時] 体のまわりを秒針が${1 + t}本回り、触れた敵を斬る（各${Math.round(8 * (1 + 0.4 * (t - 1)))}）` },
+  aura: { school: 'arts', max: 5, name: '刻の灯火', desc: (t) => `[常時] 3秒ごとに周囲へ炎の波動（${Math.round(15 * (1 + 0.4 * (t - 1)))}）` },
+  seeker: { school: 'arts', max: 5, name: '追尾星', desc: (t) => `[常時] 2.4秒ごとに追尾する秒針を放つ（${Math.round(20 * (1 + 0.4 * (t - 1)))}）` },
+  chainlight: { school: 'arts', max: 5, name: '雷鎖', desc: (t) => `[常時] 4秒ごとに近くの敵へ雷が落ち、連鎖する（${Math.round(45 * (1 + 0.4 * (t - 1)))}）` },
   lastlight: { school: 'arts', max: 5, name: '残り火', desc: (t) => `[条件] HP30%以下のとき、命中した敵が炎を噴く（${Math.round(12 * (1 + 0.4 * (t - 1)))}）` },
 };
 export const boonMax = (id) => BOONS[id].max || 2;
@@ -121,6 +126,7 @@ export function computeStats(boons) {
     activeArt: boons.find((b) => BOONS[b.id].active) || null,
     procs: { secondhand: t('secondhand'), riposte: t('riposte'), thunderbell: t('thunderbell'), plunge: t('plunge'), lastlight: t('lastlight') },
     gaugeMul: counts.arts >= 2 ? 1.5 : 1,
+    passives: { orbit: t('orbit'), aura: t('aura'), seeker: t('seeker'), chainlight: t('chainlight') },
   };
   return s;
 }

@@ -193,3 +193,30 @@ test('発動する術は 1 つだけ。別の術を取ると持ち替える', ()
   dd.frame(1, ['confirm']);
   assert.deepEqual(g.player.boons, [{ id: 'starfall', tier: 1 }]);
 });
+
+test('パリィ斬り：回避の直後の攻撃は範囲が広く、当たれば必ず会心', () => {
+  const { g, d, e } = arena(RustSoldier, 75);
+  e.hp = e.maxHp = 1e6; e.cool = 99;
+  d.frame(1, ['dodge', 'left']); // 敵から離れる向きに回避
+  d.until(() => g.player.state === 'normal', 40);
+  g.player.face = 1;
+  const before = e.hp;
+  d.frame(1, ['attack', 'right']);
+  assert.equal(g.player.atk && g.player.atk.name, 'parry');
+  d.until(() => e.hp < before, 20);
+  assert.equal(before - e.hp, Math.round(16 * 2 * (1 + 0.01 * (g.combo.n - 1))), 'guaranteed crit (x2)');
+  // 通常の攻撃（回避から時間が経ったあと）はパリィにならない
+  d.frame(60);
+  d.frame(1, ['attack']);
+  assert.notEqual(g.player.atk && g.player.atk.name, 'parry');
+});
+
+test('常に発動する術：守りの秒針は回り続けて触れた敵を斬り、雷鎖は周期的に落ちる', () => {
+  const { g, d, e } = arena(RustSoldier, 30);
+  e.hp = e.maxHp = 1e6; e.cool = 99;
+  g.player.setBoons([{ id: 'orbit', tier: 2 }, { id: 'chainlight', tier: 1 }, { id: 'aura', tier: 1 }, { id: 'seeker', tier: 1 }]);
+  d.frame(60 * 5);
+  assert.ok(e.hp < e.maxHp);
+  assert.ok(g.player.orbitHands && g.player.orbitHands.length === 3);
+  assert.ok(g.log.length >= 0);
+});

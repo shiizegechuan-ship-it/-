@@ -148,17 +148,37 @@ test('ゲームパッド：先頭に動かない仮想デバイスがいても�
   const pad = (axes, pressed = []) => ({ connected: true, mapping: 'standard', index: 1, axes, buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i), value: pressed.includes(i) ? 1 : 0 })) });
   const phantom = { connected: true, mapping: '', index: 0, axes: [0, 0], buttons: [] };
   const st = {};
-  let r = readPads([phantom, pad([0.5, 0])], st);
+  let r = readPads([phantom, pad([0.17, 0])], st); // 遊びは 15%（少し倒すだけで反応）
   assert.ok(r.right && !r.left);
-  r = readPads([phantom, pad([0.35, 0])], st); // 押した後は 0.3 まで保つ
+  r = readPads([phantom, pad([0.12, 0])], st); // 押した後は 10% まで保つ
   assert.ok(r.right);
-  r = readPads([phantom, pad([0.2, 0])], st);
+  r = readPads([phantom, pad([0.05, 0])], st);
   assert.ok(!r.right);
-  r = readPads([phantom, pad([0.4, 0])], st); // 離した後は 0.45 まで押されない
+  r = readPads([phantom, pad([0.13, 0])], st); // 離した後は 15% まで押されない
   assert.ok(!r.right);
   r = readPads([phantom, pad([0, 0], [14])], st);
   assert.ok(r.left);
   // 非標準配置の十字キー（軸 6）
   const ns = { connected: true, mapping: '', index: 2, axes: [0, 0, 0, 0, 0, 0, 1, 0], buttons: [] };
   assert.ok(readPads([ns], {}).right);
+});
+
+test('地上の回避は底なしの穴の手前で止まる（空中の回避は止まらない）', () => {
+  const PIT = [
+    '################################',
+    ...Array.from({ length: 13 }, () => '#..............................#'),
+    '#P.............................#',
+    '#####..........#################',
+    '#####..........#################',
+    '#####..........#################',
+  ];
+  const g = sandbox(PIT); const d = new Driver(g);
+  d.frame(2);
+  g.player.x = 100; // 崖の縁（x=150）の少し手前
+  d.frame(1, ['right', 'dodge']); d.frame(30);
+  assert.ok(g.player.onGround && g.player.y < 460, 'did not fall');
+  assert.ok(g.player.x + g.player.w <= 156, `stopped at the edge (${g.player.x})`);
+  // 空中の回避は穴を越えるために使える
+  d.frame(40); g.player.x = 120; d.frame(1, ['jump']); d.frame(6, ['jump']); d.frame(1, ['right', 'dodge']); d.frame(6);
+  assert.ok(g.player.x > 160, 'air dodge goes over the pit');
 });

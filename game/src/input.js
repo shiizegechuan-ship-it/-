@@ -79,7 +79,7 @@ export function attachKeyboard(input, target) {
 
 // ゲームパッド。接続中のすべてのパッドをまとめて読む（仮想デバイスが先頭にいても動くように）
 const PAD = { jump: 0, attack: 2, dodge: 1, skill: 3, interact: 5, pause: 9, journal: 8 };
-const ON = 0.45, OFF = 0.3; // スティックの押す／離す判定に差をつけて、境目でぶれないようにする
+const ON = 0.15, OFF = 0.1; // スティックの遊び（中心から反応しない範囲）。押す／離す判定に差をつけて境目でぶれないようにする
 export function readPads(pads, stickAll) {
   const out = { left: false, right: false, up: false, down: false, confirm: false, back: false };
   for (const k of Object.keys(PAD)) out[k] = false;

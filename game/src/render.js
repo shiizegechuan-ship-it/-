@@ -82,6 +82,12 @@ function renderPlay(ctx, game) {
   b.globalAlpha = 1;
   for (const e of game.room.enemies) drawEnemy(b, game, e);
   drawPlayer(b, game, game.player);
+  // 守りの秒針（常時の術）
+  for (const h of game.player.orbitHands || []) {
+    const x = Math.round(h.x / 2), y = Math.round(h.y / 2), ux = Math.cos(h.a + Math.PI / 2), uy = Math.sin(h.a + Math.PI / 2);
+    line(b, x - ux * 3, y - uy * 3, x + ux * 3, y + uy * 3, '#f2c14e', 2);
+    pset(b, x + ux * 4, y + uy * 4, '#ffffff');
+  }
   for (const s of fx.slashes) drawSlash(b, s);
   for (const sp of game.room.spells || []) drawSpell(b, sp, game.time);
   for (const im of fx.impacts || []) drawImpact(b, im);
@@ -276,6 +282,12 @@ function drawSlash(b, s) {
         circle(b, cxx, y - 1, r, '#ffe14a');
         for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; pset(b, cxx + Math.cos(a) * (r + 2), y - 1 + Math.sin(a) * (r + 2), '#c9a052'); }
       }
+      break;
+    }
+    case 'parry': { // パリィ斬り：幅の広い金と白の二重の三日月＋光の粒
+      sweep(b, x, y, 26, mir(-0.6 * Math.PI), mir(0.45 * Math.PI), k, '#ffe14a', 4, 'rgba(255,225,74,0.4)');
+      sweep(b, x + f * 4, y, 19, mir(-0.5 * Math.PI), mir(0.4 * Math.PI), k, '#ffffff', 2);
+      if (k > 0.2) for (let i = 0; i < 6; i++) { const a = mir(-0.5 * Math.PI + i * 0.18 * Math.PI); const rr = 28 + (i % 2) * 4 + k * 6; pset(b, x + Math.cos(a) * rr, y + Math.sin(a) * rr, i % 2 ? '#ffffff' : '#ffe14a'); }
       break;
     }
     case 'air': // 円を描く空中斬り

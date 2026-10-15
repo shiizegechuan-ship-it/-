@@ -62,6 +62,7 @@ export class Player {
     if (this.dodgeCd > 0) this.dodgeCd -= dt;
     if (this.comboGrace > 0) this.comboGrace -= dt; else if (this.state === 'normal') this.comboIndex = 0;
     if (this.dropT > 0) this.dropT -= dt;
+    if (this.parryT > 0) this.parryT -= dt;
     this.squash = approach(this.squash, 0, dt * 5);
     this.landedThisFrame = false;
 
@@ -77,7 +78,7 @@ export class Player {
       case 'attack': this.updateAttack(game, input, dt, dirX); break;
       case 'charge': this.updateCharge(game, input, dt, dirX); break;
       case 'dodge': this.updateDodge(game, input, dt); break;
-      case 'hurt': this.updateHurt(dt); break;
+      case 'hurt': this.updateHurt(dt); this.stopAtAbyss(game.map, dt); break;
       case 'channel': this.updateChannel(game, input, dt); break;
       case 'dead': this.vx = approach(this.vx, 0, 900 * dt); break;
       case 'frozen': this.vx = 0; break; // 会話・演出中
@@ -148,7 +149,7 @@ export class Player {
     this.tryJump(game, input);
     if (!input.down('jump') && this.vy < 0) this.vy *= Math.pow(P.jumpCutMul, dt * 60 / 4) ; // 早く離すと低いジャンプ
     if (input.pressed('dodge')) { if (this.startDodge(game, dirX)) return; }
-    if (input.pressed('attack')) { this.startAttack(game, dirX); return; }
+    if (input.pressed('attack')) { this.startAttack(game, dirX, this.parryT > 0 ? 'parry' : undefined); this.parryT = 0; return; }
     if (input.pressed('skill')) game.useSkill();
   }
 
@@ -172,14 +173,24 @@ export class Player {
     return true;
   }
 
+  // 足元の先が底なしの穴なら止まる（地上の回避と吹き飛びだけ。空中の回避は止めない）
+  stopAtAbyss(map, dt) {
+    if (!this.onGround || this.vx === 0) return;
+    const fx = this.vx > 0 ? this.x + this.w + this.vx * dt + 2 : this.x + this.vx * dt - 2;
+    if (map.groundBelow(fx, this.y + this.h + 1) >= map.pxH) this.vx = 0;
+  }
   updateDodge(game, input, dt) {
     const t = this.stateT / P.dodgeTime;
     const speed = P.dodgeSpeed * this.stats.dodgeDistMul * (t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3 * 0.7);
     this.vx = this.face * speed;
+    this.stopAtAbyss(game.map, dt);
     if (Math.floor(this.stateT / (3 * F)) !== Math.floor((this.stateT - dt) / (3 * F))) game.fx.afterimage(this);
+    // 回避の後半に攻撃を押すとパリィ斬り
+    if (this.stateT > P.dodgeTime * 0.45 && input.pressed('attack')) { this.parryT = 0; this.startAttack(game, 0, 'parry'); return; }
     if (this.stateT >= P.dodgeTime) {
       this.state = 'normal'; this.stateT = 0;
       this.vx = this.face * P.runSpeed * 0.8;
+      this.parryT = P.parryWindow; // この間の攻撃はパリィ斬り
     }
     // 回避の終わり際はジャンプでキャンセル可能（地上のみ）
     if (this.stateT > P.dodgeTime * 0.5 && this.onGround && this.bufferT > 0) {
@@ -215,6 +226,7 @@ export class Player {
     // 踏み込み。走っている勢いは半分残す（急停止しない）
     if (this.onGround && def.lunge) this.vx = this.face * Math.max(def.lunge, Math.abs(this.vx) * 0.5 * (sign(this.vx) === this.face ? 1 : 0));
     if (name === 'air' && this.vy > 0) this.vy *= 0.5; // 空中攻撃で少しだけ滞空
+    if (name === 'parry') { this.comboIndex = 0; game.sfx.play('perfect'); if (!this.onGround) this.vy = Math.min(this.vy, 0); }
   }
 
   // 攻撃判定の矩形（持続中のみ）
