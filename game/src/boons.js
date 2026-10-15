@@ -6,6 +6,7 @@ export const SCHOOLS = {
   risk: { name: '危険', color: '#e35d5d' },
   power: { name: '火力', color: '#ff9a3c' },
   arts: { name: '術', color: '#ff6ad5' },
+  rare: { name: '稀少', color: '#ffd84a' },
 };
 const pc = (n) => `${Math.round(n)}%`;
 
@@ -56,6 +57,15 @@ export const BOONS = {
   gearsaw: { school: 'arts', max: 5, name: '歯車の鋸', desc: (t) => `[常時] 2.8秒ごとに回る歯車を投げる。行きと帰りに貫通（${Math.round(14 * (1 + 0.4 * (t - 1)))}×2）` },
   stormcloud: { school: 'arts', max: 5, name: '雷雲', desc: (t) => `[常時] 頭上の雷雲が${(1.6 - 0.15 * t).toFixed(2)}秒ごとに敵を撃つ（${Math.round(16 * (1 + 0.4 * (t - 1)))}）` },
   wake: { school: 'arts', max: 5, name: '残光の轍', desc: (t) => `[常時] 走った跡に炎が残り、触れた敵を焼く（${Math.round(7 * (1 + 0.4 * (t - 1)))}／0.4秒）` },
+  // 稀少：レベル 5 ごとに選べる特別な強化。通常の候補には出ない
+  crown: { school: 'rare', name: '時の王冠', desc: () => 'すべての与ダメージ ×1.5' },
+  goldeye: { school: 'rare', name: '黄金の眼', desc: () => '会心率 +25%、会心ダメージ +100%' },
+  phoenix: { school: 'rare', name: '不死鳥の砂時計', desc: () => 'この夜に一度だけ、倒れてもHP50%で立ち上がる' },
+  starheart: { school: 'rare', name: '星の心臓', desc: () => '常時の術がすべて 1.7 倍の速さで発動する' },
+  stormstep: { school: 'rare', name: '雷の歩法', desc: () => '回避するたび、近くの敵に雷が落ちる（60）' },
+  lifesteal: { school: 'rare', name: '吸命の刃', desc: () => '直接攻撃の命中で、与えたダメージの3%だけHPが回復（1回につき最大HPの2%まで）' },
+  eternal: { school: 'rare', name: '永劫の連撃', desc: () => 'コンボが時間で途切れなくなり、コンボ加算が2倍（被弾では途切れる）' },
+  wave: { school: 'rare', name: '斬撃波', desc: () => '地上の攻撃のたびに、前へ飛ぶ斬撃波が出る（30・貫通）' },
   lastlight: { school: 'arts', max: 5, name: '残り火', desc: (t) => `[条件] HP30%以下のとき、命中した敵が炎を噴く（${Math.round(12 * (1 + 0.4 * (t - 1)))}）` },
 };
 // 常に発動する術の一覧。種類を多く持つほど、すべての常時の術が強くなる（術の共鳴）
@@ -95,7 +105,7 @@ export function computeStats(boons) {
   const s = {
     has,
     counts,
-    dmgMul: t('sandglass') ? 1.4 : 1,
+    dmgMul: (t('sandglass') ? 1.4 : 1) * (t('crown') ? 1.5 : 1),
     maxHpMul: t('sandglass') ? 0.7 : 1,
     afterimageTime: t('afterimage') ? (t('afterimage') > 1 ? 0.8 : 0.6) : 0,
     afterimageMul: t('afterimage') ? (t('afterimage') > 1 ? 2.0 : 1.6) : 1,
@@ -123,10 +133,12 @@ export function computeStats(boons) {
     doubleEchoOnSlow: !!(t('lag') && t('echo')),
     // 火力
     edgeMul: 1 + 0.2 * t('edge'),
-    comboPer: 0.01 * (1 + t('comboheat')),
+    comboPer: 0.01 * (1 + t('comboheat')) * (t('eternal') ? 2 : 1),
+    // 稀少
+    phoenix: !!t('phoenix'), passiveSpeed: t('starheart') ? 1.7 : 1, stormstep: !!t('stormstep'), lifesteal: t('lifesteal') ? 0.03 : 0, eternal: !!t('eternal'), wave: !!t('wave'),
     heavyMul: 1 + 0.4 * t('heavyart'),
-    critChance: 0.1 * t('crit') + (counts.power >= 2 ? 0.05 : 0),
-    critMul: 2 + 0.5 * t('critdmg'),
+    critChance: 0.1 * t('crit') + (counts.power >= 2 ? 0.05 : 0) + (t('goldeye') ? 0.25 : 0),
+    critMul: 2 + 0.5 * t('critdmg') + (t('goldeye') ? 1 : 0),
     executeMul: 1 + 0.3 * t('execute'),
     airMul: 1 + 0.35 * t('aerial'),
     killStack: 0.02 * t('bloodclock'),
@@ -167,13 +179,19 @@ export function rollOffer(rng, owned, unlockedSchools, n = 3) {
   return out;
 }
 
+// 稀少の候補（まだ持っていないものから 3 つ）
+export const RARE_IDS = Object.keys(BOONS).filter((id) => BOONS[id].school === 'rare');
+export function rollRare(rng, owned, n = 3) {
+  return rng.shuffle(RARE_IDS.filter((id) => !owned.some((b) => b.id === id))).slice(0, n);
+}
+
 // 選択肢カードに添える相乗効果のヒント
 export function synergyHints(id, owned) {
   const hints = [];
   const sc = BOONS[id].school;
   const counts = schoolCounts(owned);
   const owns = owned.some((b) => b.id === id);
-  if (sc !== 'risk' && counts[sc] === 1 && !owns) hints.push(`共鳴成立：${RESONANCE[sc]}`);
+  if (sc !== 'risk' && RESONANCE[sc] && counts[sc] === 1 && !owns) hints.push(`共鳴成立：${RESONANCE[sc]}`);
   for (const c of CROSS) {
     const other = c.a === id ? c.b : c.b === id ? c.a : null;
     if (other && owned.some((b) => b.id === other)) hints.push(`相乗：${c.text}`);

@@ -249,6 +249,11 @@ function floorEnemies(floor, nl) {
   const min = [2, 3, 3][floor] + Math.floor(nl / 2);
   return { g, a, t: ['T'], fill, min };
 }
+// 脅威で増える敵の種類（弓兵と砲台は増やさない）
+export function extraEnemyTypes(floor, nl) {
+  const t = floorEnemies(floor, nl);
+  return { g: t.g.filter((c) => c !== 'A'), a: t.a };
+}
 const COMBAT_POOLS = [
   ['alley', 'steps', 'pit', 'watch', 'hall', 'pillars', 'islands', 'cage'],
   ['gears', 'watch', 'hall', 'pit', 'steps', 'bridge', 'twin', 'tower', 'canyon'],

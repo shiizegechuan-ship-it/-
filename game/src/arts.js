@@ -25,7 +25,7 @@ function enemiesNear(game, x, y, r) {
 }
 function strike(game, sp, e, base, extra = {}) {
   if (!e.alive) return;
-  game.dealDamage(e, { base, cat: 'skill', knock: extra.knock || 120, dir: extra.dir || sign(cx(e) - sp.x) || 1, spell: true, ...extra });
+  game.dealDamage(e, { base, cat: 'skill', knock: extra.knock || 120, dir: extra.dir || sign(cx(e) - sp.x) || 1, spell: true, passive: !!sp.passive, ...extra });
 }
 
 // ───────── 発動 ─────────
@@ -62,6 +62,12 @@ export function castArt(game, art) {
   game.emit('art', { id: art.id });
 }
 
+// 斬撃波（稀少）：地上の攻撃のたびに前へ飛ぶ小さな斬撃
+export function spawnWave(game, p) {
+  const f = p.face;
+  game.room.spells.push(new Spell('blade', cx(p) + f * 18, cy(p), { vx: f * 480, life: 0.45, h: 34, dmg: 30, face: f }));
+}
+
 // ───────── 発動条件つき ─────────
 export const PROCS = {
   // 10 コンボごとに、追尾する秒針を 3 本
@@ -86,8 +92,8 @@ export const PROCS = {
     game.sfx.play('heavySwing');
   },
   // 重撃の命中に雷を落とす（近くの 1 体へ連鎖）
-  thunderbell(game, lv, e, mul = 1) {
-    const sp = new Spell('thunder', cx(e), cy(e), { life: 0.3, chain: null });
+  thunderbell(game, lv, e, mul = 1, passive = false) {
+    const sp = new Spell('thunder', cx(e), cy(e), { life: 0.3, chain: null, passive });
     game.room.spells.push(sp);
     strike(game, sp, e, 45 * lvMul(lv) * mul, { knock: 60 });
     const other = enemiesNear(game, cx(e), cy(e), 170).find((o) => o !== e);
@@ -229,6 +235,7 @@ export function updatePassives(game, dt) {
   const p = game.player, pv = p.stats.passives;
   if (!pv || p.state === 'dead') return;
   const T = (p.passiveT ||= { orbitHit: {} });
+  dt *= p.stats.passiveSpeed || 1; // 星の心臓：常時の術が速く回る
   const px = cx(p), py = cy(p);
   const owned = PASSIVE_IDS.filter((id) => pv[id]).length;
   const syn = passiveSynergy(owned);
@@ -249,16 +256,16 @@ export function updatePassives(game, dt) {
         if (hx < e.x - 6 || hx > e.x + e.w + 6 || hy < e.y - 6 || hy > e.y + e.h + 6) continue;
         if ((T.orbitHit[e.id] || 0) > T.orbit) continue;
         T.orbitHit[e.id] = T.orbit + 0.45; // 同じ敵へは 0.45 秒おき
-        game.dealDamage(e, { base: dmg(8, 'orbit'), cat: 'skill', knock: 60, dir: sign(cx(e) - px) || 1, spell: true });
+        game.dealDamage(e, { base: dmg(8, 'orbit'), cat: 'skill', knock: 60, dir: sign(cx(e) - px) || 1, spell: true, passive: true });
         game.fx.sparks(hx, hy, '#f2c14e', 3, 140);
       }
     }
   } else p.orbitHands = null;
-  if (pv.aura && tick('aura', 3)) game.room.spells.push(new Spell('ember', px, py, { r: 0, maxR: 80, dmg: dmg(15, 'aura') }));
-  if (pv.seeker && anyFoe() && tick('seeker', 2.4)) game.room.spells.push(new Spell('hand', px, py - 20, { vx: 0, vy: -180, life: 2, dmg: dmg(20, 'seeker'), delay: 0 }));
+  if (pv.aura && tick('aura', 3)) game.room.spells.push(new Spell('ember', px, py, { passive: true, r: 0, maxR: 80, dmg: dmg(15, 'aura') }));
+  if (pv.seeker && anyFoe() && tick('seeker', 2.4)) game.room.spells.push(new Spell('hand', px, py - 20, { passive: true, vx: 0, vy: -180, life: 2, dmg: dmg(20, 'seeker'), delay: 0 }));
   if (pv.chainlight && (T.chainlight = (T.chainlight || 0) + dt) >= 4) {
     const e = nearestTargets(game, px, py, 300)[0];
-    if (e) { T.chainlight = 0; PROCS.thunderbell(game, pv.chainlight, e, syn); }
+    if (e) { T.chainlight = 0; PROCS.thunderbell(game, pv.chainlight, e, syn, true); }
   }
   if (pv.meteor && (T.meteor = (T.meteor || 0) + dt) >= 3.5) {
     const ts = nearestTargets(game, px, py, 420);
@@ -267,12 +274,12 @@ export function updatePassives(game, dt) {
       for (let i = 0; i < 1 + pv.meteor; i++) {
         const e = ts[i % ts.length];
         const tx = cx(e) + (i >= ts.length ? (Math.random() - 0.5) * 50 : 0), ty = cy(e);
-        game.room.spells.push(new Spell('star', tx, ty, { delay: i * 0.12, fall: 0.35, dmg: dmg(24, 'meteor'), from: { x: tx + 140, y: ty - 280 } }));
+        game.room.spells.push(new Spell('star', tx, ty, { passive: true, delay: i * 0.12, fall: 0.35, dmg: dmg(24, 'meteor'), from: { x: tx + 140, y: ty - 280 } }));
       }
     }
   }
   if (pv.frostnova && anyFoe() && tick('frostnova', 5)) {
-    game.room.spells.push(new Spell('frost', px, py, { r: 0, maxR: 115, dmg: dmg(20, 'frostnova'), slow: 1.2 + 0.3 * pv.frostnova }));
+    game.room.spells.push(new Spell('frost', px, py, { passive: true, r: 0, maxR: 115, dmg: dmg(20, 'frostnova'), slow: 1.2 + 0.3 * pv.frostnova }));
     game.sfx.play('block');
   }
   if (pv.swordrain && anyFoe() && tick('swordrain', 4)) {
@@ -282,11 +289,11 @@ export function updatePassives(game, dt) {
       const tx = e && i < ts.length ? cx(e) : px + (i - (1 + pv.swordrain) / 2) * 34;
       const gy = game.map.groundBelow(tx, (e ? e.y : py) - 10);
       const ty = Math.min(gy, game.map.pxH) - 4;
-      game.room.spells.push(new Spell('sword', tx, ty, { delay: i * 0.08, fall: 0.22, dmg: dmg(22, 'swordrain') }));
+      game.room.spells.push(new Spell('sword', tx, ty, { passive: true, delay: i * 0.08, fall: 0.22, dmg: dmg(22, 'swordrain') }));
     }
   }
   if (pv.gearsaw && anyFoe() && tick('gearsaw', 2.8)) {
-    game.room.spells.push(new Spell('gear', px, py - 4, { vx: p.face * 520, ox: px, face: p.face, life: 1.3, dmg: dmg(14, 'gearsaw') }));
+    game.room.spells.push(new Spell('gear', px, py - 4, { passive: true, vx: p.face * 520, ox: px, face: p.face, life: 1.3, dmg: dmg(14, 'gearsaw') }));
     game.sfx.play('swing');
   }
   if (pv.stormcloud) {
@@ -296,7 +303,7 @@ export function updatePassives(game, dt) {
       if (ts.length) {
         T.storm = 0;
         const e = ts[Math.floor(Math.random() * Math.min(3, ts.length))];
-        const sp = new Spell('zap', p.cloud.x, p.cloud.y, { tx: cx(e), ty: cy(e), life: 0.18 });
+        const sp = new Spell('zap', p.cloud.x, p.cloud.y, { passive: true, tx: cx(e), ty: cy(e), life: 0.18 });
         game.room.spells.push(sp);
         strike(game, sp, e, dmg(16, 'stormcloud'), { knock: 40 });
         game.fx.sparks(cx(e), cy(e), '#cfe8ff', 6, 200);
@@ -304,6 +311,6 @@ export function updatePassives(game, dt) {
     }
   } else p.cloud = null;
   if (pv.wake && p.onGround && Math.abs(p.vx) > 150 && tick('wake', 0.12)) {
-    game.room.spells.push(new Spell('trail', px, p.y + p.h - 6, { life: 1.4, dmg: dmg(7, 'wake') }));
+    game.room.spells.push(new Spell('trail', px, p.y + p.h - 6, { passive: true, life: 1.4, dmg: dmg(7, 'wake') }));
   }
 }

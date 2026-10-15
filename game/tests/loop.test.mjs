@@ -48,7 +48,7 @@ test('楔：枠の上限・重複不可・抜くと戻る', () => {
 test('周回の終わり：強化はリセット、楔の強化は保持、知識は保持', () => {
   const st = memStorage();
   const g = newGame(5, st);
-  g.player.setBoons([{ id: 'echo', tier: 2 }, { id: 'gale', tier: 1 }, { id: 'lag', tier: 1 }]);
+  g.player.setBoons([{ id: 'echo', tier: 2 }, { id: 'gale', tier: 1 }, { id: 'lag', tier: 1 }, { id: 'mirror', tier: 1 }, { id: 'freeze', tier: 1 }]);
   g.meta.slots = 2;
   addWedge(g.meta, { target: 'boon', boon: { id: 'echo', tier: 2 } });
   g.learnK('code');
@@ -56,12 +56,12 @@ test('周回の終わり：強化はリセット、楔の強化は保持、知�
   assert.equal(g.scene, 'rewind');
   const rep = g.rewind.report;
   assert.ok(rep.kept.some((k) => k.text.includes('残響')));
-  // 継承枠 1：楔の強化（残響）以外から 1 つ（疾風）を持ち越し、残り（遅延の刃）はリセット
-  assert.deepEqual(g.meta.inherit.map((b) => b.id), ['gale']);
-  assert.ok(rep.reset.some((k) => k.sub.includes('遅延の刃')));
+  // 継承枠 3：楔の強化（残響）以外から 3 つを持ち越し、残り（凍刻）はリセット
+  assert.deepEqual(g.meta.inherit.map((b) => b.id), ['gale', 'lag', 'mirror']);
+  assert.ok(rep.reset.some((k) => k.sub.includes('凍刻')));
   g.startLoop();
   assert.equal(g.meta.loop, 2);
-  assert.deepEqual(g.player.boons.map((b) => b.id).sort(), ['echo', 'gale']);
+  assert.deepEqual(g.player.boons.map((b) => b.id).sort(), ['echo', 'gale', 'lag', 'mirror']);
   assert.equal(g.player.hp, g.player.maxHp);
   assert.ok(g.meta.knowledge.code);
   // 保存されている

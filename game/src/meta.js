@@ -7,21 +7,21 @@ export const MAX_SLOTS = 3;
 export const GLEN_DEADLINE = 80; // 鍛冶屋が襲われる時刻（夜の経過秒）
 
 export const WEDGE_TARGETS = {
-  lira: { name: '少女リラ', kind: '人物', effect: '次の夜も、あなたを覚えている', cost: 'ほかの楔と枠を取り合う' },
-  glen: { name: '鍛冶屋グレン', kind: '人物', effect: '生きたまま塔の入口に現れ、強化を鍛えてくれる', cost: '枠を1つ使う' },
+  lira: { name: 'リラ（師の娘）', kind: '人物', effect: '次の夜も、あなたを覚えている', cost: 'ほかの楔と枠を取り合う' },
+  glen: { name: 'グレン（鍛冶屋）', kind: '人物', effect: '生きたまま塔の入口に現れ、強化を鍛えてくれる', cost: '枠を1つ使う' },
   knight: { name: '歯車騎士の残骸', kind: '敵', effect: '騎士は倒れたまま。昇降機で上層へ直行できる', cost: '飛ばした部屋の報酬は得られない' },
   brake: { name: '鐘楼の歯止め', kind: '仕掛け', effect: '刻守は「時止め」を使えない', cost: '刻守が怒り、第2段階が早く・速くなる' },
   boon: { name: '強化', kind: '強化', effect: 'その強化を持ったまま夜が始まる', cost: '枠を1つ使う' },
 };
 
 export const KNOWLEDGE = {
-  glen_time: { cat: '人物', title: 'グレンの最期', text: (m) => `鍛冶屋グレンは夜の ${fmtClock(GLEN_DEADLINE)} に錆兵に殺される。それより早く鍛冶場に着けば助けられる。` },
-  glen_saved: { cat: '人物', title: '鍛冶屋の恩', text: () => '助けたグレンは、強化を1つ鍛え直してくれた。楔を打てば、次の夜も生きているはず。' },
-  lira_name: { cat: '人物', title: '少女の名', text: () => '刻守は最後に「リラ」と呟いた。市場で同じ言葉を繰り返す少女の名前かもしれない。' },
-  lira_father: { cat: '人物', title: '塔の上の父', text: () => 'リラの父は塔のてっぺんで、ずっと時計を見ている。' },
-  lira_message: { cat: '人物', title: 'リラの伝言', text: () => '「リラは覚えてる」――覚えている彼女が、父に伝えてほしいと言った言葉。' },
+  glen_time: { cat: '人物', title: 'グレンの最期', text: (m) => `鍛冶屋グレン（師の古い友）は夜の ${fmtClock(GLEN_DEADLINE)} に、狂った時計人形に殺される。それより早く鍛冶場に着けば助けられる。` },
+  glen_saved: { cat: '人物', title: '鍛冶屋の恩', text: () => '助けたグレンは強化を1つ鍛えてくれる。楔を打てば、次の夜も生きて入口で待っている。' },
+  lira_name: { cat: '人物', title: '少女の名', text: () => '師は戦いの最後に「リラ」と呼んだ。市場で父を待つ少女の名前かもしれない。' },
+  lira_father: { cat: '人物', title: '塔の上の父', text: () => 'リラは師（刻守）の娘。朝の汽車で遠くの療養所へ発つ。父は塔の上から降りてこない。' },
+  lira_message: { cat: '人物', title: 'リラの伝言', text: () => '「リラは覚えてる。朝が来ても、ちゃんと治して帰ってくる」――父に伝えてほしい言葉。' },
   code: { cat: '謎', title: '書庫の番号', text: (m) => `師の書斎の走り書き：「書庫の扉 ${m.code.join('-')}」` },
-  master_reason: { cat: '謎', title: '師の日誌', text: () => '崩落の朝、師は娘を失った。鐘を鳴らすたび、夜は崩落の前に戻る。師は夜を終わらせる気がない。' },
+  master_reason: { cat: '謎', title: '師の日誌', text: () => '娘のリラは夜明けの汽車で療養所へ発つ。別れを恐れた師は、鐘を鳴らして夜を戻し続けている。' },
   knight_lift: { cat: '謎', title: '昇降機', text: () => '歯車騎士は昇降機の動力そのものだった。騎士が倒れたままなら、昇降機は動く。' },
   boss_bell: { cat: '謎', title: '鐘', text: () => '刻守を倒しても、彼が鐘を鳴らせば夜は戻る。力だけでは夜明けは来ない。' },
   tell_soldier: { cat: '敵', title: '錆兵', text: () => '剣を振り上げて光ったら踏み込み斬りが来る。振り上げ中は弱い攻撃では止まらない。振った後は隙だらけ。' },
@@ -75,7 +75,7 @@ const cost = (base, g) => (lv) => Math.round(base * Math.pow(g, lv));
 export const UPGRADES = {
   atk: { name: '刃の刻印', max: 30, desc: (lv) => `基礎攻撃 +${lv * 10}%`, cost: cost(12, 1.22) },
   hp: { name: '命の刻印', max: 20, desc: (lv) => `最大HP +${lv * 30}`, cost: cost(10, 1.22) },
-  inherit: { name: '継承の刻印', max: 4, desc: (lv) => `前の夜の強化を ${1 + lv} 個まで持ち越せる`, cost: cost(40, 1.9) },
+  inherit: { name: '継承の刻印', max: 4, desc: (lv) => `前の夜の強化を ${3 + lv} 個まで持ち越せる`, cost: cost(40, 1.9) },
   crit: { name: '会心の刻印', max: 10, desc: (lv) => `会心率 +${lv * 2}%`, cost: cost(16, 1.3) },
   combo: { name: '連撃の刻印', max: 5, desc: (lv) => `コンボの持続 +${(lv * 0.4).toFixed(1)}秒`, cost: cost(18, 1.4) },
   gauge: { name: '秒針の刻印', max: 5, desc: (lv) => `夜のはじめの秒針ゲージ +${lv * 20}`, cost: cost(14, 1.4) },
@@ -83,7 +83,7 @@ export const UPGRADES = {
   choice: { name: '選択の刻印', max: 1, desc: (lv) => `強化の候補が ${3 + lv} 枚になる`, cost: () => 150 },
 };
 export const upLv = (m, k) => (m.upgrades && m.upgrades[k]) || 0;
-export const inheritCount = (m) => 1 + upLv(m, 'inherit');
+export const inheritCount = (m) => 3 + upLv(m, 'inherit'); // 基本 3 個（刻印で +1 ずつ）
 export function buyUpgrade(m, k) {
   const u = UPGRADES[k], lv = upLv(m, k);
   if (lv >= u.max) return false;
@@ -195,6 +195,7 @@ export function endLoop(m, run) {
   const lostBoons = (run.boons || []).filter((b) => !wedgedBoonIds.has(b.id) && !inheritedIds.has(b.id));
   if (lostBoons.length) report.reset.push({ text: `強化 ${lostBoons.length} 個`, sub: lostBoons.map((b) => BOONS[b.id].name).join('・') });
   report.reset.push({ text: 'HP・秒針ゲージ', sub: '' });
+  if ((run.level || 1) > 1) report.reset.push({ text: `レベル（Lv${run.level} → Lv1）`, sub: '経験値とレベルはその夜だけ' });
   report.reset.push({ text: '部屋の並び・敵・報酬', sub: '夜ごとに揺らぐ' });
   for (const w of run.newWedges || []) {
     const t = WEDGE_TARGETS[w.target];
@@ -232,10 +233,10 @@ export function deserialize(s) {
 // ───────── 夜明けへの道（最終クリアまでの段階） ─────────
 export const DAWN_STEPS = [
   { title: '刻守を倒す', hint: '上層の鐘楼にいる刻守を倒す。……それでも鐘が鳴れば夜は戻る', done: (m) => m.flags.bossBeaten },
-  { title: '少女の名前を知る', hint: '刻守を追い詰める（第三楽章）と、彼は誰かの名を呼ぶ', done: (m) => knows(m, 'lira_name') },
+  { title: '少女の名前を知る', hint: '刻守を追い詰める（第三楽章）と、師は誰かの名を呼ぶ', done: (m) => knows(m, 'lira_name') },
   { title: '書庫の番号を見つける', hint: '上層の書斎に、師の走り書きがある', done: (m) => knows(m, 'code') },
   { title: '師の日誌を読む', hint: '中層の書庫の扉を番号で開ける', done: (m) => knows(m, 'master_reason') },
-  { title: 'リラに楔を打つ', hint: '入口の少女に楔を打てば、次の夜も覚えている', done: (m) => hasWedge(m, 'lira') },
+  { title: 'リラに楔を打つ', hint: '市場の少女に楔を打てば、次の夜もあなたを覚えている', done: (m) => hasWedge(m, 'lira') },
   { title: 'リラの伝言を聞く', hint: '覚えているリラに、名前で呼びかける（楔を打った次の夜）', done: (m) => knows(m, 'lira_message') },
   { title: '夜明けの決闘に勝つ', hint: '刻守の第三楽章で「リラは覚えている」と伝え、勝つ', done: (m) => !!m.flags.ending },
 ];

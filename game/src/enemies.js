@@ -67,7 +67,8 @@ export class Enemy {
     this.hp -= info.dmg;
     this.hitFlash = 0.1;
     const res = { blocked: false, flinched: false };
-    if (info.dmg >= this.poise || this.poise === 0) {
+    // 常時の術はダメージだけで怯ませない（積んでも敵が動けなくならないように）
+    if (!info.passive && (info.dmg >= this.poise || this.poise === 0)) {
       res.flinched = this.onFlinch(game, info);
     }
     if (this.hp <= 0) this.alive = false;

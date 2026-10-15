@@ -2,6 +2,7 @@ import { PLAYER as P, ATTACKS, F } from './config.js';
 import { approach, sign } from './util.js';
 import { moveBody, standingOnOneway } from './tilemap.js';
 import { computeStats } from './boons.js';
+import { spawnWave } from './arts.js';
 
 export class Player {
   constructor(x, y) {
@@ -195,6 +196,7 @@ export class Player {
     if (this.stats.afterimageTime) this.afterT = P.dodgeTime + this.stats.afterimageTime;
     game.sfx.play('dodge');
     game.fx.afterimage(this);
+    if (game.onDodge) game.onDodge();
     return true;
   }
 
@@ -283,6 +285,7 @@ export class Player {
     a.t += dt;
     if (!a.swung && a.t >= d.startup) {
       a.swung = true; game.sfx.play(a.name === 'heavy' ? 'heavySwing' : 'swing'); game.fx.slash(this, a.name);
+      if (this.stats.wave && this.onGround && game.room) spawnWave(game, this);
       if (this.onGround && d.lunge >= 90) game.fx.step(this.x + this.w / 2 - this.face * 6, this.y + this.h, -this.face); // 踏み込みの土煙
     }
     // 移動：地上は踏み込み後に減速、空中はゆるく制御可能

@@ -120,14 +120,14 @@ test('時の欠片：倒すと貯まり、刻印で恒久強化。次の夜に�
   assert.ok(buyUpgrade(g.meta, 'atk'));
   assert.ok(buyUpgrade(g.meta, 'hp'));
   assert.ok(buyUpgrade(g.meta, 'inherit'));
-  assert.equal(inheritCount(g.meta), 2);
-  g.player.setBoons([{ id: 'edge', tier: 3 }, { id: 'crit', tier: 2 }, { id: 'gale', tier: 1 }]);
+  assert.equal(inheritCount(g.meta), 4, 'base 3 + 1');
+  g.player.setBoons([{ id: 'edge', tier: 3 }, { id: 'crit', tier: 2 }, { id: 'execute', tier: 2 }, { id: 'opener', tier: 2 }, { id: 'gale', tier: 1 }]);
   g.endRun('death');
-  assert.equal(g.meta.inherit.length, 2, 'two boons inherited');
+  assert.equal(g.meta.inherit.length, 4, 'four boons inherited');
   g.startLoop();
   assert.equal(g.player.maxHp, 330);
   assert.ok(Math.abs(g.player.metaAtk - 1.1) < 1e-9);
-  assert.deepEqual(g.player.boons.map((b) => b.id + b.tier).sort(), ['crit2', 'edge3']);
+  assert.deepEqual(g.player.boons.map((b) => b.id + b.tier).sort(), ['crit2', 'edge3', 'execute2', 'opener2']);
 });
 
 test('刻印は欠片が足りないと買えず、上限で止まる', () => {
@@ -301,4 +301,73 @@ test('通常攻撃の判定は主人公の体まで覆う（密着・背中寄�
   d.frame(1, ['attack']);
   d.until(() => e.hp < e.maxHp, 20);
   assert.ok(e.hp < e.maxHp);
+});
+
+test('経験値とレベル：敵を倒すと経験値、レベルアップで最大HP・攻撃が伸び、5 レベルごとに稀少の強化を選べる', () => {
+  const g = newGame(11);
+  const d = new Driver(g);
+  g.enterRoom(0, 1); g.modal = null;
+  const hp0 = g.player.maxHp;
+  assert.equal(g.run.level, 1);
+  g.gainExp(5000);
+  assert.ok(g.run.level >= 10, `level ${g.run.level}`);
+  assert.equal(g.player.maxHp, hp0 + 12 * (g.run.level - 1));
+  assert.equal(g.run.pendingRare, Math.floor(g.run.level / 5));
+  d.frame(1);
+  assert.equal(g.modal && g.modal.type, 'boon');
+  assert.ok(g.modal.rare && g.modal.offer.every((id) => BOONS[id].school === 'rare'));
+  const id = g.modal.offer[g.modal.sel];
+  g.modal.t = 1; d.frame(1, ['confirm']);
+  assert.ok(g.player.boons.some((b) => b.id === id));
+  // 倒した敵からも経験値が入る
+  const g2 = newGame(12); g2.enterRoom(0, 1); g2.modal = null;
+  for (const e of g2.room.enemies) { e.hp = 0; e.alive = false; }
+  new Driver(g2).frame(2);
+  assert.ok(g2.run.exp > 0 || g2.run.level > 1);
+});
+
+test('稀少の強化：不死鳥は一度だけ立ち上がる、王冠は与ダメージ ×1.5、永劫ならコンボが時間で途切れない', () => {
+  const { g, d, e } = arena(RustSoldier, 60);
+  e.hp = e.maxHp = 1e6; e.cool = 99;
+  g.player.maxHp = 300; g.player.hp = 5;
+  g.player.setBoons([{ id: 'phoenix', tier: 1 }, { id: 'eternal', tier: 1 }]);
+  g.damagePlayer(999, { fromX: 0 });
+  assert.notEqual(g.player.state, 'dead');
+  assert.ok(g.player.hp > 0);
+  g.player.iframeT = 0; g.damagePlayer(9999, { fromX: 0 });
+  assert.equal(g.player.state, 'dead', 'only once');
+  assert.equal(computeStats([{ id: 'crown', tier: 1 }]).dmgMul, 1.5);
+  const { g: g3, d: d3 } = arena(RustSoldier, 400);
+  g3.player.setBoons([{ id: 'eternal', tier: 1 }]);
+  g3.combo.n = 7; g3.combo.t = 0.1;
+  d3.frame(60 * 5);
+  assert.equal(g3.combo.n, 7);
+  void d; void e;
+});
+
+test('継承：前の夜の強化を基本 3 個まで持ち越せる', () => {
+  const m = newMeta(1);
+  assert.equal(inheritCount(m), 3);
+});
+
+test('脅威：常時の術を 3 つ積むごとに敵が強く・多くなる（弓兵は増えない）', () => {
+  const g = newGame(21);
+  g.enterRoom(0, 1); g.modal = null;
+  const base = g.room.enemies.length, hp = g.room.enemies.map((e) => e.maxHp);
+  g.player.setBoons([{ id: 'orbit', tier: 3 }, { id: 'aura', tier: 3 }]); // 計 6 → 脅威 2
+  assert.equal(g.threatStep(), 2);
+  g.enterRoom(0, 1); g.modal = null;
+  assert.equal(g.room.enemies.length, base + 2);
+  assert.ok(g.room.enemies.filter((e) => e.extra).every((e) => e.kind !== 'archer' && e.kind !== 'turret'));
+  assert.ok(g.room.enemies[0].maxHp > hp[0] * 2, 'hp scaled');
+});
+
+test('常時の術は敵を怯ませない（積んでも敵が攻撃してくる）', () => {
+  const { g, d, e } = arena(RustSoldier, 40);
+  e.hp = e.maxHp = 1e6;
+  g.player.setBoons([{ id: 'orbit', tier: 5 }, { id: 'stormcloud', tier: 5 }]);
+  let flinched = false;
+  for (let i = 0; i < 60 * 4; i++) { d.frame(1); if (e.state === 'flinch') flinched = true; }
+  assert.ok(e.hp < e.maxHp, 'takes damage');
+  assert.ok(!flinched, 'never flinches from passives');
 });
