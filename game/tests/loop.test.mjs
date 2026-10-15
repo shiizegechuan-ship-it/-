@@ -78,15 +78,19 @@ test('セーブの読み込み：壊れたデータ・古い版は無視して�
   assert.equal(g.meta, null);
 });
 
-test('刻守の記憶：前の夜に最も使った手段への対策を1つだけ持つ', () => {
+test('刻守の記憶：前の夜の戦い方を分析し、最も多い手段への対策を1つ持つ', async () => {
+  const { habitAnalysis } = await import('../src/meta.js');
   assert.equal(bossCounter(null), null);
-  assert.equal(bossCounter({ dmgByCat: { combo: 50, heavy: 30 } }), null, 'below threshold');
+  assert.equal(bossCounter({ dmgByCat: { combo: 40, heavy: 30 } }), null, 'below threshold');
   assert.equal(bossCounter({ dmgByCat: { combo: 200, heavy: 400, echo: 100 } }), 'heavy');
+  // 回避を多用し、攻撃が偏っていなければ「読みのフェイント」
+  assert.equal(bossCounter({ dmgByCat: { combo: 300, heavy: 300, air: 200 }, dodges: 60, clock: 180 }), 'dodge');
+  const a = habitAnalysis({ dmgByCat: { combo: 300, heavy: 100 }, dodges: 6, clock: 120 });
+  assert.equal(a.counter, 'combo'); assert.equal(Math.round(a.shares.combo * 100), 75); assert.equal(a.dodgeRate, 3);
   const m = newMeta(1);
   const r1 = endLoop(m, { cause: 'death', floor: 3, boons: [], dmgByCat: { combo: 500 } });
-  assert.ok(r1.changed.some((c) => c.text.includes('反撃の足捌き')));
-  const r2 = endLoop(m, { cause: 'death', floor: 3, boons: [], dmgByCat: { combo: 500 } });
-  assert.ok(!r2.changed.some((c) => c.text.includes('戦い方を覚えた')), 'same counter is not re-announced');
+  const line = r1.changed.find((c) => c.text.includes('歯車の外殻'));
+  assert.ok(line && line.text.includes('連撃') && line.sub.includes('崩し方'), 'announces counter, habit share and how to break it');
 });
 
 test('偽りの勝利（鐘）：初回だけ楔の枠+1', () => {

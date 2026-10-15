@@ -83,6 +83,8 @@ function renderPlay(ctx, game) {
   for (const e of game.room.enemies) drawEnemy(b, game, e);
   drawPlayer(b, game, game.player);
   for (const s of fx.slashes) drawSlash(b, s);
+  for (const sp of game.room.spells || []) drawSpell(b, sp, game.time);
+  for (const im of fx.impacts || []) drawImpact(b, im);
   for (const pr of game.room.projectiles) drawProjectile(b, pr, game.time);
   for (const r of fx.rings) {
     const k = r.t / r.life;
@@ -229,26 +231,177 @@ function drawPlayer(b, game, p) {
   b.restore();
 }
 
+// 斬撃：段ごとに形を変える。振り抜きに合わせて弧が伸び、古い部分ほど暗く消える
+function sweep(b, x, y, r, a0, a1, k, col, th, dim) {
+  const prog = Math.min(1, k * 2.6);
+  const end = a0 + (a1 - a0) * prog;
+  const tail = a0 + (a1 - a0) * Math.max(0, prog - 0.55);
+  arc(b, x, y, r, Math.min(tail, end), Math.max(tail, end), col, th);
+  if (dim) arc(b, x, y, r - th, Math.min(a0, tail), Math.max(a0, tail), dim, 1);
+}
 function drawSlash(b, s) {
-  const p = s.owner, k = s.t / s.life;
-  const heavy = s.name === 'heavy', spin = s.name === 'combo4';
-  const r = heavy ? 24 : s.name === 'combo3' ? 21 : 17;
-  const x = cx(p) / 2 + (spin ? 0 : s.face * 5), y = cy(p) / 2 - 1;
-  const col = heavy ? '#f2c14e' : '#fff8e6';
-  const th = heavy ? 4 : 3;
-  b.globalAlpha = 1 - k * 0.8;
-  if (spin) arc(b, x, y, r, 0, Math.PI * 2 * (0.4 + k * 0.6), col, th);
-  else {
-    const f = s.face;
-    let a0, a1;
-    if (s.name === 'combo2') { a0 = -0.45 * Math.PI; a1 = 0.35 * Math.PI; }
-    else if (s.name === 'air') { a0 = -0.6 * Math.PI; a1 = 0.6 * Math.PI; }
-    else { a0 = -0.45 * Math.PI; a1 = 0.35 * Math.PI; }
-    if (f < 0) { const t0 = Math.PI - a1, t1 = Math.PI - a0; a0 = t0; a1 = t1; }
-    arc(b, x, y, r, a0, a1, col, th);
-    arc(b, x, y, r - th, a0 + 0.2, a1 - 0.2, 'rgba(255,255,255,0.35)', 1);
+  const p = s.owner, k = s.t / s.life, f = s.face;
+  const x = cx(p) / 2 + (s.name === 'combo4' ? 0 : f * 4), y = cy(p) / 2 - 1;
+  const mir = (a) => (f > 0 ? a : Math.PI - a);
+  b.globalAlpha = 1 - Math.max(0, k - 0.5) * 2;
+  switch (s.name) {
+    case 'combo1': // 横一文字の三日月＋流れる線
+      sweep(b, x, y, 17, mir(-0.45 * Math.PI), mir(0.3 * Math.PI), k, '#fff8e6', 3, 'rgba(255,248,230,0.35)');
+      for (let i = 0; i < 3; i++) line(b, x - f * (6 + i * 5), y - 4 + i * 4, x - f * (12 + i * 5), y - 4 + i * 4, 'rgba(255,255,255,0.45)');
+      break;
+    case 'combo2': // 斬り上げ
+      sweep(b, x, y, 17, mir(0.4 * Math.PI), mir(-0.55 * Math.PI), k, '#fff8e6', 3, 'rgba(255,248,230,0.35)');
+      if (k > 0.3) { const a = mir(-0.5 * Math.PI); pset(b, x + Math.cos(a) * 19, y + Math.sin(a) * 19, '#ffffff'); pset(b, x + Math.cos(a) * 21 + f, y + Math.sin(a) * 21 - 1, '#ffe14a'); }
+      break;
+    case 'combo3': { // 叩き下ろし＋地面の亀裂
+      sweep(b, x, y, 21, mir(-0.8 * Math.PI), mir(0.4 * Math.PI), k, '#ffffff', 4, 'rgba(255,220,160,0.4)');
+      if (k > 0.35) {
+        const gy = Math.round((p.y + p.h) / 2), gx = x + f * 14;
+        for (let i = 0; i < 6; i++) pset(b, gx + f * i * 2, gy - 1 - (i % 2), '#ffd08a');
+        line(b, gx - 3, gy - 1, gx + 3, gy - 1, '#ffffff');
+      }
+      break;
+    }
+    case 'combo4': // 回転斬り：時計の目盛りつき
+      sweep(b, x, y, 24, -Math.PI / 2, Math.PI * 1.5, k, '#fff8e6', 3, 'rgba(255,248,230,0.3)');
+      for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; if (i / 12 < k * 2.6) pset(b, x + Math.cos(a) * 28, y + Math.sin(a) * 28, i % 3 ? '#c9a052' : '#ffe14a'); }
+      break;
+    case 'heavy': { // 時計の針の突き＋文字盤の衝撃
+      const len = Math.round(42 * Math.min(1, k * 3));
+      line(b, x, y - 1, x + f * len, y - 1, '#f2c14e', 3);
+      line(b, x, y - 1, x + f * len, y - 1, '#fff6d0', 1);
+      for (let i = 0; i < 4; i++) rect(b, x + f * (len + i) - (f < 0 ? 0 : 0), y - 1 - (3 - i), 1, (3 - i) * 2 + 1, '#f2c14e');
+      if (k > 0.25) {
+        const cxx = x + f * 40, r = Math.round(6 + (k - 0.25) * 22);
+        circle(b, cxx, y - 1, r, '#ffe14a');
+        for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; pset(b, cxx + Math.cos(a) * (r + 2), y - 1 + Math.sin(a) * (r + 2), '#c9a052'); }
+      }
+      break;
+    }
+    case 'air': // 円を描く空中斬り
+      sweep(b, x, y, 18, mir(-0.7 * Math.PI), mir(0.7 * Math.PI), k, '#fff8e6', 3, 'rgba(255,248,230,0.35)');
+      break;
+    default:
+      sweep(b, x, y, 17, mir(-0.45 * Math.PI), mir(0.35 * Math.PI), k, '#fff8e6', 3);
   }
   b.globalAlpha = 1;
+}
+
+// 命中の閃光（4 方向の星）
+function drawImpact(b, im) {
+  const k = im.t / im.life, s = Math.round(im.size * (1 - k));
+  if (s <= 0) return;
+  const x = Math.round(im.x / 2), y = Math.round(im.y / 2);
+  rect(b, x - s, y, s * 2 + 1, 1, im.color); rect(b, x, y - s, 1, s * 2 + 1, im.color);
+  const d = Math.round(s * 0.5);
+  for (let i = 1; i <= d; i++) { pset(b, x + i, y + i, '#ffffff'); pset(b, x - i, y - i, '#ffffff'); pset(b, x + i, y - i, '#ffffff'); pset(b, x - i, y + i, '#ffffff'); }
+  pset(b, x, y, '#ffffff');
+}
+
+// ───────── 術のエフェクト ─────────
+function drawSpell(b, sp, t) {
+  const x = Math.round(sp.x / 2), y = Math.round(sp.y / 2);
+  switch (sp.kind) {
+    case 'flamering': {
+      const r = Math.round(sp.r / 2);
+      if (r < 2) break;
+      circle(b, x, y, r, '#ff7a3c'); circle(b, x, y, Math.max(1, r - 1), '#ffe14a');
+      const n = Math.max(8, Math.round(r * 0.9));
+      for (let i = 0; i < n; i++) {
+        const a = i / n * Math.PI * 2, fx = x + Math.cos(a) * r, fy = y + Math.sin(a) * r * 0.55;
+        const h = 2 + ((i * 7 + Math.floor(t * 20)) % 4);
+        rect(b, fx, fy - h, 1, h, i % 2 ? '#ff7a3c' : '#ffd08a');
+      }
+      for (let i = -r; i <= r; i += 2) pset(b, x + i, y + 1, 'rgba(255,120,60,0.6)');
+      break;
+    }
+    case 'star': {
+      if (sp.t < sp.delay) break;
+      const k = (sp.t - sp.delay) / sp.fall;
+      if (k < 1) {
+        const sx = (sp.from.x + (sp.x - sp.from.x) * k) / 2, sy = (sp.from.y + (sp.y - sp.from.y) * k) / 2;
+        dashLine(b, sx - 10, sy - 20, sx, sy, 'rgba(255,225,74,0.6)', 2, 1);
+        rect(b, sx - 3, sy, 7, 1, '#ffe14a'); rect(b, sx, sy - 3, 1, 7, '#ffe14a'); pset(b, sx, sy, '#ffffff');
+        pset(b, sx - 1, sy - 1, '#fff6d0'); pset(b, sx + 1, sy + 1, '#fff6d0');
+      } else {
+        const r = Math.round((k - 1) * 40);
+        b.globalAlpha = Math.max(0, 1 - (k - 1) / 0.6);
+        circle(b, x, y, r, '#ffe14a'); circle(b, x, y, Math.max(1, Math.round(r * 0.6)), '#ffffff');
+        rect(b, x - r - 3, y, r * 2 + 7, 1, '#fff6d0'); rect(b, x, y - r - 3, 1, r * 2 + 7, '#fff6d0');
+        b.globalAlpha = 1;
+      }
+      break;
+    }
+    case 'blade': {
+      const h = Math.round(sp.h / 4), f = sp.face;
+      for (let i = 2; i >= 0; i--) {
+        b.globalAlpha = i === 0 ? 1 : 0.3 / i;
+        const ox = x - f * i * 6;
+        arc(b, ox - f * h, y, h, f > 0 ? -0.5 * Math.PI : 0.5 * Math.PI, f > 0 ? 0.5 * Math.PI : 1.5 * Math.PI, i === 0 ? '#9fe3ff' : '#5aa9e6', 3);
+        if (i === 0) arc(b, ox - f * h, y, h - 3, f > 0 ? -0.4 * Math.PI : 0.6 * Math.PI, f > 0 ? 0.4 * Math.PI : 1.4 * Math.PI, '#ffffff', 1);
+      }
+      b.globalAlpha = 1;
+      break;
+    }
+    case 'toll': {
+      const r = Math.round(sp.r / 2), k = sp.t / 0.45;
+      b.globalAlpha = Math.max(0, 1 - Math.max(0, k - 1) * 4);
+      circle(b, x, y, r, '#f2c14e'); circle(b, x, y, Math.max(1, Math.round(r * 0.75)), 'rgba(255,230,160,0.7)'); circle(b, x, y, Math.max(1, Math.round(r * 0.5)), 'rgba(255,230,160,0.4)');
+      // 頭上の鐘
+      if (sp.t < 0.5) {
+        const by2 = y - 22 - Math.round(Math.sin(t * 30) * 1);
+        for (let i = 0; i < 8; i++) rect(b, x - 2 - Math.floor(i / 2), by2 + i, 5 + Math.floor(i / 2) * 2, 1, '#f2c14e');
+        rect(b, x - 6, by2 + 8, 13, 1, '#c9a052'); pset(b, x, by2 + 9, '#ffe14a');
+      }
+      b.globalAlpha = 1;
+      break;
+    }
+    case 'quake': {
+      const r = Math.round(sp.r / 2);
+      for (const d of [-1, 1]) for (let i = 0; i < 6; i++) { const h = Math.round(Math.sin(i / 5 * Math.PI) * 7); rect(b, x + d * (r - i), y - h, 1, h, i % 2 ? '#ffaa5a' : '#ffd08a'); }
+      break;
+    }
+    case 'ember': {
+      const r = Math.round(sp.r / 2);
+      circle(b, x, y, r, '#ff7a3c');
+      for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + t * 4; rect(b, x + Math.cos(a) * r, y + Math.sin(a) * r - 2, 1, 3, '#ffe14a'); }
+      break;
+    }
+    case 'hand': {
+      if (sp.t < (sp.delay || 0)) break;
+      const d = Math.hypot(sp.vx, sp.vy) || 1, ux = sp.vx / d, uy = sp.vy / d;
+      dashLine(b, x - ux * 12, y - uy * 12, x - ux * 4, y - uy * 4, 'rgba(242,193,78,0.5)', 1, 1);
+      line(b, x - ux * 4, y - uy * 4, x + ux * 4, y + uy * 4, '#f2c14e', 2);
+      pset(b, x + ux * 5, y + uy * 5, '#9fe3ff');
+      break;
+    }
+    case 'riposte': {
+      const k = sp.t / sp.life, tx = Math.round(sp.tx / 2), ty = Math.round(sp.ty / 2);
+      b.globalAlpha = 1 - k;
+      line(b, x, y, tx, ty, '#ffffff', 2);
+      for (let i = 0; i < 3; i++) { const mx = x + (tx - x) * (0.3 + i * 0.25), my = y + (ty - y) * (0.3 + i * 0.25); line(b, mx - 3, my - 4, mx + 3, my + 4, '#9fe3ff'); }
+      b.globalAlpha = 1;
+      break;
+    }
+    case 'thunder': {
+      const k = sp.t / sp.life;
+      b.globalAlpha = 1 - k;
+      let px = x, py = y - 90;
+      for (let i = 0; i < 9; i++) {
+        const nx = x + (i === 8 ? 0 : ((i * 37 + Math.floor(sp.x)) % 9) - 4), ny = py + 10;
+        line(b, px, py, nx, ny, '#e8f0ff', 2); line(b, px, py, nx, ny, '#9fe3ff', 1);
+        px = nx; py = ny;
+      }
+      circle(b, x, y, 6, '#e8f0ff');
+      if (sp.chain) {
+        const cx2 = Math.round(sp.chain.x / 2), cy2 = Math.round(sp.chain.y / 2);
+        let qx = x, qy = y;
+        for (let i = 1; i <= 5; i++) { const nx = x + (cx2 - x) * i / 5, ny = y + (cy2 - y) * i / 5 + (i < 5 ? ((i * 13) % 7) - 3 : 0); line(b, qx, qy, nx, ny, '#9fe3ff'); qx = nx; qy = ny; }
+      }
+      b.globalAlpha = 1;
+      break;
+    }
+  }
 }
 
 // ───────── 敵 ─────────
@@ -417,7 +570,7 @@ function outlinedImg(b, img, x, y, color) {
 
 function drawBoss(b, game, e, bx, by, t, flash, slowGlow) {
   const f = e.face, duel = e.trueDuel;
-  const wind = ['swingWind', 'handsWind', 'stopWind', 'stepWind', 'antiAirWind', 'leapWind'].includes(e.state);
+  const wind = ['swingWind', 'handsWind', 'stopWind', 'stepWind', 'antiAirWind', 'leapWind', 'feint', 'punishWind'].includes(e.state);
   // 予告（範囲）は体より先に
   if (e.state === 'leap') {
     const gx = Math.round(e.leapX / 2), gy = Math.round(game.map.groundBelow(e.leapX, e.y + e.h) / 2);
@@ -435,10 +588,19 @@ function drawBoss(b, game, e, bx, by, t, flash, slowGlow) {
     line(b, hx + Math.cos(a) * 5, hy + Math.sin(a) * 5, hx + Math.cos(a) * len, hy + Math.sin(a) * len, duel ? '#ffd38a' : '#c9a052');
   }
   const frame = e.state === 'defeated' ? 'kneel' : (e.state === 'swing' || e.state === 'riposte' || e.state === 'step') ? 'lunge' : wind ? 'wind' : 'stand';
-  if (wind) outlined(b, 'boss', frame, bx, by, f, 0.3 + e.tell * 0.7, 'red', duel);
+  if (e.tellKind === 'real' && e.state === 'swingWind') outlined(b, 'boss', frame, bx, by, f, 1, 'white', duel); // フェイントの後の本当の一撃
+  else if (wind) outlined(b, 'boss', frame, bx, by, f, 0.3 + e.tell * 0.7, 'red', duel);
   else if (e.state === 'parry') outlined(b, 'boss', frame, bx, by, f, 1, 'blue', duel);
   else outlined(b, 'boss', frame, bx, by, f, slowGlow, 'blue', duel);
   drawSprite(b, spr('boss', frame, flash ? 'white' : null, duel), bx, by, f);
+  // 歯車の外殻（連撃対策）：体のまわりを回る装甲板
+  if (e.counter === 'combo' && e.shell > 0) {
+    const n = 8, cyy = Math.round(cy(e) / 2);
+    for (let i = 0; i < n; i++) {
+      const a = i / n * Math.PI * 2 + t * 1.5, px = bx + Math.cos(a) * 15, py = cyy + Math.sin(a) * 15;
+      rect(b, px - 2, py - 2, 4, 4, '#120c14'); rect(b, px - 1, py - 1, 2, 2, Math.sin(a) > 0 ? '#c9a052' : '#8a6a34');
+    }
+  }
   // 振り子の剣
   if (e.state !== 'defeated') {
     let ang = f > 0 ? 0.6 : Math.PI - 0.6;

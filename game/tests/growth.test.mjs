@@ -146,3 +146,50 @@ test('古いセーブ（欠片・刻印なし）も読み込める', async () =>
   assert.equal(r.shards, 0);
   assert.ok(r.unlocked.includes('power'));
 });
+
+import { dawnProgress, learn as learnK2, addWedge as addW2 } from '../src/meta.js';
+test('夜明けへの道：段階が順に進み、次にすることが分かる', () => {
+  const m = newMeta(2);
+  let p = dawnProgress(m);
+  assert.equal(p.done, 0); assert.equal(p.total, 7); assert.equal(p.next.title, '刻守を倒す');
+  m.flags.bossBeaten = true; learnK2(m, 'lira_name'); learnK2(m, 'code');
+  p = dawnProgress(m); assert.equal(p.done, 3); assert.equal(p.next.title, '師の日誌を読む');
+  learnK2(m, 'master_reason'); m.slots = 3; addW2(m, { target: 'lira' }); learnK2(m, 'lira_message');
+  p = dawnProgress(m); assert.equal(p.next.title, '夜明けの決闘に勝つ');
+  m.flags.ending = true;
+  p = dawnProgress(m); assert.equal(p.done, 7); assert.equal(p.next, null);
+});
+
+for (const art of ['flamering', 'starfall', 'rewindblade', 'belltoll']) {
+  test(`発動する術「${art}」：ゲージを使って放ち、敵に当たる`, () => {
+    const { g, d, e } = arena(RustSoldier, 70);
+    e.hp = e.maxHp = 1e6; e.cool = 99;
+    g.player.setBoons([{ id: art, tier: 1 }]);
+    g.player.gauge = 100;
+    d.frame(1); d.frame(1, ['skill']);
+    assert.ok(g.player.gauge < 100, 'gauge spent');
+    d.frame(60);
+    assert.ok(e.hp < e.maxHp, 'spell hit the enemy');
+    assert.ok(g.run.dmgByCat.skill > 0, 'counted as 術 for the boss analysis');
+  });
+}
+
+test('発動条件つきの術：10コンボで秒針、重撃で落雷、ジャスト回避で斬り抜け', () => {
+  const { g, d, e } = arena(RustSoldier, 60);
+  e.hp = e.maxHp = 1e6; e.cool = 99;
+  g.player.setBoons([{ id: 'secondhand', tier: 1 }, { id: 'thunderbell', tier: 1 }, { id: 'riposte', tier: 1 }]);
+  for (let i = 0; i < 10; i++) g.dealDamage(e, { base: 1, cat: 'combo', knock: 0, dir: 1 });
+  assert.ok(g.room.spells.some((s) => s.kind === 'hand'));
+  g.dealDamage(e, { base: 10, cat: 'heavy', heavy: true, knock: 0, dir: 1 });
+  assert.ok(g.room.spells.some((s) => s.kind === 'thunder'));
+  g.perfectDodge();
+  assert.ok(g.room.spells.some((s) => s.kind === 'riposte'));
+});
+
+test('発動する術は 1 つだけ。別の術を取ると持ち替える', () => {
+  const g = newGame(8); const dd = new Driver(g);
+  g.player.setBoons([{ id: 'flamering', tier: 2 }]);
+  g.modal = { type: 'boon', offer: ['starfall'], sel: 0, count: 1, school: null, t: 1 };
+  dd.frame(1, ['confirm']);
+  assert.deepEqual(g.player.boons, [{ id: 'starfall', tier: 1 }]);
+});

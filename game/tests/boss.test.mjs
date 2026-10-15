@@ -55,6 +55,39 @@ test('刻守の記憶（重撃）：溜めを見せると受け流しの構え�
   assert.equal(b.state, 'riposte');
 });
 
+test('対策（連撃）：外殻が連撃を弾き（耐性）、重撃で割れると連撃が通る', () => {
+  const { g, d, b } = bossRoom(21, (g) => { g.meta.lastLoop = { dmgByCat: { combo: 500 } }; });
+  d.until(() => b.state === 'idle', 200);
+  b.cool = 99; b.state = 'recover'; b.recT = 99;
+  const h0 = b.hp;
+  g.dealDamage(b, { base: 100, cat: 'combo', knock: 0, dir: 1 }); g.combo.n = 0;
+  const lightDmg = h0 - b.hp;
+  assert.ok(lightDmg <= 31 && lightDmg >= 29, `combo resisted to 30% (${lightDmg})`);
+  // 重撃で外殻を割る
+  for (let i = 0; i < 50 && b.shell > 0; i++) { b.state = 'recover'; g.dealDamage(b, { base: 200, cat: 'heavy', heavy: true, knock: 0, dir: 1 }); g.combo.n = 0; }
+  assert.ok(b.shellDown > 0);
+  b.state = 'recover';
+  const h1 = b.hp;
+  g.dealDamage(b, { base: 100, cat: 'combo', knock: 0, dir: 1 });
+  assert.ok(h1 - b.hp >= 99, 'full damage after the shell breaks');
+});
+
+test('対策（術）：術を使うと突進してくる。術のダメージは軽減', () => {
+  const { g, d, b } = bossRoom(23, (g) => { g.meta.lastLoop = { dmgByCat: { skill: 500 } }; });
+  d.until(() => b.state === 'idle', 200);
+  g.player.setBoons([{ id: 'rewindblade', tier: 1 }]);
+  g.player.gauge = 100; d.frame(1); d.frame(1, ['skill']);
+  assert.equal(b.state, 'punishWind');
+});
+
+test('対策（回避）：フェイントで一拍止め、白く光ってから振る', () => {
+  const { g, d, b } = bossRoom(25, (g) => { g.meta.lastLoop = { dmgByCat: { combo: 300, heavy: 300, air: 300 }, dodges: 80, clock: 200 }; });
+  assert.equal(b.counter, 'dodge');
+  let feint = false, real = false;
+  for (let i = 0; i < 60 * 30 && !(feint && real); i++) { d.frame(1); g.player.iframeT = 0; if (b.state === 'feint') feint = true; if (b.state === 'swingWind' && b.tellKind === 'real') real = true; }
+  assert.ok(feint && real);
+});
+
 test('刻守の記憶（連撃）：短時間に3発受けると赤く光って跳び退く', () => {
   const { g, d, b } = bossRoom(9, (g) => { g.meta.lastLoop = { dmgByCat: { combo: 500 } }; });
   d.until(() => b.state === 'idle', 200);

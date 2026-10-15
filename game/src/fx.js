@@ -6,6 +6,7 @@ export class Fx {
     this.ghosts = [];
     this.slashes = [];
     this.rings = [];
+    this.impacts = [];
     this.shakeT = 0; this.shakeMag = 0;
     this.flash = 0; this.flashColor = '#fff';
     this.vignette = 0; // 被弾時の赤
@@ -31,10 +32,11 @@ export class Fx {
     }
   }
   burst(x, y, color, n = 18) { this.sparks(x, y, color, n, 340); this.ring(x, y, color, 40); }
+  impact(x, y, color = '#ffffff', size = 6) { this.impacts.push({ x, y, color, size, t: 0, life: 0.14 }); }
   ring(x, y, color, r = 30, life = 0.3) { this.rings.push({ x, y, color, r, life, t: 0 }); }
   text(x, y, str, color = '#fff', size = 14) { this.texts.push({ x, y, str, color, size, t: 0, life: 0.7 }); }
   afterimage(e) { this.ghosts.push({ x: e.x, y: e.y, w: e.w, h: e.h, face: e.face, t: 0, life: 0.22 }); }
-  slash(p, name) { this.slashes.push({ owner: p, name, t: 0, life: name === 'heavy' ? 0.2 : 0.12, face: p.face }); }
+  slash(p, name) { this.slashes.push({ owner: p, name, t: 0, life: name === 'heavy' ? 0.26 : name === 'combo3' || name === 'combo4' ? 0.22 : 0.17, face: p.face }); }
   setBanner(text, sub = '', color = '#efe6d2', life = 1.6) { this.banner = { text, sub, color, t: 0, life }; }
 
   update(dt) {
@@ -46,6 +48,8 @@ export class Fx {
     this.ghosts = this.ghosts.filter((g) => g.t < g.life);
     for (const s of this.slashes) s.t += dt;
     this.slashes = this.slashes.filter((s) => s.t < s.life);
+    for (const im of this.impacts) im.t += dt;
+    this.impacts = this.impacts.filter((im) => im.t < im.life);
     for (const r of this.rings) r.t += dt;
     this.rings = this.rings.filter((r) => r.t < r.life);
     if (this.shakeT > 0) this.shakeT -= dt; else this.shakeMag = 0;
@@ -53,5 +57,5 @@ export class Fx {
     this.vignette = Math.max(0, this.vignette - dt * 2);
     if (this.banner) { this.banner.t += dt; if (this.banner.t > this.banner.life) this.banner = null; }
   }
-  clear() { this.parts = []; this.texts = []; this.ghosts = []; this.slashes = []; this.rings = []; this.shakeT = 0; this.flash = 0; }
+  clear() { this.parts = []; this.texts = []; this.ghosts = []; this.slashes = []; this.rings = []; this.impacts = []; this.shakeT = 0; this.flash = 0; }
 }

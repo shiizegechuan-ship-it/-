@@ -5,6 +5,7 @@ import { TileMap } from './tilemap.js';
 import { Player } from './player.js';
 import { makeEnemy, RustSoldier, GearKnight } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
+import { castArt, updateSpells, PROCS, ACTIVE_ARTS } from './arts.js';
 import { Fx } from './fx.js';
 import { NullSfx } from './audio.js';
 import { BOONS, rollOffer, boonMax } from './boons.js';
@@ -12,7 +13,7 @@ import { LAYOUTS, FLOOR_NAMES, buildPlan, layoutRows } from './world.js';
 import {
   newMeta, serialize, deserialize, endLoop, learn, knows, hasWedge, addWedge, removeWedge, freeSlots,
   bossCounter, trueEndReady, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
-  upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount,
+  upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount, habitAnalysis, dawnProgress,
 } from './meta.js';
 
 const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
@@ -94,6 +95,9 @@ export class Game {
       critRng: makeRng(plan.offerSeed ^ 0xc817),
       scale: enemyScale(meta),
     };
+    // 発動する術は 1 つだけ（楔と継承で重なったら Lv の高い方）
+    const actives = wedgedBoons.filter((b) => BOONS[b.id].active).sort((a, b) => b.tier - a.tier);
+    for (const extra of actives.slice(1)) wedgedBoons.splice(wedgedBoons.indexOf(extra), 1);
     this.player = new Player(0, 0);
     this.player.baseMaxHp = PC.maxHp + 10 * upLv(meta, 'hp');
     this.player.metaAtk = 1 + 0.1 * upLv(meta, 'atk');
@@ -106,7 +110,13 @@ export class Game {
     this.fx.clear();
     this.timeStopT = 0; this.slowT = 0; this.hitstop = 0;
     this.enterRoom(0, 0);
-    this.fx.setBanner(`第 ${meta.loop} 夜`, `${FLOOR_NAMES[0]}　夜の深さ Lv${this.run.scale.level}`, '#f2c14e', 2.2);
+    const pr = dawnProgress(meta);
+    this.fx.setBanner(`第 ${meta.loop} 夜`, pr.next ? `夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}` : `終わらない夜　深さLv${this.run.scale.level}`, '#f2c14e', 2.6);
+    if (meta.loop === 1 && !meta.flags.ending) this.openDialog([
+      { who: '', text: 'この時計塔は、同じ夜を繰り返している。' },
+      { who: '', text: '目的は「夜明けを迎える」こと。鐘楼の刻守を倒すだけでは、鐘が鳴って夜は戻る。', note: '進み具合は 記録帳（Tab）の「夜明け」で確認できる' },
+      { who: '', text: '倒れても、知ったことと、楔を打ったものは次の夜に残る。少しずつ、夜明けへの道を進もう。' },
+    ]);
     this.save();
     this.emit('loopStart', { loop: meta.loop });
   }
@@ -121,7 +131,7 @@ export class Game {
     run.fi = fi; run.ri = ri;
     const desc = this.roomDesc();
     this.map = new TileMap(layoutRows(desc));
-    this.room = { desc, cleared: false, rewardSpawned: false, enemies: [], projectiles: [], echoes: [], items: [], t: 0, boss: null, glenHp: 0 };
+    this.room = { desc, cleared: false, rewardSpawned: false, enemies: [], projectiles: [], echoes: [], items: [], spells: [], t: 0, boss: null, glenHp: 0 };
     this.player.vx = 0; this.player.vy = 0; this.player.state = 'normal'; this.player.atk = null;
     const spawn = this.map.markers.find((m) => m.c === 'P') || { x: TILE * 2, y: this.map.pxH - TILE * 4 };
     this.player.x = spawn.x + (TILE - this.player.w) / 2;
@@ -243,9 +253,11 @@ export class Game {
     const lines = [];
     if (this.meta.flags.bossBeaten) lines.push({ who: '刻守', text: 'また来たか。何度来ても、夜は終わらんよ。' });
     else lines.push({ who: '刻守', text: '……弟子よ。鐘の時刻だ。下がっていろ。' });
-    if (counter) lines.push({ who: '刻守', text: `前の夜、お前は${{ combo: '連撃', heavy: '重撃', air: '空中からの攻め', echo: '残響', skill: '時歪' }[counter]}に頼りすぎた。もう通じんぞ。`, note: `刻守の対策：${COUNTERS[counter].name}――${COUNTERS[counter].desc}` });
+    if (counter) lines.push({ who: '刻守', text: `前の夜、お前は${COUNTERS[counter].habit}に頼りすぎた。もう通じんぞ。` });
     if (hasWedge(this.meta, 'brake')) lines.push({ who: '刻守', text: '歯止めを……！ 小癪な。ならば力で止めるまで！', note: '時止め封印／第2段階が早まり、技が速くなる' });
-    this.openDialog(lines);
+    // 前の夜の戦い方の分析を先に見せる
+    if (counter) this.modal = { type: 'analysis', a: habitAnalysis(this.meta.lastLoop), counter, next: lines, t: 0 };
+    else this.openDialog(lines);
   }
 
   // ───────── 毎フレーム ─────────
@@ -299,6 +311,8 @@ export class Game {
     this.resolveEnemyAttacks();
     for (const pr of room.projectiles) { updateHoming(pr, this); pr.update(this, this.timeStopT > 0 && !pr.homing ? dt * 0.3 : dt); }
     this.resolveProjectiles();
+    updateSpells(this, dt);
+    if (p.onGround) p.airHits = 0;
     this.updateEchoes(dt);
     this.handleDeaths();
     room.projectiles = room.projectiles.filter((x) => x.alive);
@@ -355,12 +369,13 @@ export class Game {
     if (e.hp <= e.maxHp * 0.35) dmg *= st.executeMul;
     let crit = false;
     let cat = info.cat;
+    const direct = !info.echo && !info.spell;
     if (!info.echo) {
       if (e.hp >= e.maxHp && st.openerMul > 1) dmg *= st.openerMul;
       if (p.onGround && Math.abs(p.vx) > 150 && st.momentumMul > 1) dmg *= st.momentumMul;
       if (run.critRng.next() < st.critChance + 0.02 * upLv(this.meta, 'crit')) { crit = true; dmg *= st.critMul; }
-      if (p.afterT > 0 && st.afterimageMul > 1) { dmg *= st.afterimageMul; p.afterT = 0; this.fx.text(cx(e), e.y - 18, '残影', '#5fd18b', 12); }
-      if (p.empowerNext > 1) { dmg *= p.empowerNext; p.empowerNext = 1; this.fx.text(cx(e), e.y - 30, '×3', '#e35d5d', 14); }
+      if (direct && p.afterT > 0 && st.afterimageMul > 1) { dmg *= st.afterimageMul; p.afterT = 0; this.fx.text(cx(e), e.y - 18, '残影', '#5fd18b', 12); }
+      if (direct && p.empowerNext > 1) { dmg *= p.empowerNext; p.empowerNext = 1; this.fx.text(cx(e), e.y - 30, '×3', '#e35d5d', 14); }
       if (info.heavy && e.slowed && st.shatterMul > 1) {
         dmg *= st.shatterMul; info.breaks = true;
         this.fx.burst(cx(e), cy(e), '#5aa9e6', 22); this.fx.text(cx(e), e.y - 30, '粉砕', '#5aa9e6', 16);
@@ -387,21 +402,33 @@ export class Game {
       this.learnOnce(e);
       return res;
     }
+    if (res.dmg != null) dmg = res.dmg;
     run.dmgByCat[info.echo ? 'echo' : cat] = (run.dmgByCat[info.echo ? 'echo' : cat] || 0) + dmg;
     this.addCombo();
     if (res.guardBreak) { this.sfx.play('guardBreak'); this.fx.text(cx(e), e.y - 30, '崩し', '#f2c14e', 16); this.fx.shake(5, 0.2); }
     const hx = info.dir > 0 ? e.x + 4 : e.x + e.w - 4;
+    if (!info.echo) this.fx.impact(hx, cy(e), crit ? '#ffe14a' : info.heavy ? '#f2c14e' : info.spell ? '#9fe3ff' : '#ffffff', crit ? 10 : info.heavy ? 9 : 6);
+    if (info.heavy || crit) for (let i = 0; i < 4; i++) this.fx.parts.push({ x: hx, y: cy(e), vx: (Math.random() - 0.5) * 300, vy: -100 - Math.random() * 200, life: 0.5, t: 0, color: '#c9a052', size: 3, g: 900 }); // 歯車の破片
     this.fx.sparks(hx, cy(e), info.echo ? '#b67cf0' : info.heavy ? '#f2c14e' : '#fff3d6', info.heavy ? 14 : 7, info.heavy ? 380 : 260, info.dir);
     const num = fmtNum(dmg) + (crit ? '!' : '');
+    if (res.resisted) { this.fx.text(cx(e) + 14, e.y - 22, '耐性', '#8a8a92', 11); this.fx.text(cx(e) + (Math.random() - 0.5) * 10, e.y - 6, num, '#8a8a92', 12); this.addCombo(); this.learnOnce(e); return res; }
     this.fx.text(cx(e) + (Math.random() - 0.5) * 10, e.y - 6, num, crit ? '#ffe14a' : info.echo ? '#c9a0ff' : info.heavy ? '#f2c14e' : '#ffffff', crit ? 20 : info.heavy ? 18 : 13);
-    if (!info.echo) {
+    if (info.spell) {
+      this.sfx.play(crit ? 'heavyHit' : 'hit');
+      this.hitstop = Math.max(this.hitstop, crit ? 2 / 60 : 1 / 60);
+      this.fx.shake(crit ? 3 : 1.5, 0.06);
+    } else if (!info.echo) {
       this.hitstop = Math.max(this.hitstop, (info.stop || 3 / 60) + (crit ? 2 / 60 : 0));
       this.sfx.play(info.heavy || crit || (info.shake || 0) >= 3 ? 'heavyHit' : 'hit');
       // 命中で画面を小さく揺らす（重い一撃・会心ほど大きく）
       this.fx.shake(Math.max(info.shake || 0, crit ? 4 : info.heavy ? 5 : 2), crit || info.heavy ? 0.14 : 0.07);
       if (crit) this.fx.ring(cx(e), cy(e), '#ffe14a', 28, 0.2);
-      p.gauge = Math.min(PC.gaugeMax, p.gauge + PC.gaugePerHit);
+      p.gauge = Math.min(PC.gaugeMax, p.gauge + PC.gaugePerHit * st.gaugeMul);
       if (st.lagTime) e.lag = Math.max(e.lag, st.lagTime);
+      // 発動条件つきの術
+      if (info.heavy && st.procs.thunderbell && e.alive) PROCS.thunderbell(this, st.procs.thunderbell, e);
+      if (info.cat === 'air' && st.procs.plunge && !p.onGround) { p.airHits = (p.airHits || 0) + 1; if (p.airHits >= 3 && !p.plunging) { p.airHits = 0; PROCS.plunge(this, st.procs.plunge); } }
+      if (st.procs.lastlight && p.hp < p.maxHp * 0.3) PROCS.lastlight(this, st.procs.lastlight, e);
       if (st.echoMul) {
         this.room.echoes.push({ t: 0.45, e, dmg: info.base * st.echoMul, dir: info.dir });
         if (st.doubleEchoOnSlow && e.slowed) this.room.echoes.push({ t: 0.7, e, dmg: info.base * st.echoMul, dir: info.dir });
@@ -419,6 +446,7 @@ export class Game {
     c.n++; c.t = 2.2 + 0.4 * upLv(this.meta, 'combo'); c.pop = 1;
     c.max = Math.max(c.max, c.n);
     this.run.maxCombo = Math.max(this.run.maxCombo || 0, c.n);
+    if (c.n % 10 === 0 && this.player.stats.procs.secondhand) PROCS.secondhand(this, this.player.stats.procs.secondhand);
     if (c.n % 25 === 0) { this.fx.setBanner(`${c.n} HIT`, `与ダメージ +${Math.round(c.n * this.player.stats.comboPer * 100)}%`, '#ff9a3c', 0.9); this.sfx.play('charged'); }
   }
   addShards(n, x, y) {
@@ -486,6 +514,7 @@ export class Game {
     this.fx.ring(cx(p), cy(p), '#ffffff', 46, 0.35);
     this.fx.text(cx(p), p.y - 20, '刹那', '#ffffff', 16);
     if (st.perfectResetsDodge) { p.dodgeCd = 0; p.airDodgeUsed = false; }
+    if (st.procs.riposte) PROCS.riposte(this, st.procs.riposte);
     if (st.perfectNextMul > 1) p.empowerNext = st.perfectNextMul;
     if (st.freezeTime) {
       for (const e of this.room.enemies) if (e.alive && Math.hypot(cx(e) - cx(p), cy(e) - cy(p)) < 220) e.lag = Math.max(e.lag, st.freezeTime);
@@ -523,6 +552,15 @@ export class Game {
 
   useSkill() {
     const p = this.player;
+    const art = p.stats.activeArt;
+    if (art) {
+      const c = ACTIVE_ARTS[art.id].cost(art.tier || 1);
+      if (p.gauge < c) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 14, 'ゲージ不足', '#9a8fa6', 11); return false; }
+      p.gauge -= c;
+      castArt(this, art);
+      if (this.room.boss) this.room.boss.onPlayerCast(this);
+      return true;
+    }
     const cost = PC.skillCost * p.stats.skillCostMul;
     if (p.gauge < cost) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 14, 'ゲージ不足', '#9a8fa6', 11); return false; }
     p.gauge -= cost;
@@ -531,6 +569,7 @@ export class Game {
       e.warp = e.boss && e.counter === 'skill' ? t / 2 : t;
     }
     for (const pr of this.room.projectiles) if (Math.hypot(pr.x - cx(p), pr.y - cy(p)) < PC.skillRadius) { pr.vx *= 0.35; pr.vy *= 0.35; }
+    if (this.room.boss) this.room.boss.onPlayerCast(this);
     this.sfx.play('skill');
     this.fx.ring(cx(p), cy(p), '#5aa9e6', PC.skillRadius, 0.5);
     this.fx.screenFlash('#5aa9e6', 0.25);
@@ -953,7 +992,7 @@ export class Game {
     if (run.ended) return;
     run.ended = true;
     const report = endLoop(this.meta, {
-      cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock, shards: run.shards,
+      cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock, shards: run.shards, dodges: p.dodgeCount || 0,
     });
     this.save();
     this.sfx.play('rewind');
@@ -978,7 +1017,7 @@ export class Game {
     if (e.t > 0.8 && (input.pressed('confirm') || input.pressed('attack') || input.pressed('jump'))) {
       e.page++; e.t = 0;
       this.sfx.play('select');
-      if (e.page >= ENDING_PAGES.length) { this.scene = 'title'; this.titleSel = 0; }
+      if (e.page >= ENDING_PAGES.length) { this.scene = 'title'; this.titleSel = 0; this.save(); }
     }
   }
 
@@ -1081,7 +1120,7 @@ export class Game {
   // ───────── タイトル ─────────
   titleOptions() {
     const o = [];
-    if (this.meta) o.push({ id: 'continue', label: `続きから（第 ${this.meta.loop} 夜）` });
+    if (this.meta) o.push({ id: 'continue', label: this.meta.flags.ending ? `終わらない夜へ（第 ${this.meta.loop} 夜）` : `続きから（第 ${this.meta.loop} 夜）` });
     o.push({ id: 'new', label: this.meta ? 'はじめから（記録を消す）' : 'はじめる' });
     o.push({ id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}` });
     return o;
@@ -1133,6 +1172,7 @@ export class Game {
     const m = this.modal;
     if (!m) return false;
     switch (m.type) {
+      case 'analysis': if (m.t > 0.4) this.openDialog(m.next); return false;
       case 'dialog': {
         const last = m.idx >= m.lines.length - 1;
         if (last && m.choices) { const n = m.choices.length; const i = row(472 - n * 22, 22, n, 22); if (i < 0) return false; m.sel = i; return true; }
@@ -1232,6 +1272,9 @@ export class Game {
         }
         break;
       }
+      case 'analysis':
+        if (m.t > 0.4 && ok) { this.sfx.play('confirm'); input.consume('attack'); input.consume('jump'); this.openDialog(m.next); }
+        break;
       case 'boon': {
         if (m.t < 0.25) return; // 誤選択防止
         if (input.pressed('left')) { m.sel = (m.sel + m.offer.length - 1) % m.offer.length; this.sfx.play('select'); }
@@ -1240,6 +1283,8 @@ export class Game {
           const id = m.offer[m.sel];
           const own = this.player.boons.find((b) => b.id === id);
           if (own) this.player.setBoons(this.player.boons.map((b) => (b.id === id ? { ...b, tier: Math.min(boonMax(id), b.tier + 1) } : b)));
+          // 発動する術は 1 つだけ：別の術に持ち替える
+          else if (BOONS[id].active) this.player.setBoons([...this.player.boons.filter((b) => !BOONS[b.id].active), { id, tier: 1 }]);
           else this.player.setBoons([...this.player.boons, { id, tier: 1 }]);
           const nowTier = this.player.boons.find((b) => b.id === id).tier;
           this.sfx.play('pickup');
@@ -1331,7 +1376,7 @@ export class Game {
   }
 }
 
-export const BOON_COLORS = { haste: '#5fd18b', stasis: '#5aa9e6', echo: '#b67cf0', risk: '#e35d5d', power: '#ff9a3c' };
+export const BOON_COLORS = { haste: '#5fd18b', stasis: '#5aa9e6', echo: '#b67cf0', risk: '#e35d5d', power: '#ff9a3c', arts: '#ff6ad5' };
 // 大きな数字を読みやすく（1,234 / 12.3万）
 export function fmtNum(n) {
   n = Math.round(n);
@@ -1345,4 +1390,5 @@ export const ENDING_PAGES = [
   ['鐘は鳴らなかった。', '夜は戻らず、塔に、はじめての朝が来た。'],
   ['市場で、少女が空を見上げている。', '――おはよう、お父さん。'],
   ['夜明けの楔', '遊んでくれてありがとう。'],
+  ['クリア', 'ここで物語は完結です。', '続けて遊ぶと「終わらない夜」――敵がさらに強くなる挑戦です。'],
 ];

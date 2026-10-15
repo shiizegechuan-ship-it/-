@@ -5,6 +5,7 @@ export const SCHOOLS = {
   echo: { name: '残響', color: '#b67cf0' },
   risk: { name: '危険', color: '#e35d5d' },
   power: { name: '火力', color: '#ff9a3c' },
+  arts: { name: '術', color: '#ff6ad5' },
 };
 const pc = (n) => `${Math.round(n)}%`;
 
@@ -34,6 +35,17 @@ export const BOONS = {
   bloodclock: { school: 'power', max: 5, name: '血の秒針', desc: (t) => `撃破ごとに この夜の与ダメージ +${2 * t}%（累積）` },
   opener: { school: 'power', max: 5, name: '先手', desc: (t) => `無傷の敵への一撃 +${pc(60 * t)}` },
   momentum: { school: 'power', max: 5, name: '勢い', desc: (t) => `走りながらの攻撃 +${pc(25 * t)}` },
+  // 術：発動する術（V で放つ。装着は 1 つ、取り直すと Lv アップ）
+  flamering: { school: 'arts', max: 5, active: true, name: '刻炎陣', desc: (t) => `[術] 周囲に炎の輪を3度広げる（${Math.round(22 * (1 + 0.4 * (t - 1)))}×3）ゲージ${40 - 3 * (t - 1)}` },
+  starfall: { school: 'arts', max: 5, active: true, name: '星落とし', desc: (t) => `[術] 近くの敵に星を${4 + t}つ降らせる（各${Math.round(30 * (1 + 0.4 * (t - 1)))}）ゲージ${55 - 4 * (t - 1)}` },
+  rewindblade: { school: 'arts', max: 5, active: true, name: '逆行の刃', desc: (t) => `[術] 前方へ飛ぶ巨大な斬撃。貫通（${Math.round(42 * (1 + 0.4 * (t - 1)))}）ゲージ${35 - 3 * (t - 1)}` },
+  belltoll: { school: 'arts', max: 5, active: true, name: '鐘鳴', desc: (t) => `[術] 広がる鐘の衝撃で吹き飛ばし怯ませる（${Math.round(34 * (1 + 0.4 * (t - 1)))}）ゲージ${45 - 3 * (t - 1)}` },
+  // 術：発動条件つき（自動で出る）
+  secondhand: { school: 'arts', max: 5, name: '秒針の連斬', desc: (t) => `[条件] 10コンボごとに追尾する秒針を3本（各${Math.round(18 * (1 + 0.4 * (t - 1)))}）` },
+  riposte: { school: 'arts', max: 5, name: '刹那返し', desc: (t) => `[条件] ジャスト回避で近くの敵を斬り抜ける（${Math.round(60 * (1 + 0.4 * (t - 1)))}）` },
+  thunderbell: { school: 'arts', max: 5, name: '落雷の鐘', desc: (t) => `[条件] 重撃の命中に雷が落ち、もう1体へ連鎖（${Math.round(45 * (1 + 0.4 * (t - 1)))}）` },
+  plunge: { school: 'arts', max: 5, name: '落下斬り', desc: (t) => `[条件] 空中で3回当てると急降下し、着地の衝撃波（${Math.round(32 * (1 + 0.4 * (t - 1)))}）` },
+  lastlight: { school: 'arts', max: 5, name: '残り火', desc: (t) => `[条件] HP30%以下のとき、命中した敵が炎を噴く（${Math.round(12 * (1 + 0.4 * (t - 1)))}）` },
 };
 export const boonMax = (id) => BOONS[id].max || 2;
 
@@ -43,6 +55,7 @@ export const RESONANCE = {
   stasis: '遅い敵の予備動作が 30% 長くなる',
   echo: '残響の威力 +25%',
   power: '会心率 +5%',
+  arts: '命中時の秒針ゲージ +50%',
 };
 // 系統をまたぐ相乗効果（説明用。効果自体は個別の強化の組み合わせで自然に起きるものも含む）
 export const CROSS = [
@@ -53,7 +66,7 @@ export const CROSS = [
 ];
 
 export function schoolCounts(boons) {
-  const c = { haste: 0, stasis: 0, echo: 0, risk: 0, power: 0 };
+  const c = { haste: 0, stasis: 0, echo: 0, risk: 0, power: 0, arts: 0 };
   for (const b of boons) c[BOONS[b.id].school]++;
   return c;
 }
@@ -104,6 +117,10 @@ export function computeStats(boons) {
     killStack: 0.02 * t('bloodclock'),
     openerMul: 1 + 0.6 * t('opener'),
     momentumMul: 1 + 0.25 * t('momentum'),
+    // 術
+    activeArt: boons.find((b) => BOONS[b.id].active) || null,
+    procs: { secondhand: t('secondhand'), riposte: t('riposte'), thunderbell: t('thunderbell'), plunge: t('plunge'), lastlight: t('lastlight') },
+    gaugeMul: counts.arts >= 2 ? 1.5 : 1,
   };
   return s;
 }
@@ -120,7 +137,7 @@ export function rollOffer(rng, owned, unlockedSchools, n = 3) {
   for (const id of pool) {
     const sc = BOONS[id].school;
     let w = sc === 'risk' ? 1 : 2 + (counts[sc] || 0) * 2;
-    if (sc === 'power') w = id in lv ? 3 : 2;
+    if (sc === 'power' || sc === 'arts') w = id in lv ? 3 : 2;
     for (let i = 0; i < w; i++) weighted.push(id);
   }
   const out = [];

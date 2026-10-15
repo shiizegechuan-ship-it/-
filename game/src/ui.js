@@ -2,7 +2,8 @@
 import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC } from './config.js';
 import { clamp } from './util.js';
 import { BOONS, SCHOOLS, RESONANCE, synergyHints, schoolCounts } from './boons.js';
-import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, openQuestions, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritCount, enemyScale } from './meta.js';
+import { ACTIVE_ARTS } from './arts.js';
+import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, openQuestions, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritCount, enemyScale, DAWN_STEPS, dawnProgress } from './meta.js';
 import { FLOOR_NAMES } from './world.js';
 
 // ドット文字（DotGothic16）。読み込めない環境では OS の日本語フォントで表示される
@@ -51,11 +52,12 @@ export function drawHud(ctx, game) {
   ctx.fillStyle = k < 0.3 ? '#ff5a3c' : '#e35d5d'; ctx.fillRect(22, 20, hpW * k, 12);
   text(ctx, `${Math.ceil(p.hp)} / ${p.maxHp}`, 22 + hpW - 4, 31, { size: 10, align: 'right', color: '#fff' });
   // 秒針ゲージ（時歪の消費量に目盛り）
-  const cost = PC.skillCost * p.stats.skillCostMul;
+  const art = p.stats.activeArt;
+  const cost = art ? ACTIVE_ARTS[art.id].cost(art.tier || 1) : PC.skillCost * p.stats.skillCostMul;
   ctx.fillStyle = '#16202c'; ctx.fillRect(22, 38, hpW, 8);
   ctx.fillStyle = p.gauge >= cost ? '#5aa9e6' : '#3a6a90'; ctx.fillRect(22, 38, hpW * (p.gauge / PC.gaugeMax), 8);
   for (let c = cost; c < PC.gaugeMax; c += cost) { ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillRect(22 + hpW * (c / PC.gaugeMax), 37, 1, 10); }
-  text(ctx, p.gauge >= cost ? '時歪 V' : '秒針', 22 + hpW + 4, 47, { size: 9, color: p.gauge >= cost ? '#9fd0ff' : C.muted });
+  text(ctx, `${art ? BOONS[art.id].name : '時歪'}${p.gauge >= cost ? ' V' : ''}`, 22 + hpW + 4, 47, { size: 10, color: p.gauge >= cost ? (art ? '#ff8ae0' : '#9fd0ff') : C.muted });
   if (p.dodgeCd > 0) { ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(22, 50, hpW * clamp(1 - p.dodgeCd / 0.8, 0, 1), 2); }
 
   // 中央：夜の時刻・階層・部屋の進み
@@ -127,7 +129,16 @@ export function drawHud(ctx, game) {
   if (b) {
     const w = 520, x = VIEW_W / 2 - w / 2, y = VIEW_H - 40;
     text(ctx, b.trueDuel ? '刻守 ― 夜明けの決闘' : '刻守', x, y - 6, { size: 13, bold: true, color: b.trueDuel ? '#ffd38a' : '#efe6d2', font: SERIF });
-    if (b.counter) text(ctx, `対策：${COUNTERS[b.counter].name}`, x + w, y - 6, { size: 10, align: 'right', color: '#ff9a7a' });
+    if (b.counter) {
+      text(ctx, `対策：${COUNTERS[b.counter].name}`, x + w, y - 6, { size: 11, align: 'right', color: '#ff9a7a' });
+      text(ctx, `崩し方：${COUNTERS[b.counter].weak}`, VIEW_W / 2, y + 26, { size: 11, align: 'center', color: '#c9b0a0' });
+      if (b.counter === 'combo') {
+        const sw = 120, sx = x + w - sw;
+        ctx.fillStyle = '#05040a'; ctx.fillRect(sx - 1, y - 30, sw + 2, 6);
+        ctx.fillStyle = b.shell > 0 ? '#c9a052' : '#3a3242'; ctx.fillRect(sx, y - 29, Math.round(sw * Math.max(0, b.shell) / (b.shellMax || 1)), 4);
+        text(ctx, b.shell > 0 ? '外殻' : `外殻なし ${Math.ceil(b.shellDown)}秒`, sx - 6, y - 23, { size: 10, align: 'right', color: '#c9a052' });
+      }
+    }
     if (b.brake) text(ctx, b.trueDuel ? '' : '時止め封印', x + w - (b.counter ? 150 : 0), y - 6, { size: 10, align: 'right', color: C.gold });
     ctx.fillStyle = '#1a1018'; ctx.fillRect(x, y, w, 10);
     ctx.fillStyle = b.trueDuel ? '#ffd38a' : '#c94a3a'; ctx.fillRect(x, y, w * clamp(b.hp / b.maxHp, 0, 1), 10);
@@ -160,6 +171,7 @@ export function drawModal(ctx, game) {
   if (m.type === 'forge') drawForge(ctx, game, m);
   if (m.type === 'code') drawCode(ctx, game, m);
   if (m.type === 'pause') drawPause(ctx, game, m);
+  if (m.type === 'analysis') drawAnalysis(ctx, game, m);
   if (m.type === 'journal') drawJournal(ctx, game, m);
 }
 
@@ -207,6 +219,8 @@ function drawBoonPick(ctx, game, m) {
     const nt = own ? own.tier + 1 : 1;
     text(ctx, def.name, x + 16, y + 56, { size: 20, bold: true, font: SERIF });
     if (def.max) text(ctx, own ? `Lv${own.tier} → ${nt}` : 'Lv1', x + cw - 16, y + 28, { size: 13, align: 'right', color: own ? '#ffe14a' : C.muted });
+    const curArt = def.active && !own ? p.boons.find((b) => BOONS[b.id].active) : null;
+    if (curArt) text(ctx, `持ち替え：${BOONS[curArt.id].name} を外す`, x + 16, y + ch - 32, { size: 11, color: '#ff8ae0' });
     wrap(ctx, def.desc(nt), cw - 32, 13).forEach((l, j) => text(ctx, l, x + 16, y + 86 + j * 19, { size: 13, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0' }));
     const hints = synergyHints(id, p.boons);
     let hy = y + 170;
@@ -256,10 +270,11 @@ function drawPause(ctx, game, m) {
     const yy = y + 74 + i * 32;
     text(ctx, (i === m.sel ? '▶ ' : '') + o.label, VIEW_W / 2, yy, { size: 14, align: 'center', color: i === m.sel ? C.gold : '#ddd' });
   });
-  if (!game.touch) text(ctx, '移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃）　回避 C　時歪 V　調べる ↑/E', VIEW_W / 2, VIEW_H - 30, { size: 11, align: 'center', color: C.muted });
+  drawDawnStrip(ctx, game, y + h + 30);
+  if (!game.touch) text(ctx, '移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃）　回避 C　時歪/術 V　調べる ↑/E', VIEW_W / 2, VIEW_H - 30, { size: 11, align: 'center', color: C.muted });
 }
 
-const TABS = ['人物', '謎', '敵', '問い'];
+const TABS = ['人物', '謎', '敵', '夜明け'];
 export function drawJournal(ctx, game, m) {
   const meta = game.meta;
   const x = 90, y = 50, w = VIEW_W - 180, h = VIEW_H - 100;
@@ -292,7 +307,14 @@ export function drawJournal(ctx, game, m) {
       for (const wd of meta.wedges) { text(ctx, `◆ ${wedgeLabel(wd)}：${wd.target === 'boon' ? WEDGE_TARGETS.boon.effect : WEDGE_TARGETS[wd.target].effect}`, x + 40, yy, { size: 12, color: '#d8b968' }); yy += 16; }
     }
   } else {
-    for (const q of openQuestions(meta)) draw('？', q, false, '#9fd0ff');
+    const pr = dawnProgress(meta);
+    text(ctx, `夜明けへの道　${pr.done} / ${pr.total}`, x + 28, yy, { size: 15, color: '#ffd38a' }); yy += 26;
+    DAWN_STEPS.forEach((st, i) => {
+      const ok = st.done(meta), isNext = pr.next === st;
+      text(ctx, `${ok ? '■' : '□'} ${i + 1}. ${st.title}`, x + 36, yy, { size: 14, color: ok ? '#9a8fa6' : isNext ? '#ffd38a' : '#efe6d2' });
+      if (isNext) { yy += 18; text(ctx, `→ ${st.hint}`, x + 60, yy, { size: 12, color: '#9fd0ff' }); }
+      yy += 22;
+    });
     const c = bossCounter(meta.lastLoop);
     if (c) draw('刻守の記憶', `前の夜の戦い方を覚えている：${COUNTERS[c].name}――${COUNTERS[c].desc}`, false, '#ff9a7a');
   }
@@ -314,7 +336,8 @@ export function drawTitle(ctx, game) {
   const opts = game.titleOptions();
   opts.forEach((o, i) => text(ctx, (i === game.titleSel ? '▶ ' : '') + o.label, VIEW_W / 2, 410 + i * 28, { size: 16, align: 'center', color: i === game.titleSel ? C.gold : '#bbb' }));
   text(ctx, game.touch ? 'タップで選ぶ' : '↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　時歪 V　調べる ↑', VIEW_W / 2, VIEW_H - 18, { size: 11, align: 'center', color: C.muted });
-  if (game.meta && game.meta.flags.ending) text(ctx, '― 夜明けを迎えた ―', VIEW_W / 2, 386, { size: 11, align: 'center', color: '#ffd38a' });
+  if (game.meta && game.meta.flags.ending) text(ctx, '★ クリア済み ― 夜明けを迎えた', VIEW_W / 2, 498, { size: 12, align: 'center', color: '#ffd38a' });
+  else if (game.meta) drawDawnStrip(ctx, game, 498);
 }
 
 // ───────── 巻き戻り ─────────
@@ -368,7 +391,8 @@ export function drawRewind(ctx, game) {
   if (r.mode === 'view') {
     const opts = game.rewindOptions();
     opts.forEach((o, i) => text(ctx, (i === r.sel ? '▶ ' : '') + o.label, VIEW_W / 2, by + i * 26, { size: 15, align: 'center', color: i === r.sel ? C.gold : '#ccc', bold: i === r.sel }));
-    text(ctx, `楔 ${meta.wedges.length}/${meta.slots}`, VIEW_W / 2, VIEW_H - 16, { size: 11, align: 'center', color: C.gold });
+    text(ctx, `楔 ${meta.wedges.length}/${meta.slots}`, VIEW_W - 24, VIEW_H - 16, { size: 11, align: 'right', color: C.gold });
+    drawDawnStrip(ctx, game, VIEW_H - 16, 'left');
   } else if (r.mode === 'pull' || r.mode === 'wedgeBoon') {
     const list = r.mode === 'pull' ? meta.wedges.map((w) => wedgeLabel(w)) : game.wedgeableBoons().map((b) => `${BOONS[b.id].name}${b.tier > 1 ? ' II' : ''}（${SCHOOLS[BOONS[b.id].school].name}）`);
     text(ctx, r.mode === 'pull' ? 'どの楔を抜く？（その対象は次の夜、元に戻る）' : 'どの強化に楔を打つ？（次の夜、持ったまま始まる）', VIEW_W / 2, by - 4, { size: 13, align: 'center', color: C.gold });
@@ -432,4 +456,40 @@ function drawRewindShop(ctx, game, r) {
     });
   }
   text(ctx, game.touch ? '項目をタップで選択／決定は「跳ぶ」、戻るは「回避」' : '↑↓ 選ぶ　Z 決定　C 戻る', VIEW_W / 2, y + h - 16, { size: 12, align: 'center', color: C.muted });
+}
+
+// 刻守の分析：前の夜のあなたの戦い方と、用意された対策
+const HABIT_LABEL = { combo: '連撃', heavy: '重撃', air: '空中', skill: '術', echo: '残響' };
+function drawAnalysis(ctx, game, m) {
+  const x = 150, y = 60, w = VIEW_W - 300, h = 420;
+  const k = clamp(m.t / 0.6, 0, 1);
+  panel(ctx, x, y, w, h, '#ff9a7a');
+  text(ctx, '刻守はあなたを見ていた', x + 24, y + 38, { size: 22, color: '#ff9a7a' });
+  text(ctx, '前の夜の戦い方', x + 24, y + 70, { size: 13, color: C.muted });
+  const a = m.a;
+  Object.entries(HABIT_LABEL).forEach(([cat, label], i) => {
+    const yy = y + 96 + i * 26, share = a ? a.shares[cat] : 0, top = cat === m.counter;
+    text(ctx, label, x + 24, yy, { size: 14, color: top ? '#ffffff' : '#bbb' });
+    ctx.fillStyle = '#1a1420'; ctx.fillRect(x + 90, yy - 12, 300, 12);
+    ctx.fillStyle = top ? '#ff4a2a' : '#6a5a7a'; ctx.fillRect(x + 90, yy - 12, Math.round(300 * share * k), 12);
+    text(ctx, `${Math.round(share * 100)}%`, x + 400, yy, { size: 13, color: top ? '#ff9a7a' : '#999' });
+  });
+  const dy = y + 96 + 5 * 26;
+  text(ctx, `回避  毎分 ${a ? Math.round(a.dodgeRate) : 0} 回`, x + 24, dy, { size: 14, color: m.counter === 'dodge' ? '#ffffff' : '#bbb' });
+  const c = COUNTERS[m.counter];
+  if (k >= 1) {
+    text(ctx, `対策：${c.name}`, x + 24, dy + 44, { size: 20, color: '#ff4a2a' });
+    wrap(ctx, c.desc, w - 48, 14).forEach((l, i) => text(ctx, l, x + 24, dy + 70 + i * 20, { size: 14, color: '#efe6d2' }));
+    wrap(ctx, '崩し方：' + c.weak, w - 48, 14).forEach((l, i) => text(ctx, l, x + 24, dy + 116 + i * 20, { size: 14, color: '#9fd0ff' }));
+  }
+  text(ctx, game.touch ? 'タップで続ける' : 'Z で続ける', x + w - 20, y + h - 14, { size: 11, align: 'right', color: C.muted });
+}
+
+// 夜明けへの道（進み具合と次にすること）を 1 行で
+export function drawDawnStrip(ctx, game, y, align = 'center') {
+  const m = game.meta; if (!m) return;
+  const pr = dawnProgress(m);
+  const x = align === 'center' ? VIEW_W / 2 : 24;
+  if (!pr.next) { text(ctx, '夜明けを迎えた（クリア済み）', x, y, { size: 13, align, color: '#ffd38a' }); return; }
+  text(ctx, `夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}`, x, y, { size: 13, align, color: '#ffd38a' });
 }

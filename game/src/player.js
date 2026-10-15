@@ -157,6 +157,7 @@ export class Player {
     if (!this.onGround) this.airDodgeUsed = true;
     if (dirX !== 0) this.face = dirX;
     this.state = 'dodge'; this.stateT = 0;
+    this.dodgeCount = (this.dodgeCount || 0) + 1;
     this.dodgeFrom = { x: this.x, y: this.y, w: this.w, h: this.h }; // ジャスト回避の判定に使う
     this.atk = null;
     this.iframeT = this.stats.dodgeIframes ?? P.dodgeIframes;
