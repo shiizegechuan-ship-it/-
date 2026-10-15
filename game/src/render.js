@@ -273,8 +273,10 @@ function drawEnemy(b, game, e) {
   };
   switch (e.kind) {
     case 'soldier': {
-      const frame = e.state === 'windup' ? 'crouch' : Math.abs(e.vx) > 10 ? (Math.floor(t * 8) % 2 ? 'walk0' : 'walk1') : 'stand';
-      body('soldier', frame, e.state === 'windup' ? e.tell : 0);
+      const winding = e.state === 'windup' || e.state === 'windup2' || e.state === 'thrustWind';
+      const frame = winding ? 'crouch' : Math.abs(e.vx) > 10 ? (Math.floor(t * 8) % 2 ? 'walk0' : 'walk1') : 'stand';
+      body('soldier', frame, winding ? e.tell : 0);
+      if (e.state === 'thrustWind') dashLine(b, bx + f * 8, by - 8, bx + f * (30 + e.tell * 70), by - 8, e.tell > 0.6 ? '#ff4a2a' : '#c0402a');
       // ギザギザの剣
       const hx = bx + f * 3, hy = by - 8;
       let ang = f > 0 ? 0.35 : Math.PI - 0.35;
@@ -283,7 +285,8 @@ function drawEnemy(b, game, e) {
       const ca = Math.cos(ang), sa = Math.sin(ang);
       line(b, hx, hy, hx + ca * 13, hy + sa * 13, '#b9a58a');
       for (const d of [5, 8, 11]) pset(b, hx + ca * d - sa * 1.6, hy + sa * d + ca * 1.6, '#d8c8a8');
-      if (e.state === 'windup' && e.tell < 0.4) {
+      if (e.state === 'thrust' || e.state === 'thrustWind') ang = f > 0 ? 0 : Math.PI;
+      if ((e.state === 'windup' || e.state === 'windup2') && e.tell < 0.4) {
         const gx = hx + ca * 13, gy = hy + sa * 13, s = Math.round(5 * (1 - e.tell / 0.4));
         rect(b, gx - s, gy, s * 2 + 1, 1, '#ffffff'); rect(b, gx, gy - s, 1, s * 2 + 1, '#ffffff');
       }
@@ -330,6 +333,10 @@ function drawEnemy(b, game, e) {
         rect(b, f > 0 ? x0 + 4 : x0 - 2, by - 11, 2, 2, col); pset(b, f > 0 ? x0 + 6 : x0 - 3, by - 10, col);
         if (e.guarding) rect(b, x0 + (f > 0 ? 2 : 1), by - 15, 1, 11, '#d8ccb4');
       }
+      if (e.state === 'leap' && e.leapX != null) {
+        const gx = Math.round(e.leapX / 2), gy = Math.round(game.map.groundBelow(e.leapX, e.y + e.h) / 2);
+        for (let i = -12; i <= 12; i++) if ((i + Math.floor(t * 20)) % 2 === 0) pset(b, gx + i, gy - 1, '#ff4a2a');
+      }
       if (e.state === 'slamWind' || e.state === 'slam') {
         const up = e.state === 'slamWind';
         const hx = bx + f * (up ? -2 : 15), hy = up ? by - 26 - Math.round(e.tell * 4) : by - 7;
@@ -337,6 +344,62 @@ function drawEnemy(b, game, e) {
         rect(b, hx - 5, hy - 3, 11, 7, '#120c14'); rect(b, hx - 4, hy - 2, 9, 5, flash ? '#fff' : '#7a6a52'); rect(b, hx - 4, hy - 2, 9, 1, '#a89878');
         if (up && e.tell > 0.2) { rect(b, bx, by - 34, 1, 4, '#ff4a2a'); pset(b, bx, by - 29, '#ff4a2a'); }
       }
+      break;
+    }
+    case 'roller': {
+      const ccx = Math.round(cx(e) / 2), ccy = Math.round(cy(e) / 2);
+      const step = Math.floor(e.spin * 2) % 8;
+      if (e.state === 'spinup' || e.slowed) {
+        const img = gearFrame(7, 9, e.state === 'spinup' ? '#ff4a2a' : '#5aa9e6', false, step);
+        b.globalAlpha = e.state === 'spinup' ? 0.3 + e.tell * 0.7 : 0.7;
+        b.drawImage(img, ccx - img.width / 2 - 1, ccy - img.height / 2); b.drawImage(img, ccx - img.width / 2 + 1, ccy - img.height / 2);
+        b.globalAlpha = 1;
+      }
+      const img = gearFrame(6, 9, flash ? '#ffffff' : '#4a3f4c', false, step);
+      b.drawImage(img, ccx - img.width / 2, ccy - img.height / 2);
+      disc(b, ccx, ccy, 3, flash ? '#ffffff' : '#2c2531');
+      rect(b, ccx + (f > 0 ? 0 : -2), ccy - 1, 3, 2, '#ff3b2f');
+      if (e.state === 'dizzy') for (let i = 0; i < 3; i++) { const a = t * 7 + i * 2.1; pset(b, ccx + Math.cos(a) * 6, ccy - 9 + Math.sin(a) * 2, '#ffe14a'); }
+      break;
+    }
+    case 'archer': {
+      const frame = e.state === 'draw' ? 'draw' : 'stand';
+      body('archer', frame, e.state === 'draw' ? e.tell : 0);
+      // 弓と弦（引き絞るほど光る）
+      const hx = bx + f * 5, hy = by - 9;
+      for (let i = -5; i <= 5; i++) pset(b, hx + f * Math.round(3 - (i * i) / 9), hy + i, '#8a6a3a');
+      const pull = e.state === 'draw' ? Math.round(e.tell * 4) : 0;
+      line(b, hx, hy - 5, hx - f * pull, hy, e.tell > 0.7 ? '#ffffff' : '#c8c0b0'); line(b, hx - f * pull, hy, hx, hy + 5, e.tell > 0.7 ? '#ffffff' : '#c8c0b0');
+      if (e.state === 'draw' && e.aim) dashLine(b, hx, hy, e.aim.x / 2, e.aim.y / 2, e.tell > 0.6 ? '#ff4a2a' : 'rgba(255,74,42,0.5)', 2, 3);
+      break;
+    }
+    case 'phantom': {
+      if (e.state === 'mark' && e.dest) {
+        // 行き先の揺らぎ（予兆）
+        const dx = Math.round(e.dest.x / 2), dy = Math.round(e.dest.y / 2);
+        b.globalAlpha = 0.3 + e.tell * 0.6;
+        for (let i = 0; i < 12; i++) { const yy = dy - 2 - i, w = Math.round(Math.sin(t * 20 + i) * 2 + 3 + e.tell * 2); rect(b, dx - w, yy, w * 2, 1, i % 2 ? '#b67cf0' : '#ff4a2a'); }
+        b.globalAlpha = 1;
+      }
+      const yb = by + Math.round(Math.sin(t * 3 + e.id) * 1.5);
+      b.globalAlpha = e.state === 'mark' ? Math.max(0.15, 1 - e.tell) : e.state === 'drift' ? 0.75 : 1;
+      const frame = Math.floor(t * 4) % 2 ? 'a' : 'b';
+      if (e.state === 'slashWind') outlined(b, 'phantom', frame, bx, yb, f, 0.4 + e.tell * 0.6, 'red');
+      else outlined(b, 'phantom', frame, bx, yb, f, slowGlow, 'blue');
+      drawSprite(b, spr('phantom', frame, flash ? 'white' : null), bx, yb, f);
+      b.globalAlpha = 1;
+      if (e.state === 'slash') arc(b, bx + f * 6, by - 8, 13, f > 0 ? -1 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 1, '#d9b0ff', 2);
+      break;
+    }
+    case 'bell': {
+      const frame = e.state === 'lift' ? 'ring' : 'stand';
+      body('bell', frame, e.state === 'lift' ? e.tell : 0);
+      // 槌
+      const up = e.state === 'lift';
+      const mx = bx + f * (up ? 2 : 8), my = up ? by - 22 - Math.round(e.tell * 4) : by - 8;
+      line(b, bx + f * 3, by - 12, mx, my, '#6a5a44');
+      rect(b, mx - 2, my - 2, 5, 4, '#120c14'); rect(b, mx - 1, my - 1, 3, 2, flash ? '#fff' : '#9a8a70');
+      if (up && e.tell > 0.5) { b.globalAlpha = (e.tell - 0.5) * 2; circle(b, bx, by - 9, 10 + Math.round(e.tell * 4), '#f2c14e'); b.globalAlpha = 1; }
       break;
     }
     case 'boss': drawBoss(b, game, e, bx, by, t, flash, slowGlow); break;
@@ -418,6 +481,18 @@ function drawProjectile(b, pr, t) {
     line(b, x - ux * 5, y - uy * 5, x + ux * 4, y + uy * 4, col);
     pset(b, x + ux * 5, y + uy * 5, '#ffffff');
     pset(b, x - uy * 1 + ux * 2, y + ux * 1 + uy * 2, col); pset(b, x + uy * 1 + ux * 2, y - ux * 1 + uy * 2, col);
+  } else if (pr.kind === 'arrow') {
+    const d = Math.hypot(pr.vx, pr.vy) || 1, ux = pr.vx / d, uy = pr.vy / d;
+    line(b, x - ux * 5, y - uy * 5, x + ux * 3, y + uy * 3, '#c8b898');
+    pset(b, x + ux * 4, y + uy * 4, '#ffffff');
+    pset(b, x - ux * 5 - uy, y - uy * 5 + ux, '#ff4a2a'); pset(b, x - ux * 5 + uy, y - uy * 5 - ux, '#ff4a2a');
+  } else if (pr.kind === 'bomb') {
+    disc(b, x, y, 2, '#2c2531'); pset(b, x, y - 3, Math.floor(t * 12) % 2 ? '#ff4a2a' : '#ffe14a');
+  } else if (pr.kind === 'ring') {
+    const k = pr.r / pr.maxR;
+    b.globalAlpha = 1 - k * 0.6;
+    for (let i = 0; i < Math.max(1, Math.round(pr.band / 4)); i++) circle(b, pr.x / 2, pr.y / 2, Math.max(1, pr.r / 2 - i * 2), i % 2 ? '#c9a052' : '#ffe6a0');
+    b.globalAlpha = 1;
   } else if (pr.kind === 'wave') {
     const bx = Math.round(pr.x / 2), by = Math.round((pr.y + pr.h) / 2);
     for (let i = 0; i < 8; i++) { const h = Math.round(Math.sin(i / 7 * Math.PI) * 8); rect(b, bx + i, by - h, 1, h, i % 2 ? '#ffaa5a' : '#ffd08a'); }

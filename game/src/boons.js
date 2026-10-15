@@ -4,7 +4,9 @@ export const SCHOOLS = {
   stasis: { name: '停滞', color: '#5aa9e6' },
   echo: { name: '残響', color: '#b67cf0' },
   risk: { name: '危険', color: '#e35d5d' },
+  power: { name: '火力', color: '#ff9a3c' },
 };
+const pc = (n) => `${Math.round(n)}%`;
 
 export const BOONS = {
   afterimage: { school: 'haste', name: '残影の一撃', desc: (t) => `回避後${t > 1 ? 0.8 : 0.6}秒以内の初撃が +${t > 1 ? 100 : 60}%` },
@@ -21,13 +23,26 @@ export const BOONS = {
   resonate: { school: 'echo', name: '共振', desc: (t) => `残響の命中で秒針ゲージ +${t > 1 ? 10 : 6}、HP +${t > 1 ? 2 : 1}` },
   sandglass: { school: 'risk', name: '砕けた砂時計', desc: () => '与ダメージ +40%。最大HP -30%' },
   inverted: { school: 'risk', name: '逆さ時計', desc: () => '通常回避の無敵が4Fに。ジャスト回避の受付+6F、成功後の一撃 ×3' },
+  // 火力：取るたびに Lv が上がり、数字が伸びる（最大 Lv5）
+  edge: { school: 'power', max: 5, name: '研ぎ澄まし', desc: (t) => `すべての与ダメージ +${pc(20 * t)}` },
+  comboheat: { school: 'power', max: 5, name: '連撃の熱', desc: (t) => `コンボ1ごとの加算 +${t}%（基本 1% に上乗せ）` },
+  heavyart: { school: 'power', max: 5, name: '重撃の極意', desc: (t) => `重撃のダメージ +${pc(40 * t)}` },
+  crit: { school: 'power', max: 5, name: '会心', desc: (t) => `会心率 +${10 * t}%（会心は ×2）` },
+  critdmg: { school: 'power', max: 5, name: '痛撃', desc: (t) => `会心ダメージ +${pc(50 * t)}` },
+  execute: { school: 'power', max: 5, name: '処刑', desc: (t) => `HP35%以下の敵に +${pc(30 * t)}` },
+  aerial: { school: 'power', max: 5, name: '空舞', desc: (t) => `空中攻撃 +${pc(35 * t)}` },
+  bloodclock: { school: 'power', max: 5, name: '血の秒針', desc: (t) => `撃破ごとに この夜の与ダメージ +${2 * t}%（累積）` },
+  opener: { school: 'power', max: 5, name: '先手', desc: (t) => `無傷の敵への一撃 +${pc(60 * t)}` },
+  momentum: { school: 'power', max: 5, name: '勢い', desc: (t) => `走りながらの攻撃 +${pc(25 * t)}` },
 };
+export const boonMax = (id) => BOONS[id].max || 2;
 
 // 共鳴（同系統2つ）
 export const RESONANCE = {
   haste: '移動 +10%、連撃の速さ +15%',
   stasis: '遅い敵の予備動作が 30% 長くなる',
   echo: '残響の威力 +25%',
+  power: '会心率 +5%',
 };
 // 系統をまたぐ相乗効果（説明用。効果自体は個別の強化の組み合わせで自然に起きるものも含む）
 export const CROSS = [
@@ -38,7 +53,7 @@ export const CROSS = [
 ];
 
 export function schoolCounts(boons) {
-  const c = { haste: 0, stasis: 0, echo: 0, risk: 0 };
+  const c = { haste: 0, stasis: 0, echo: 0, risk: 0, power: 0 };
   for (const b of boons) c[BOONS[b.id].school]++;
   return c;
 }
@@ -78,20 +93,34 @@ export function computeStats(boons) {
     comboSpeed: counts.haste >= 2 ? 1.15 : 1,
     slowWindupMul: counts.stasis >= 2 ? 1.3 : 1,
     doubleEchoOnSlow: !!(t('lag') && t('echo')),
+    // 火力
+    edgeMul: 1 + 0.2 * t('edge'),
+    comboPer: 0.01 * (1 + t('comboheat')),
+    heavyMul: 1 + 0.4 * t('heavyart'),
+    critChance: 0.1 * t('crit') + (counts.power >= 2 ? 0.05 : 0),
+    critMul: 2 + 0.5 * t('critdmg'),
+    executeMul: 1 + 0.3 * t('execute'),
+    airMul: 1 + 0.35 * t('aerial'),
+    killStack: 0.02 * t('bloodclock'),
+    openerMul: 1 + 0.6 * t('opener'),
+    momentumMul: 1 + 0.25 * t('momentum'),
   };
   return s;
 }
 
 // 強化候補の抽出。乱数は周回ごとのもの（揺らぎ）。解放されていない系統は出ない。
+// 強化候補の抽出。乱数は周回ごとのもの（揺らぎ）。解放されていない系統は出ない。
+// 火力系統は手持ちでも Lv が上限未満なら「Lv アップ」として候補に出る。
 export function rollOffer(rng, owned, unlockedSchools, n = 3) {
-  const ownedIds = new Set(owned.map((b) => b.id));
-  const pool = Object.keys(BOONS).filter((id) => !ownedIds.has(id) && unlockedSchools.includes(BOONS[id].school));
+  const lv = Object.fromEntries(owned.map((b) => [b.id, b.tier || 1]));
+  const pool = Object.keys(BOONS).filter((id) => unlockedSchools.includes(BOONS[id].school) && (!(id in lv) || (BOONS[id].max && lv[id] < BOONS[id].max)));
   // 手持ちの系統を少し出やすくして構築を成立させる
   const counts = schoolCounts(owned);
   const weighted = [];
   for (const id of pool) {
     const sc = BOONS[id].school;
-    const w = sc === 'risk' ? 1 : 2 + (counts[sc] || 0) * 2;
+    let w = sc === 'risk' ? 1 : 2 + (counts[sc] || 0) * 2;
+    if (sc === 'power') w = id in lv ? 3 : 2;
     for (let i = 0; i < w; i++) weighted.push(id);
   }
   const out = [];
@@ -108,7 +137,8 @@ export function synergyHints(id, owned) {
   const hints = [];
   const sc = BOONS[id].school;
   const counts = schoolCounts(owned);
-  if (sc !== 'risk' && counts[sc] === 1) hints.push(`共鳴成立：${RESONANCE[sc]}`);
+  const owns = owned.some((b) => b.id === id);
+  if (sc !== 'risk' && counts[sc] === 1 && !owns) hints.push(`共鳴成立：${RESONANCE[sc]}`);
   for (const c of CROSS) {
     const other = c.a === id ? c.b : c.b === id ? c.a : null;
     if (other && owned.some((b) => b.id === other)) hints.push(`相乗：${c.text}`);

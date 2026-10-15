@@ -7,11 +7,12 @@ import { makeEnemy, RustSoldier, GearKnight } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
 import { Fx } from './fx.js';
 import { NullSfx } from './audio.js';
-import { BOONS, rollOffer } from './boons.js';
-import { LAYOUTS, FLOOR_NAMES, buildPlan } from './world.js';
+import { BOONS, rollOffer, boonMax } from './boons.js';
+import { LAYOUTS, FLOOR_NAMES, buildPlan, layoutRows } from './world.js';
 import {
   newMeta, serialize, deserialize, endLoop, learn, knows, hasWedge, addWedge, removeWedge, freeSlots,
   bossCounter, trueEndReady, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
+  upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount,
 } from './meta.js';
 
 const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
@@ -63,6 +64,11 @@ export class Game {
     const meta = this.meta;
     const plan = buildPlan(meta, this.loopSeed());
     const wedgedBoons = meta.wedges.filter((w) => w.target === 'boon').map((w) => ({ ...w.boon }));
+    // 継承した強化（楔の強化と重なる場合は Lv の高い方）
+    for (const b of meta.inherit || []) {
+      const w = wedgedBoons.find((x) => x.id === b.id);
+      if (w) w.tier = Math.max(w.tier, b.tier); else wedgedBoons.push({ ...b });
+    }
     this.run = {
       plan,
       fi: 0, ri: 0,
@@ -82,16 +88,25 @@ export class Game {
       deathT: 0,
       perfects: 0,
       kills: 0,
+      shards: 0,
+      killStacks: 0,
+      maxCombo: 0,
+      critRng: makeRng(plan.offerSeed ^ 0xc817),
+      scale: enemyScale(meta),
     };
     this.player = new Player(0, 0);
+    this.player.baseMaxHp = PC.maxHp + 10 * upLv(meta, 'hp');
+    this.player.metaAtk = 1 + 0.1 * upLv(meta, 'atk');
     this.player.setBoons(wedgedBoons);
     this.player.hp = this.player.maxHp;
+    this.player.gauge = Math.min(PC.gaugeMax, 20 * upLv(meta, 'gauge'));
+    this.combo = { n: 0, t: 0, max: 0, pop: 0 };
     this.scene = 'play';
     this.modal = null;
     this.fx.clear();
     this.timeStopT = 0; this.slowT = 0; this.hitstop = 0;
     this.enterRoom(0, 0);
-    this.fx.setBanner(`第 ${meta.loop} 夜`, FLOOR_NAMES[0], '#f2c14e', 2.2);
+    this.fx.setBanner(`第 ${meta.loop} 夜`, `${FLOOR_NAMES[0]}　夜の深さ Lv${this.run.scale.level}`, '#f2c14e', 2.2);
     this.save();
     this.emit('loopStart', { loop: meta.loop });
   }
@@ -105,7 +120,7 @@ export class Game {
     const prevFloor = run.fi;
     run.fi = fi; run.ri = ri;
     const desc = this.roomDesc();
-    this.map = new TileMap(LAYOUTS[desc.layout]);
+    this.map = new TileMap(layoutRows(desc));
     this.room = { desc, cleared: false, rewardSpawned: false, enemies: [], projectiles: [], echoes: [], items: [], t: 0, boss: null, glenHp: 0 };
     this.player.vx = 0; this.player.vy = 0; this.player.state = 'normal'; this.player.atk = null;
     const spawn = this.map.markers.find((m) => m.c === 'P') || { x: TILE * 2, y: this.map.pxH - TILE * 4 };
@@ -136,12 +151,16 @@ export class Game {
 
   addEnemy(e) {
     if (!e) return;
+    // 夜の深さで強くなる（HP・攻撃・攻撃パターンの段階）
+    const sc = this.run.scale;
+    e.maxHp = e.hp = Math.round(e.maxHp * sc.hp);
+    e.tier = sc.tier;
     this.room.enemies.push(e);
-    const tellKey = { soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss' }[e.kind];
+    const tellKey = { soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
     if (tellKey) e.tellKey = tellKey;
     return e;
   }
-  spawnProjectile(p) { this.room.projectiles.push(p); }
+  spawnProjectile(p) { p.dmg = Math.round(p.dmg * this.run.scale.dmg); this.room.projectiles.push(p); }
   marker(c) { return this.map.markers.find((m) => m.c === c); }
   addItem(it) { this.room.items.push({ w: 24, h: 40, ...it }); return it; }
   addSign(m) {
@@ -260,6 +279,8 @@ export class Game {
     const run = this.run, room = this.room, p = this.player;
     run.clock += dt;
     room.t += dt;
+    if (this.combo.n > 0) { this.combo.t -= dt; if (this.combo.t <= 0) this.combo.n = 0; }
+    if (this.combo.pop > 0) this.combo.pop = Math.max(0, this.combo.pop - dt * 6);
     if (this.timeStopT > 0) {
       this.timeStopT -= dt;
       if (this.timeStopT <= 0) { this.sfx.play('timeResume'); this.fx.screenFlash('#ffffff', 0.35); }
@@ -326,9 +347,18 @@ export class Game {
 
   dealDamage(e, info) {
     const p = this.player, st = p.stats, run = this.run;
-    let dmg = info.base * st.dmgMul;
+    let dmg = info.base * st.dmgMul * st.edgeMul * (p.metaAtk || 1) * (1 + run.killStacks);
+    // コンボ加算：つないだ数だけ与ダメージが増える
+    dmg *= 1 + this.combo.n * st.comboPer;
+    if (info.heavy) dmg *= st.heavyMul;
+    if (info.cat === 'air') dmg *= st.airMul;
+    if (e.hp <= e.maxHp * 0.35) dmg *= st.executeMul;
+    let crit = false;
     let cat = info.cat;
     if (!info.echo) {
+      if (e.hp >= e.maxHp && st.openerMul > 1) dmg *= st.openerMul;
+      if (p.onGround && Math.abs(p.vx) > 150 && st.momentumMul > 1) dmg *= st.momentumMul;
+      if (run.critRng.next() < st.critChance + 0.02 * upLv(this.meta, 'crit')) { crit = true; dmg *= st.critMul; }
       if (p.afterT > 0 && st.afterimageMul > 1) { dmg *= st.afterimageMul; p.afterT = 0; this.fx.text(cx(e), e.y - 18, '残影', '#5fd18b', 12); }
       if (p.empowerNext > 1) { dmg *= p.empowerNext; p.empowerNext = 1; this.fx.text(cx(e), e.y - 30, '×3', '#e35d5d', 14); }
       if (info.heavy && e.slowed && st.shatterMul > 1) {
@@ -358,14 +388,18 @@ export class Game {
       return res;
     }
     run.dmgByCat[info.echo ? 'echo' : cat] = (run.dmgByCat[info.echo ? 'echo' : cat] || 0) + dmg;
+    this.addCombo();
     if (res.guardBreak) { this.sfx.play('guardBreak'); this.fx.text(cx(e), e.y - 30, '崩し', '#f2c14e', 16); this.fx.shake(5, 0.2); }
     const hx = info.dir > 0 ? e.x + 4 : e.x + e.w - 4;
     this.fx.sparks(hx, cy(e), info.echo ? '#b67cf0' : info.heavy ? '#f2c14e' : '#fff3d6', info.heavy ? 14 : 7, info.heavy ? 380 : 260, info.dir);
-    this.fx.text(cx(e) + (Math.random() - 0.5) * 10, e.y - 6, String(dmg), info.echo ? '#c9a0ff' : info.heavy ? '#f2c14e' : '#ffffff', info.heavy ? 18 : 13);
+    const num = fmtNum(dmg) + (crit ? '!' : '');
+    this.fx.text(cx(e) + (Math.random() - 0.5) * 10, e.y - 6, num, crit ? '#ffe14a' : info.echo ? '#c9a0ff' : info.heavy ? '#f2c14e' : '#ffffff', crit ? 20 : info.heavy ? 18 : 13);
     if (!info.echo) {
-      this.hitstop = Math.max(this.hitstop, info.stop || 3 / 60);
-      this.sfx.play(info.heavy || (info.shake || 0) >= 3 ? 'heavyHit' : 'hit');
-      if (info.shake) this.fx.shake(info.shake);
+      this.hitstop = Math.max(this.hitstop, (info.stop || 3 / 60) + (crit ? 2 / 60 : 0));
+      this.sfx.play(info.heavy || crit || (info.shake || 0) >= 3 ? 'heavyHit' : 'hit');
+      // 命中で画面を小さく揺らす（重い一撃・会心ほど大きく）
+      this.fx.shake(Math.max(info.shake || 0, crit ? 4 : info.heavy ? 5 : 2), crit || info.heavy ? 0.14 : 0.07);
+      if (crit) this.fx.ring(cx(e), cy(e), '#ffe14a', 28, 0.2);
       p.gauge = Math.min(PC.gaugeMax, p.gauge + PC.gaugePerHit);
       if (st.lagTime) e.lag = Math.max(e.lag, st.lagTime);
       if (st.echoMul) {
@@ -380,6 +414,18 @@ export class Game {
     return res;
   }
   learnOnce(e) { if (e.tellKey) this.learnK(e.tellKey, true); }
+  addCombo() {
+    const c = this.combo;
+    c.n++; c.t = 2.2 + 0.4 * upLv(this.meta, 'combo'); c.pop = 1;
+    c.max = Math.max(c.max, c.n);
+    this.run.maxCombo = Math.max(this.run.maxCombo || 0, c.n);
+    if (c.n % 25 === 0) { this.fx.setBanner(`${c.n} HIT`, `与ダメージ +${Math.round(c.n * this.player.stats.comboPer * 100)}%`, '#ff9a3c', 0.9); this.sfx.play('charged'); }
+  }
+  addShards(n, x, y) {
+    if (n <= 0) return;
+    this.run.shards += n;
+    if (x != null) this.fx.text(x, y, `+${n} 欠片`, '#9fd0ff', 11);
+  }
 
   updateEchoes(dt) {
     const room = this.room;
@@ -397,12 +443,19 @@ export class Game {
     const p = this.player;
     for (const e of this.room.enemies) {
       if (!e.alive) continue;
-      for (const a of e.attacks) this.hitPlayer(a, a.dmg, cx(e), a.key);
+      for (const a of e.attacks) this.hitPlayer(a, Math.round(a.dmg * this.run.scale.dmg), cx(e), a.key);
     }
   }
   resolveProjectiles() {
+    const p = this.player;
     for (const pr of this.room.projectiles) {
       if (!pr.alive || pr.delay > 0) continue;
+      if (pr.kind === 'ring') {
+        // 広がる音の輪：輪の帯に体が重なったときだけ当たる
+        const d = Math.hypot(cx(p) - pr.x, cy(p) - pr.y);
+        if (!pr.hitDone && d <= pr.r + 10 && d >= pr.r - pr.band - 10) { if (this.hitPlayer(p, pr.dmg, pr.x, pr.key)) pr.hitDone = true; }
+        continue;
+      }
       if (this.hitPlayer(pr, pr.dmg, pr.x + pr.w / 2, pr.key) && pr.kind !== 'wave') pr.alive = false;
     }
   }
@@ -446,6 +499,8 @@ export class Game {
     if (p.state === 'dead') return;
     if (!pit && p.invulnerable) return;
     p.hurt(dmg, fromX ?? cx(p));
+    if (this.combo.n >= 10) this.fx.text(cx(p), p.y - 26, `${this.combo.n} HIT 途切れた`, '#9a8fa6', 11);
+    this.combo.n = 0;
     this.fx.vignette = 1;
     this.fx.shake(pit ? 3 : 6, 0.22);
     this.fx.text(cx(p), p.y - 10, `-${dmg}`, '#ff5a3c', 16);
@@ -490,6 +545,8 @@ export class Game {
       e.handled = true;
       if (e.boss) continue;
       this.run.kills++;
+      this.run.killStacks += p.stats.killStack;
+      this.addShards((e.elite ? 12 : 2) + Math.floor(this.run.scale.level / 2), cx(e), e.y - 20);
       this.sfx.play('kill');
       this.fx.burst(cx(e), cy(e), e.elite ? '#f2c14e' : '#e8dcc4', e.elite ? 30 : 16);
       this.hitstop = Math.max(this.hitstop, (e.elite ? 10 : 4) / 60);
@@ -520,13 +577,17 @@ export class Game {
     if (t === 'combat') reward = this.run.nextReward || 'boon';
     if (t === 'elite' && !room.desc.knightWedged) reward = 'boon2';
     if (!quiet) {
+      this.addShards(3 + this.run.scale.level);
       this.fx.setBanner('制圧', '', '#f2c14e', 1.0);
       this.sfx.play('confirm');
     }
     if (reward) {
-      const gx = this.map.pxW / 2;
-      const gy = this.map.groundBelow(gx, this.map.pxH / 2) - 30;
-      this.addItem({ kind: 'reward', reward, x: gx - 12, y: Math.min(gy, this.map.pxH - 4 * TILE), w: 24, h: 24, bob: 0 });
+      // 報酬はプレイヤーの近くの足場に出す（部屋の形に左右されない）
+      const p = this.player, base = p.onGround ? p : { x: p.lastSafe.x, y: p.lastSafe.y, w: p.w, h: p.h };
+      let gx = clamp(cx(base) + p.face * 60, 60, this.map.pxW - 60);
+      let gy = this.map.groundBelow(gx, base.y + 2);
+      if (gy >= this.map.pxH || gy - (base.y + base.h) > 90) { gx = cx(base); gy = base.y + base.h; }
+      this.addItem({ kind: 'reward', reward, x: gx - 12, y: gy - 30, w: 24, h: 24, bob: 0 });
     } else this.openDoors();
     this.emit('roomClear', { type: t });
   }
@@ -545,7 +606,8 @@ export class Game {
     if (!next || !X) return;
     const doorY = X.y + TILE - 50;
     if (next.desc.type === 'combat') {
-      next.desc.rewardChoices.forEach((rw, i) => this.addItem({ kind: 'door', x: X.x - i * 90 - 6, y: doorY, w: 36, h: 50, to: next, reward: rw }));
+      const dir = X.x > this.map.pxW / 2 ? -1 : 1; // 2枚目の扉は部屋の内側へ
+      next.desc.rewardChoices.forEach((rw, i) => this.addItem({ kind: 'door', x: X.x + dir * i * 90 - 6, y: doorY, w: 36, h: 50, to: next, reward: rw }));
     } else {
       this.addItem({ kind: 'door', x: X.x - 6, y: doorY, w: 36, h: 50, to: next, reward: null, label: next.stairs ? '階段' : { forge: '鍛冶場', elite: '強敵', archive: '書庫', study: '書斎', boss: '鐘楼', entry: '' }[next.desc.type], causal: ['forge', 'archive', 'study'].includes(next.desc.type), boss: next.desc.type === 'boss', elite: next.desc.type === 'elite' });
     }
@@ -571,7 +633,7 @@ export class Game {
     const p = this.player;
     this.emit('reward', { kind });
     if (kind === 'heal') {
-      const amt = 40; p.hp = Math.min(p.maxHp, p.hp + amt);
+      const amt = Math.round(40 * (1 + 0.2 * upLv(this.meta, 'heal'))); p.hp = Math.min(p.maxHp, p.hp + amt);
       this.sfx.play('heal'); this.fx.text(cx(p), p.y - 20, `+${amt}`, '#5fd18b', 16); this.fx.ring(cx(p), cy(p), '#5fd18b', 40);
       this.openDoors();
     } else if (kind === 'hourglass') {
@@ -856,6 +918,7 @@ export class Game {
     this.fx.setBanner('夜明けの決闘', '', '#ffd38a', 2.0);
   }
   onBossDefeated(b) {
+    this.addShards(40 + 10 * this.run.scale.level, cx(b), b.y - 30);
     this.room.projectiles = [];
     this.room.bossOutroT = 0;
     this.slowT = 1.2; this.slowScale = 0.25;
@@ -890,7 +953,7 @@ export class Game {
     if (run.ended) return;
     run.ended = true;
     const report = endLoop(this.meta, {
-      cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock,
+      cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock, shards: run.shards,
     });
     this.save();
     this.sfx.play('rewind');
@@ -923,6 +986,8 @@ export class Game {
   rewindOptions() {
     const m = this.meta;
     const opts = [{ id: 'next', label: '次の夜へ' }];
+    opts.push({ id: 'upgrade', label: `刻印を刻む（時の欠片 ${m.shards}）` });
+    if (((m.lastLoop && m.lastLoop.boons) || []).length) opts.push({ id: 'inherit', label: `継承する強化を選ぶ（${(m.inherit || []).length}/${inheritCount(m)}）` });
     const lastBoons = (m.lastLoop && m.lastLoop.boons) || [];
     const wedgedIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
     if (freeSlots(m) > 0 && lastBoons.some((b) => !wedgedIds.has(b.id))) opts.push({ id: 'wedgeBoon', label: '最後に掴んだ強化に楔を打つ' });
@@ -947,9 +1012,12 @@ export class Game {
         if (o.id === 'next') this.startLoop();
         else if (o.id === 'wedgeBoon') { r.mode = 'wedgeBoon'; r.sub = 0; }
         else if (o.id === 'pull') { r.mode = 'pull'; r.sub = 0; }
+        else if (o.id === 'upgrade') { r.mode = 'upgrade'; r.sub = 0; }
+        else if (o.id === 'inherit') { r.mode = 'inherit'; r.sub = 0; }
         else if (o.id === 'journal') this.openJournal();
       }
     } else {
+      if (r.mode === 'upgrade' || r.mode === 'inherit') { this.updateRewindShop(input, r); return; }
       const list = r.mode === 'pull' ? this.meta.wedges : this.wedgeableBoons();
       if (!list.length) { r.mode = 'view'; return; }
       r.sub = clamp(r.sub, 0, list.length - 1);
@@ -972,6 +1040,37 @@ export class Game {
         r.mode = 'view';
       }
     }
+  }
+  // 刻印（恒久強化）と継承の選択
+  inheritCandidates() {
+    const m = this.meta;
+    const wedgedIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
+    return ((m.lastLoop && m.lastLoop.boons) || []).filter((b) => !wedgedIds.has(b.id));
+  }
+  updateRewindShop(input, r) {
+    const m = this.meta;
+    const list = r.mode === 'upgrade' ? Object.keys(UPGRADES) : this.inheritCandidates();
+    if (!list.length) { r.mode = 'view'; return; }
+    r.sub = clamp(r.sub, 0, list.length - 1);
+    if (input.pressed('up')) { r.sub = (r.sub + list.length - 1) % list.length; this.sfx.play('select'); }
+    if (input.pressed('down')) { r.sub = (r.sub + 1) % list.length; this.sfx.play('select'); }
+    if (input.pressed('back') || input.pressed('dodge')) { r.mode = 'view'; this.sfx.play('select'); return; }
+    if (!(input.pressed('confirm') || input.pressed('jump'))) return;
+    if (r.mode === 'upgrade') {
+      const k = list[r.sub];
+      if (buyUpgrade(m, k)) {
+        this.sfx.play('wedge'); r.flash = 0.3;
+        r.report.changed.push({ text: `刻印：${UPGRADES[k].name} Lv${upLv(m, k)}（${UPGRADES[k].desc(upLv(m, k))}）`, tone: 'gold' });
+        if (k === 'inherit') { const prev = m.inherit.slice(); m.inherit = prev; }
+      } else this.sfx.play('deny');
+    } else {
+      const b = list[r.sub];
+      const i = m.inherit.findIndex((x) => x.id === b.id);
+      if (i >= 0) { m.inherit.splice(i, 1); this.sfx.play('door'); }
+      else if (m.inherit.length < inheritCount(m)) { m.inherit.push({ ...b }); this.sfx.play('confirm'); }
+      else this.sfx.play('deny');
+    }
+    this.save();
   }
   wedgeableBoons() {
     const m = this.meta;
@@ -1020,6 +1119,12 @@ export class Game {
       const r = this.rewind;
       if (this.modal && this.modal.type === 'journal') return this.tapJournal(x, y);
       if (r.t < 3.2) return true;
+      if (r.mode === 'upgrade' || r.mode === 'inherit') {
+        const n = r.mode === 'upgrade' ? Object.keys(UPGRADES).length : this.inheritCandidates().length;
+        const i = r.mode === 'upgrade' ? row(150, 36, n, 32) : row(150, 30, n, 28);
+        if (i < 0) { if (y > 470 || y < 70) r.mode = 'view'; return false; }
+        r.sub = i; return true;
+      }
       const by = r.report.tip ? 396 : 380;
       if (r.mode === 'view') { const i = row(by, 26, this.rewindOptions().length); if (i < 0) return false; r.sel = i; return true; }
       const n = r.mode === 'pull' ? this.meta.wedges.length : this.wedgeableBoons().length;
@@ -1084,13 +1189,13 @@ export class Game {
     if (school) {
       const ids = Object.keys(BOONS).filter((id) => BOONS[id].school === school && !p.boons.some((b) => b.id === id));
       offer = this.run.offerRng.shuffle(ids).slice(0, 3);
-    } else offer = rollOffer(this.run.offerRng, p.boons, this.meta.unlocked, 3);
+    } else offer = rollOffer(this.run.offerRng, p.boons, this.meta.unlocked, 3 + upLv(this.meta, 'choice'));
     if (!offer.length) { p.hp = Math.min(p.maxHp, p.hp + 30); this.openDoors(); return; }
     this.modal = { type: 'boon', offer, sel: 1 % offer.length, count, school, t: 0 };
     this.sfx.play('pickup');
   }
   openForge() {
-    const tier1 = this.player.boons.filter((b) => b.tier < 2 && BOONS[b.id].school !== 'risk');
+    const tier1 = this.player.boons.filter((b) => b.tier < boonMax(b.id) && BOONS[b.id].school !== 'risk');
     if (!tier1.length) { this.openDialog([{ who: 'グレン', text: '鍛えるもんが無ぇじゃねえか。強化を手に入れてから来な。' }]); return; }
     this.modal = { type: 'forge', list: tier1, sel: 0, t: 0 };
   }
@@ -1133,10 +1238,13 @@ export class Game {
         if (input.pressed('right')) { m.sel = (m.sel + 1) % m.offer.length; this.sfx.play('select'); }
         if (input.pressed('confirm') || input.pressed('jump')) {
           const id = m.offer[m.sel];
-          this.player.setBoons([...this.player.boons, { id, tier: 1 }]);
+          const own = this.player.boons.find((b) => b.id === id);
+          if (own) this.player.setBoons(this.player.boons.map((b) => (b.id === id ? { ...b, tier: Math.min(boonMax(id), b.tier + 1) } : b)));
+          else this.player.setBoons([...this.player.boons, { id, tier: 1 }]);
+          const nowTier = this.player.boons.find((b) => b.id === id).tier;
           this.sfx.play('pickup');
           this.fx.ring(cx(this.player), cy(this.player), BOON_COLORS[BOONS[id].school], 50, 0.4);
-          this.fx.setBanner(BOONS[id].name, BOONS[id].desc(1), BOON_COLORS[BOONS[id].school], 1.4);
+          this.fx.setBanner(BOONS[id].name + (BOONS[id].max ? ` Lv${nowTier}` : ''), BOONS[id].desc(nowTier), BOON_COLORS[BOONS[id].school], 1.4);
           this.emit('boon', { id });
           input.consume('jump'); input.consume('attack');
           if (m.count > 1) { this.modal = null; this.openBoonPick(m.count - 1, m.school); }
@@ -1150,12 +1258,13 @@ export class Game {
         if (back) { this.modal = null; return; }
         if (ok && m.t > 0.15) {
           const b = m.list[m.sel];
-          const boons = this.player.boons.map((x) => (x.id === b.id ? { ...x, tier: 2 } : x));
+          const boons = this.player.boons.map((x) => (x.id === b.id ? { ...x, tier: Math.min(boonMax(x.id), x.tier + 1) } : x));
           this.player.setBoons(boons);
           this.run.forged = true;
           this.modal = null;
           this.sfx.play('wedge');
-          this.fx.setBanner(`${BOONS[b.id].name} II`, BOONS[b.id].desc(2), '#f2c14e', 1.6);
+          const nt = Math.min(boonMax(b.id), b.tier + 1);
+          this.fx.setBanner(`${BOONS[b.id].name} ${BOONS[b.id].max ? 'Lv' + nt : 'II'}`, BOONS[b.id].desc(nt), '#f2c14e', 1.6);
           input.consume('attack'); input.consume('jump');
         }
         break;
@@ -1222,7 +1331,13 @@ export class Game {
   }
 }
 
-export const BOON_COLORS = { haste: '#5fd18b', stasis: '#5aa9e6', echo: '#b67cf0', risk: '#e35d5d' };
+export const BOON_COLORS = { haste: '#5fd18b', stasis: '#5aa9e6', echo: '#b67cf0', risk: '#e35d5d', power: '#ff9a3c' };
+// 大きな数字を読みやすく（1,234 / 12.3万）
+export function fmtNum(n) {
+  n = Math.round(n);
+  if (n >= 100000) return (n / 10000).toFixed(n >= 1000000 ? 0 : 1) + '万';
+  return n.toLocaleString('en-US');
+}
 
 export const ENDING_PAGES = [
   ['刻守は剣を下ろした。', '鐘楼の窓の外が、白みはじめている。'],

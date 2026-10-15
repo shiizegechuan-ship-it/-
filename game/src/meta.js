@@ -28,6 +28,10 @@ export const KNOWLEDGE = {
   tell_bat: { cat: '敵', title: '振り子蝙蝠', text: () => '空中で止まり、赤い線を引いたら急降下。線から外れれば当たらない。壁に当たると目を回す。' },
   tell_turret: { cat: '敵', title: '時計砲台', text: () => '針が12時を指すと撃つ。弾は攻撃で斬り落とせる。' },
   tell_knight: { cat: '敵', title: '歯車騎士', text: () => '正面の盾は通常攻撃を弾く。重撃で崩すか背後を取る。ハンマーを振り上げたら衝撃波が床を走る――跳べ。' },
+  tell_roller: { cat: '敵', title: '歯車転がし', text: () => '火花を散らして回転を速めたら、一直線に転がってくる。壁にぶつかると目を回し、その間は大きな隙（1.5倍）。' },
+  tell_archer: { cat: '敵', title: '時計弓兵', text: () => '距離を取って弓を引き絞る。照準線が出たら矢が来る。矢は斬り落とせる。近づけば逃げる。' },
+  tell_phantom: { cat: '敵', title: '刻の亡霊', text: () => 'あなたの背後に紫の揺らぎを残し、そこへ跳んで斬る。揺らぎを見たら前へ回避。' },
+  tell_bell: { cat: '敵', title: '鐘撞き', text: () => '槌を振り上げたら鐘が鳴り、音の輪が広がる。輪の帯に重なると当たる。回避の無敵か、輪の外へ。' },
   tell_boss: { cat: '敵', title: '刻守', text: () => '懐中時計を掲げたら時が止まる。時が戻る瞬間の刃に合わせて回避すれば、刹那が取れる。' },
 };
 
@@ -54,11 +58,58 @@ export function newMeta(seed = (Date.now() & 0x7fffffff)) {
     wedges: [],
     knowledge: {}, // key -> 知った周回
     code: [r.int(1, 9), r.int(1, 9), r.int(1, 9)], // セーブ固定（周回では変わらない）
-    unlocked: ['haste', 'echo', 'risk'],
+    unlocked: ['haste', 'echo', 'risk', 'power'],
+    shards: 0, // 時の欠片（恒久強化の通貨）
+    upgrades: {}, // 刻印（恒久強化）の Lv
+    inherit: [], // 次の夜に持ち越す強化（巻き戻り画面で選ぶ）
     lastLoop: null,
     flags: { bossBeaten: false, diaryRead: false, archiveOpened: false, ending: false, seenRewind: false },
     stats: { deaths: 0, falseWins: 0, bestFloor: 0 },
   };
+}
+
+// ───────── 恒久強化（刻印）と夜の深さ ─────────
+const cost = (base, g) => (lv) => Math.round(base * Math.pow(g, lv));
+export const UPGRADES = {
+  atk: { name: '刃の刻印', max: 30, desc: (lv) => `基礎攻撃 +${lv * 10}%`, cost: cost(12, 1.22) },
+  hp: { name: '命の刻印', max: 20, desc: (lv) => `最大HP +${lv * 10}`, cost: cost(10, 1.22) },
+  inherit: { name: '継承の刻印', max: 4, desc: (lv) => `前の夜の強化を ${1 + lv} 個まで持ち越せる`, cost: cost(40, 1.9) },
+  crit: { name: '会心の刻印', max: 10, desc: (lv) => `会心率 +${lv * 2}%`, cost: cost(16, 1.3) },
+  combo: { name: '連撃の刻印', max: 5, desc: (lv) => `コンボの持続 +${(lv * 0.4).toFixed(1)}秒`, cost: cost(18, 1.4) },
+  gauge: { name: '秒針の刻印', max: 5, desc: (lv) => `夜のはじめの秒針ゲージ +${lv * 20}`, cost: cost(14, 1.4) },
+  heal: { name: '泉の刻印', max: 5, desc: (lv) => `回復量 +${lv * 20}%`, cost: cost(14, 1.35) },
+  choice: { name: '選択の刻印', max: 1, desc: (lv) => `強化の候補が ${3 + lv} 枚になる`, cost: () => 150 },
+};
+export const upLv = (m, k) => (m.upgrades && m.upgrades[k]) || 0;
+export const inheritCount = (m) => 1 + upLv(m, 'inherit');
+export function buyUpgrade(m, k) {
+  const u = UPGRADES[k], lv = upLv(m, k);
+  if (lv >= u.max) return false;
+  const c = u.cost(lv);
+  if (m.shards < c) return false;
+  m.shards -= c;
+  m.upgrades[k] = lv + 1;
+  return true;
+}
+// 夜の深さ：夜を重ねるほど敵が強くなり、攻撃パターンが増える
+export const nightLevel = (m) => Math.max(0, m.loop - 1);
+export function enemyTier(m) { const n = nightLevel(m); return n >= 5 ? 3 : n >= 2 ? 2 : 1; }
+export function enemyScale(m) {
+  const n = nightLevel(m);
+  return { hp: 1 + 0.35 * n + 0.04 * n * n, dmg: 1 + 0.1 * n, tier: enemyTier(m), level: n };
+}
+// 巻き戻りのとき、持ち越す強化を自動で選んでおく（Lv の高い順、火力優先）
+export function autoInherit(m, boons) {
+  const wedged = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
+  const cand = boons.filter((b) => !wedged.has(b.id)).slice().sort((a, b) => (b.tier || 1) - (a.tier || 1) || (BOONS[b.id].school === 'power') - (BOONS[a.id].school === 'power'));
+  m.inherit = cand.slice(0, inheritCount(m)).map((b) => ({ ...b }));
+}
+
+// 古いセーブに新しい項目を足す
+function migrate(m) {
+  m.shards ??= 0; m.upgrades ??= {}; m.inherit ??= [];
+  if (!m.unlocked.includes('power')) m.unlocked.push('power');
+  return m;
 }
 
 export function validateMeta(m) {
@@ -107,7 +158,9 @@ export function bossCounter(lastLoop) {
 // run: { cause:'death'|'bell', floor, boons:[{id,tier}], dmgByCat, newWedges:[], learned:[], clock, hpMax }
 export function endLoop(m, run) {
   const prevCounter = bossCounter(m.lastLoop);
-  const report = { kept: [], reset: [], changed: [], cause: run.cause, loop: m.loop };
+  const prevTier = enemyTier(m);
+  const report = { kept: [], reset: [], changed: [], cause: run.cause, loop: m.loop, shards: run.shards || 0 };
+  m.shards = (m.shards || 0) + (run.shards || 0);
   if (run.cause === 'death') m.stats.deaths++;
   if (run.cause === 'bell') {
     m.stats.falseWins++;
@@ -120,8 +173,12 @@ export function endLoop(m, run) {
   for (const w of m.wedges) report.kept.push({ text: wedgeLabel(w), sub: w.target === 'boon' ? WEDGE_TARGETS.boon.effect : WEDGE_TARGETS[w.target].effect });
   const nk = Object.keys(m.knowledge).length;
   report.kept.push({ text: `記録帳（${nk}件）`, sub: (run.learned || []).length ? `新たに ${(run.learned || []).length} 件` : '' });
+  report.kept.push({ text: `時の欠片 +${run.shards || 0}（所持 ${m.shards}）`, sub: '刻印（恒久強化）に使える' });
+  autoInherit(m, run.boons || []);
+  if (m.inherit.length) report.kept.push({ text: `継承：${m.inherit.map((b) => BOONS[b.id].name + (b.tier > 1 ? ' Lv' + b.tier : '')).join('・')}`, sub: `最大 ${inheritCount(m)} 個（巻き戻り画面で変更できる）` });
+  const inheritedIds = new Set(m.inherit.map((b) => b.id));
   const wedgedBoonIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
-  const lostBoons = (run.boons || []).filter((b) => !wedgedBoonIds.has(b.id));
+  const lostBoons = (run.boons || []).filter((b) => !wedgedBoonIds.has(b.id) && !inheritedIds.has(b.id));
   if (lostBoons.length) report.reset.push({ text: `強化 ${lostBoons.length} 個`, sub: lostBoons.map((b) => BOONS[b.id].name).join('・') });
   report.reset.push({ text: 'HP・秒針ゲージ', sub: '' });
   report.reset.push({ text: '部屋の並び・敵・報酬', sub: '夜ごとに揺らぐ' });
@@ -139,6 +196,9 @@ export function endLoop(m, run) {
   else if (!nextCounter && prevCounter) report.changed.push({ text: '刻守の対策が消えた', tone: 'blue' });
   m.loop++;
   m.flags.seenRewind = true;
+  const sc = enemyScale(m);
+  report.changed.push({ text: `夜の深さ Lv${sc.level}：敵のHP ×${sc.hp.toFixed(2)}・攻撃 ×${sc.dmg.toFixed(2)}`, tone: 'risk' });
+  if (sc.tier > prevTier) report.changed.push({ text: sc.tier === 2 ? '敵が新しい攻撃を覚えた（二段斬り・連続急降下・3方向弾 ほか）' : '敵がさらに凶暴になった（突き・爆弾・速射・跳躍叩きつけ ほか）', tone: 'risk' });
   return report;
 }
 
@@ -146,7 +206,7 @@ export function serialize(m) { return JSON.stringify(m); }
 export function deserialize(s) {
   try {
     const m = JSON.parse(s);
-    return validateMeta(m) ? m : null;
+    return validateMeta(m) ? migrate(m) : null;
   } catch { return null; }
 }
 

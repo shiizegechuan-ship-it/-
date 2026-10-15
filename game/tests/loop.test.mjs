@@ -10,7 +10,7 @@ import { Game } from '../src/game.js';
 
 test('部屋レイアウトはすべて18行・幅が揃っている', () => {
   for (const [name, rows] of Object.entries(LAYOUTS)) {
-    assert.equal(rows.length, 18, name);
+    assert.ok(rows.length === 18 || rows.length === 24, `${name}: ${rows.length} rows`);
     const w = rows[0].length;
     for (const r of rows) assert.equal(r.length, w, `${name}: ${r}`);
     assert.ok(rows.some((r) => r.includes('P')), `${name} has spawn`);
@@ -48,7 +48,7 @@ test('楔：枠の上限・重複不可・抜くと戻る', () => {
 test('周回の終わり：強化はリセット、楔の強化は保持、知識は保持', () => {
   const st = memStorage();
   const g = newGame(5, st);
-  g.player.setBoons([{ id: 'echo', tier: 2 }, { id: 'gale', tier: 1 }]);
+  g.player.setBoons([{ id: 'echo', tier: 2 }, { id: 'gale', tier: 1 }, { id: 'lag', tier: 1 }]);
   g.meta.slots = 2;
   addWedge(g.meta, { target: 'boon', boon: { id: 'echo', tier: 2 } });
   g.learnK('code');
@@ -56,10 +56,12 @@ test('周回の終わり：強化はリセット、楔の強化は保持、知�
   assert.equal(g.scene, 'rewind');
   const rep = g.rewind.report;
   assert.ok(rep.kept.some((k) => k.text.includes('残響')));
-  assert.ok(rep.reset.some((k) => k.sub.includes('疾風')));
+  // 継承枠 1：楔の強化（残響）以外から 1 つ（疾風）を持ち越し、残り（遅延の刃）はリセット
+  assert.deepEqual(g.meta.inherit.map((b) => b.id), ['gale']);
+  assert.ok(rep.reset.some((k) => k.sub.includes('遅延の刃')));
   g.startLoop();
   assert.equal(g.meta.loop, 2);
-  assert.deepEqual(g.player.boons, [{ id: 'echo', tier: 2 }]);
+  assert.deepEqual(g.player.boons.map((b) => b.id).sort(), ['echo', 'gale']);
   assert.equal(g.player.hp, g.player.maxHp);
   assert.ok(g.meta.knowledge.code);
   // 保存されている
@@ -84,7 +86,7 @@ test('刻守の記憶：前の夜に最も使った手段への対策を1つだ�
   const r1 = endLoop(m, { cause: 'death', floor: 3, boons: [], dmgByCat: { combo: 500 } });
   assert.ok(r1.changed.some((c) => c.text.includes('反撃の足捌き')));
   const r2 = endLoop(m, { cause: 'death', floor: 3, boons: [], dmgByCat: { combo: 500 } });
-  assert.ok(!r2.changed.some((c) => c.text.includes('覚えた')), 'same counter is not re-announced');
+  assert.ok(!r2.changed.some((c) => c.text.includes('戦い方を覚えた')), 'same counter is not re-announced');
 });
 
 test('偽りの勝利（鐘）：初回だけ楔の枠+1', () => {
@@ -248,4 +250,12 @@ test('救出戦：放っておくと錆兵がグレンを襲い、近づくと�
   g.player.x = e.x - 40; g.player.y = e.y + e.h - g.player.h; g.player.hp = 9999; g.player.maxHp = 9999;
   d.frame(30);
   assert.ok(g.targetFor(e) === g.player, 'nearby soldier targets the player');
+});
+
+test('すべての部屋に出現位置が1つ、出口が1つある（刻守の部屋を除く）', () => {
+  for (const [name, rows] of Object.entries(LAYOUTS)) {
+    const t = rows.join('');
+    assert.equal(t.split('P').length - 1, 1, `${name} P`);
+    if (name !== 'belfry') assert.equal(t.split('X').length - 1, 1, `${name} X`);
+  }
 });

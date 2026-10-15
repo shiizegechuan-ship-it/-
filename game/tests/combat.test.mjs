@@ -107,8 +107,9 @@ test('強化「遅延の刃」＋「粉砕」：遅い敵への重撃が2倍', (
   d.frame(40, ['attack']); // 1段目が当たって遅延 → 溜め
   assert.ok(e.slowed);
   const before = e.hp;
+  const combo = g.combo.n;
   d.frame(1); d.until(() => e.hp < before, 30);
-  assert.equal(before - e.hp, 80);
+  assert.equal(before - e.hp, Math.round(40 * 2 * (1 + combo * 0.01)), 'heavy x2 on slowed (+combo bonus)');
 });
 
 test('時歪：ゲージを消費して周囲の敵を遅くする。不足時は不発', () => {

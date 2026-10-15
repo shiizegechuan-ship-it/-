@@ -2,7 +2,7 @@
 import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC } from './config.js';
 import { clamp } from './util.js';
 import { BOONS, SCHOOLS, RESONANCE, synergyHints, schoolCounts } from './boons.js';
-import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, openQuestions, bossCounter, GLEN_DEADLINE, hasWedge } from './meta.js';
+import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, openQuestions, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritCount, enemyScale } from './meta.js';
 import { FLOOR_NAMES } from './world.js';
 
 // ドット文字（DotGothic16）。読み込めない環境では OS の日本語フォントで表示される
@@ -61,7 +61,7 @@ export function drawHud(ctx, game) {
   // 中央：夜の時刻・階層・部屋の進み
   const fi = run.fi;
   text(ctx, `夜 ${fmtClock(run.clock)}`, VIEW_W / 2, 26, { size: 15, align: 'center', bold: true, color: '#efe6d2' });
-  text(ctx, `第${meta.loop}夜　${FLOOR_NAMES[fi]}`, VIEW_W / 2, 42, { size: 10, align: 'center', color: C.muted });
+  text(ctx, `第${meta.loop}夜　${FLOOR_NAMES[fi]}　深さLv${run.scale ? run.scale.level : 0}`, VIEW_W / 2, 42, { size: 11, align: 'center', color: C.muted });
   const rooms = run.plan.floors[fi];
   const dotW = 14, sx = VIEW_W / 2 - (rooms.length * dotW) / 2 + dotW / 2;
   rooms.forEach((r, i) => {
@@ -97,11 +97,27 @@ export function drawHud(ctx, game) {
     const x = 18 + (i % 8) * 112, y = VIEW_H - 22 - Math.floor(i / 8) * 20;
     ctx.fillStyle = col; ctx.save(); ctx.translate(x + 5, y - 4); ctx.rotate(Math.PI / 4); ctx.fillRect(-4, -4, 8, 8); ctx.restore();
     const wedged = meta.wedges.some((w) => w.target === 'boon' && w.boon.id === b.id);
-    text(ctx, def.name + (b.tier > 1 ? ' II' : ''), x + 14, y, { size: 11, color: wedged ? C.gold : '#ddd' });
+    text(ctx, def.name + (def.max ? ` ${b.tier}` : b.tier > 1 ? ' II' : ''), x + 14, y, { size: 11, color: wedged ? C.gold : '#ddd' });
   });
   const res = Object.entries(counts).filter(([s, n]) => s !== 'risk' && n >= 2).map(([s]) => SCHOOLS[s].name);
   if (res.length) text(ctx, `共鳴：${res.join('・')}`, 18, VIEW_H - 22 - (Math.ceil(p.boons.length / 8)) * 20, { size: 10, color: '#f2c14e' });
 
+  // 時の欠片
+  text(ctx, `◆ 欠片 ${meta.shards + (run.shards || 0)}`, 22, 76, { size: 12, color: '#9fd0ff' });
+  if (run.killStacks > 0) text(ctx, `血の秒針 +${Math.round(run.killStacks * 100)}%`, 120, 76, { size: 11, color: '#ff9a3c' });
+  // コンボ
+  const cb = game.combo;
+  if (cb && cb.n >= 2) {
+    const pop = cb.pop || 0, xr = VIEW_W - 26;
+    const big = Math.round(34 + pop * 14 + Math.min(16, cb.n / 6));
+    const col = cb.n >= 50 ? '#ff4a2a' : cb.n >= 20 ? '#ff9a3c' : '#ffe14a';
+    text(ctx, String(cb.n), xr - 52, 150, { size: big, align: 'right', color: col });
+    text(ctx, 'HIT', xr, 150, { size: 18, align: 'right', color: col });
+    text(ctx, `与ダメージ +${Math.round(cb.n * p.stats.comboPer * 100)}%`, xr, 172, { size: 12, align: 'right', color: '#ffd8a0' });
+    const k = clamp(cb.t / (2.2 + 0.4 * upLv(meta, 'combo')), 0, 1);
+    ctx.fillStyle = '#05040a'; ctx.fillRect(xr - 120, 180, 120, 6);
+    ctx.fillStyle = col; ctx.fillRect(xr - 119, 181, Math.round(118 * k), 4);
+  }
   // 鍛冶屋の危機
   if (game.room.desc.type === 'forge' && run.glen === 'attacked') {
     text(ctx, 'グレンを守れ ― 近づいて錆兵を引きつけろ', VIEW_W / 2, 78, { size: 13, align: 'center', color: '#ff8a6a', bold: true });
@@ -187,17 +203,20 @@ function drawBoonPick(ctx, game, m) {
     if (sel) { ctx.lineWidth = 2; ctx.strokeStyle = sc.color; ctx.strokeRect(x + 1, y + 1, cw - 2, ch - 2); }
     ctx.fillStyle = sc.color; ctx.fillRect(x, y, cw, 5);
     text(ctx, sc.name, x + 16, y + 28, { size: 11, color: sc.color, bold: true });
+    const own = p.boons.find((b) => b.id === id);
+    const nt = own ? own.tier + 1 : 1;
     text(ctx, def.name, x + 16, y + 56, { size: 20, bold: true, font: SERIF });
-    wrap(ctx, def.desc(1), cw - 32, 13).forEach((l, j) => text(ctx, l, x + 16, y + 86 + j * 19, { size: 13, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0' }));
+    if (def.max) text(ctx, own ? `Lv${own.tier} → ${nt}` : 'Lv1', x + cw - 16, y + 28, { size: 13, align: 'right', color: own ? '#ffe14a' : C.muted });
+    wrap(ctx, def.desc(nt), cw - 32, 13).forEach((l, j) => text(ctx, l, x + 16, y + 86 + j * 19, { size: 13, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0' }));
     const hints = synergyHints(id, p.boons);
     let hy = y + 170;
     for (const h of hints) { wrap(ctx, h, cw - 32, 11).forEach((l) => { text(ctx, l, x + 16, hy, { size: 11, color: '#f2c14e' }); hy += 15; }); }
-    if (!hints.length && def.school !== 'risk') text(ctx, `同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted });
+    if (!hints.length && def.school !== 'risk' && !schoolCounts(p.boons)[def.school]) text(ctx, `同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted });
     ctx.globalAlpha = 1;
   });
   text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定', VIEW_W / 2, 412, { size: 12, align: 'center', color: C.muted });
   // 現在の手持ち
-  if (p.boons.length) text(ctx, '手持ち：' + p.boons.map((b) => BOONS[b.id].name + (b.tier > 1 ? 'II' : '')).join('・'), VIEW_W / 2, 440, { size: 11, align: 'center', color: '#bbb' });
+  if (p.boons.length) text(ctx, '手持ち：' + p.boons.map((b) => BOONS[b.id].name + (BOONS[b.id].max ? ` Lv${b.tier}` : b.tier > 1 ? 'II' : '')).join('・'), VIEW_W / 2, 440, { size: 11, align: 'center', color: '#bbb' });
 }
 
 function drawForge(ctx, game, m) {
@@ -350,12 +369,13 @@ export function drawRewind(ctx, game) {
     const opts = game.rewindOptions();
     opts.forEach((o, i) => text(ctx, (i === r.sel ? '▶ ' : '') + o.label, VIEW_W / 2, by + i * 26, { size: 15, align: 'center', color: i === r.sel ? C.gold : '#ccc', bold: i === r.sel }));
     text(ctx, `楔 ${meta.wedges.length}/${meta.slots}`, VIEW_W / 2, VIEW_H - 16, { size: 11, align: 'center', color: C.gold });
-  } else {
+  } else if (r.mode === 'pull' || r.mode === 'wedgeBoon') {
     const list = r.mode === 'pull' ? meta.wedges.map((w) => wedgeLabel(w)) : game.wedgeableBoons().map((b) => `${BOONS[b.id].name}${b.tier > 1 ? ' II' : ''}（${SCHOOLS[BOONS[b.id].school].name}）`);
     text(ctx, r.mode === 'pull' ? 'どの楔を抜く？（その対象は次の夜、元に戻る）' : 'どの強化に楔を打つ？（次の夜、持ったまま始まる）', VIEW_W / 2, by - 4, { size: 13, align: 'center', color: C.gold });
     list.forEach((l, i) => text(ctx, (i === r.sub ? '▶ ' : '') + l, VIEW_W / 2, by + 22 + i * 22, { size: 14, align: 'center', color: i === r.sub ? C.gold : '#ccc' }));
     text(ctx, 'Z 決定　C 戻る', VIEW_W / 2, VIEW_H - 16, { size: 11, align: 'center', color: C.muted });
   }
+  if (r.mode === 'upgrade' || r.mode === 'inherit') drawRewindShop(ctx, game, r);
   if (game.modal && game.modal.type === 'journal') { ctx.fillStyle = 'rgba(5,4,8,0.7)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); drawJournal(ctx, game, game.modal); }
 }
 
@@ -380,3 +400,36 @@ export function drawEnding(ctx, game) {
   if (e.t > 0.8) text(ctx, 'Z', VIEW_W - 24, VIEW_H - 18, { size: 11, align: 'right', color: 'rgba(255,255,255,0.5)' });
 }
 export { GLEN_DEADLINE, hasWedge };
+
+// 刻印（恒久強化）と継承の選択画面
+function drawRewindShop(ctx, game, r) {
+  const m = game.meta;
+  const x = 120, y = 70, w = VIEW_W - 240, h = 400;
+  ctx.fillStyle = 'rgba(5,4,8,0.75)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  panel(ctx, x, y, w, h, r.mode === 'upgrade' ? '#9fd0ff' : C.gold);
+  if (r.mode === 'upgrade') {
+    text(ctx, '刻印 ― 夜を越えて残る力', x + 24, y + 38, { size: 22, color: '#9fd0ff' });
+    text(ctx, `時の欠片 ${m.shards}`, x + w - 24, y + 38, { size: 18, align: 'right', color: '#9fd0ff' });
+    Object.entries(UPGRADES).forEach(([k, u], i) => {
+      const yy = y + 80 + i * 36, lv = upLv(m, k), maxed = lv >= u.max, c = maxed ? 0 : u.cost(lv);
+      const sel = i === r.sub;
+      if (sel) { ctx.fillStyle = 'rgba(159,208,255,0.14)'; ctx.fillRect(x + 12, yy - 22, w - 24, 32); }
+      text(ctx, (sel ? '▶ ' : '　') + `${u.name}`, x + 24, yy, { size: 16, color: sel ? '#ffffff' : '#ddd' });
+      text(ctx, `Lv${lv}/${u.max}`, x + 230, yy, { size: 14, color: C.muted });
+      text(ctx, maxed ? u.desc(lv) : `次：${u.desc(lv + 1)}`, x + 320, yy, { size: 13, color: '#cfc8bb' });
+      text(ctx, maxed ? '最大' : `${c}`, x + w - 24, yy, { size: 15, align: 'right', color: maxed ? C.muted : m.shards >= c ? '#9fd0ff' : '#7a5a6a' });
+    });
+  } else {
+    const list = game.inheritCandidates();
+    text(ctx, `継承 ― 次の夜に持ち越す強化（${m.inherit.length}/${inheritCount(m)}）`, x + 24, y + 38, { size: 20, color: C.gold });
+    text(ctx, '「継承の刻印」で数を増やせる', x + w - 24, y + 38, { size: 12, align: 'right', color: C.muted });
+    list.forEach((b, i) => {
+      const yy = y + 80 + i * 30, sel = i === r.sub, on = m.inherit.some((x2) => x2.id === b.id);
+      const def = BOONS[b.id];
+      if (sel) { ctx.fillStyle = 'rgba(242,193,78,0.14)'; ctx.fillRect(x + 12, yy - 20, w - 24, 28); }
+      text(ctx, (on ? '◆ ' : '◇ ') + def.name + (def.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), x + 24, yy, { size: 15, color: on ? C.gold : '#ccc' });
+      text(ctx, def.desc(b.tier || 1), x + 250, yy, { size: 12, color: SCHOOLS[def.school].color });
+    });
+  }
+  text(ctx, game.touch ? '項目をタップで選択／決定は「跳ぶ」、戻るは「回避」' : '↑↓ 選ぶ　Z 決定　C 戻る', VIEW_W / 2, y + h - 16, { size: 12, align: 'center', color: C.muted });
+}

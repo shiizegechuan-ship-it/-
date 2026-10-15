@@ -233,6 +233,66 @@ export const BOSS_FRAMES = {
   kneel: pad([...Array(8).fill('......................'), ...BOSS.slice(0, 4).map((r) => '..' + r.slice(0, 20)), ...BOSS.slice(8, 22)]),
 };
 
+
+// ───────── 時計弓兵（とがったフード・赤い目。弓は描画で足す） ─────────
+const ARCHER = pad([
+  '.....U......',
+  '....kUk.....',
+  '...kMMMk....',
+  '..kMMMxxk...',
+  '..kMMMMMk...',
+  '.UkmmmMk....',
+  'UukmmmmMk...',
+  '.ukmmmmmk...',
+  '..kmmhmmk...',
+  '..kmmmmmk...',
+  '..kmmmmk....',
+  '...kmmk.....',
+  '...kmkmk....',
+  '..kmk.kmk...',
+  '..kk...kk...',
+]);
+export const ARCHER_FRAMES = { stand: ARCHER, draw: shift(ARCHER, 0, 9, -1) };
+
+// ───────── 刻の亡霊（ギザギザの裾・浮遊） ─────────
+const PHANTOM = pad([
+  '..U.......U...',
+  '..kUkkkkkUk...',
+  '..kmmmmmmmk...',
+  '..kmxmmmxmk...',
+  '..kmmmmmmmk...',
+  '.kmmmmmmmmmk..',
+  'UkmmmhmmmmmkU.',
+  'kmmmmmmmmmmmk.',
+  'kmmmmmmmmmmmk.',
+  '.kmmmmmmmmmk..',
+  '.kmmkmmmkmmk..',
+  '.km..kmk..kmk.',
+  '.k....k....k..',
+]);
+export const PHANTOM_FRAMES = { a: PHANTOM, b: shift(PHANTOM, 9, 12, 1) };
+export const PAL_PHANTOM = { k: '#120c1c', m: '#4a3a6a', h: '#8a74b8', x: '#ff3b2f', U: '#b67cf0' };
+
+// ───────── 鐘撞き（鐘の胴・トゲの冠） ─────────
+const BELL = pad([
+  '...U.U.U.....',
+  '...kkkkk.....',
+  '..kMMMxxk....',
+  '..kMMMMMk....',
+  '.kkkkkkkkk...',
+  '.kgggggGgk...',
+  'kgggggggGgk..',
+  'kgggggggGgk..',
+  'kggggggggGgk.',
+  'kggggggggGgk.',
+  'kkkkkkkkkkkk.',
+  '..kmk..kmk...',
+  '.kmmk..kmmk..',
+  '.kkkk..kkkk..',
+]);
+export const BELL_FRAMES = { stand: BELL, ring: shift(BELL, 0, 3, -1) };
+export const PAL_BELL = { ...PAL_FOE, g: '#7a5a2a', G: '#c9a052' };
+
 // スプライトの実体（キャッシュされる）
 export function heroSprite(name) { return sprite('hero:' + name, HERO_FRAMES[name], PAL_ALLY); }
 export function liraSprite() { return sprite('lira', LIRA, PAL_ALLY); }
@@ -245,11 +305,11 @@ export function bossSprite(name, duel) {
   return sprite('boss:' + name + (duel ? ':d' : ''), BOSS_FRAMES[name], pal);
 }
 
-export const ALL_FRAMES = { HERO_FRAMES, SOLDIER_FRAMES, BAT_FRAMES, KNIGHT_FRAMES, BOSS_FRAMES, LIRA: { a: LIRA }, GLEN: { a: GLEN } };
+export const ALL_FRAMES = { HERO_FRAMES, SOLDIER_FRAMES, BAT_FRAMES, KNIGHT_FRAMES, BOSS_FRAMES, ARCHER_FRAMES, PHANTOM_FRAMES, BELL_FRAMES, LIRA: { a: LIRA }, GLEN: { a: GLEN } };
 
 // 色違い（白＝被弾の光、赤＝予備動作の縁取り、青＝遅延、亡霊＝回避の残像）
 const MONO = { white: '#ffffff', red: '#ff4a2a', blue: '#5aa9e6', ghost: '#9fe3ff', gold: '#f2c14e' };
-const GROUPS = { hero: [HERO_FRAMES, PAL_ALLY], soldier: [SOLDIER_FRAMES, PAL_FOE], bat: [BAT_FRAMES, PAL_FOE], knight: [KNIGHT_FRAMES, PAL_FOE], boss: [BOSS_FRAMES, PAL_FOE], lira: [{ a: LIRA }, PAL_ALLY], glen: [{ a: GLEN }, PAL_ALLY] };
+const GROUPS = { archer: [ARCHER_FRAMES, PAL_FOE], phantom: [PHANTOM_FRAMES, PAL_PHANTOM], bell: [BELL_FRAMES, PAL_BELL], hero: [HERO_FRAMES, PAL_ALLY], soldier: [SOLDIER_FRAMES, PAL_FOE], bat: [BAT_FRAMES, PAL_FOE], knight: [KNIGHT_FRAMES, PAL_FOE], boss: [BOSS_FRAMES, PAL_FOE], lira: [{ a: LIRA }, PAL_ALLY], glen: [{ a: GLEN }, PAL_ALLY] };
 export function spr(group, frame, variant = null, duel = false) {
   const [frames, basePal] = GROUPS[group];
   let pal = duel ? { ...basePal, m: '#4a4058', M: '#6e6280' } : basePal;

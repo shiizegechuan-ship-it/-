@@ -3,14 +3,14 @@
 <style>body{margin:0;background:#2a2433}canvas{image-rendering:pixelated;display:block}</style></head>
 <body><canvas id="c"></canvas>
 <script type="module">
-import { ALL_FRAMES, PAL_ALLY, PAL_FOE } from '../src/sprites.js';
+import { ALL_FRAMES, PAL_ALLY, PAL_FOE, PAL_PHANTOM, PAL_BELL } from '../src/sprites.js';
 import { sprite } from '../src/pix.js';
 const S = 6, c = document.getElementById('c'), ctx = c.getContext('2d');
 c.width = 1200; c.height = 760; let col = 0;
 ctx.fillStyle = '#d9d2c4'; ctx.fillRect(0, 380, 1200, 380);
 let y = 8, x0 = 8;
 for (const [group, frames] of Object.entries(ALL_FRAMES)) {
-  const pal = /HERO|LIRA|GLEN/.test(group) ? PAL_ALLY : PAL_FOE;
+  const pal = /HERO|LIRA|GLEN/.test(group) ? PAL_ALLY : /PHANTOM/.test(group) ? PAL_PHANTOM : /BELL/.test(group) ? PAL_BELL : PAL_FOE;
   let x = x0, h = 0;
   for (const [name, rows] of Object.entries(frames)) {
     const s = sprite(group + name, rows, pal);
