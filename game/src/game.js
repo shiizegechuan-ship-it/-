@@ -145,7 +145,10 @@ export class Game {
   marker(c) { return this.map.markers.find((m) => m.c === c); }
   addItem(it) { this.room.items.push({ w: 24, h: 40, ...it }); return it; }
   addSign(m) {
-    const texts = [
+    const texts = this.touch ? [
+      '左のスティックで移動。右のボタンで 跳ぶ・攻撃（長押しで重撃）・回避',
+      '時歪は秒針ゲージを消費して周囲を遅くする。光る印の前で「調べる」',
+    ] : [
       '←→ 移動　Z ジャンプ　X 攻撃（長押しで重撃）　C 回避',
       'V 時歪（秒針ゲージ消費）　↑/E 調べる　Tab 記録帳　Esc 中断',
     ];
@@ -1001,6 +1004,73 @@ export class Game {
       else if (o.id === 'new') { if (this.meta) this.titleConfirm = true; else this.newGame(); }
       else if (o.id === 'shake') this.settings.shake = !this.settings.shake;
     }
+  }
+
+  // ───────── タップ（スマホ）：項目を直接選ぶ。true を返すと「決定」を1回押したことになる ─────────
+  handleTap(x, y) {
+    const row = (y0, step, n, h = 24) => { for (let i = 0; i < n; i++) if (Math.abs(y - (y0 + i * step - 5)) < h / 2) return i; return -1; };
+    if (this.scene === 'title') {
+      if (this.titleConfirm) return y > 390 && y < 470;
+      const i = row(410, 28, this.titleOptions().length, 26);
+      if (i < 0 || Math.abs(x - VIEW_W / 2) > 200) return false;
+      this.titleSel = i; return true;
+    }
+    if (this.scene === 'ending') return true;
+    if (this.scene === 'rewind') {
+      const r = this.rewind;
+      if (this.modal && this.modal.type === 'journal') return this.tapJournal(x, y);
+      if (r.t < 3.2) return true;
+      const by = r.report.tip ? 396 : 380;
+      if (r.mode === 'view') { const i = row(by, 26, this.rewindOptions().length); if (i < 0) return false; r.sel = i; return true; }
+      const n = r.mode === 'pull' ? this.meta.wedges.length : this.wedgeableBoons().length;
+      const i = row(by + 22, 22, n, 22); if (i < 0) return false; r.sub = i; return true;
+    }
+    const m = this.modal;
+    if (!m) return false;
+    switch (m.type) {
+      case 'dialog': {
+        const last = m.idx >= m.lines.length - 1;
+        if (last && m.choices) { const n = m.choices.length; const i = row(472 - n * 22, 22, n, 22); if (i < 0) return false; m.sel = i; return true; }
+        if (m.t < 0.12) return false;
+        this.sfx.play('select');
+        if (last) this.modal = null; else { m.idx++; m.t = 0; }
+        return false;
+      }
+      case 'boon': {
+        if (m.t < 0.25) return false;
+        const cw = 250, gap = 22, total = m.offer.length * cw + (m.offer.length - 1) * gap;
+        for (let i = 0; i < m.offer.length; i++) {
+          const cx0 = VIEW_W / 2 - total / 2 + i * (cw + gap);
+          if (x >= cx0 && x <= cx0 + cw && y >= 130 && y <= 380) {
+            if (m.sel === i) return true; // 2回目のタップで決定
+            m.sel = i; this.sfx.play('select'); return false;
+          }
+        }
+        return false;
+      }
+      case 'pause': { const i = row(214, 32, this.pauseOptions().length, 28); if (i < 0) return false; m.sel = i; return true; }
+      case 'forge': { const i = row(182, 30, m.list.length, 26); if (i < 0) return false; m.sel = i; return true; }
+      case 'journal': return this.tapJournal(x, y);
+      case 'code': {
+        // 数字の上半分で＋、下半分で−
+        for (let i = 0; i < 3; i++) {
+          const dx = VIEW_W / 2 - 80 + i * 80;
+          if (Math.abs(x - dx) < 34 && y > 200 && y < 300) {
+            m.pos = i;
+            m.digits[i] = y < 251 ? m.digits[i] % 9 + 1 : (m.digits[i] + 7) % 9 + 1;
+            this.sfx.play('tick'); return false;
+          }
+        }
+        return y > 300 && y < 370; // 下の帯をタップで決定
+      }
+    }
+    return false;
+  }
+  tapJournal(x, y) {
+    const m = this.modal;
+    for (let i = 0; i < 4; i++) { const tx = 114 + i * 90; if (x >= tx && x <= tx + 80 && y >= 112 && y <= 136) { m.tab = i; this.sfx.play('select'); return false; } }
+    if (y > 480 || x < 90 || x > VIEW_W - 90 || y < 50) { this.modal = m.prev && m.prev.type === 'pause' ? m.prev : null; }
+    return false;
   }
 
   // ───────── モーダル ─────────

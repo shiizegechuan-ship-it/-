@@ -4,6 +4,7 @@ import { Input, attachKeyboard, pollGamepad } from './input.js';
 import { Game } from './game.js';
 import { Sfx } from './audio.js';
 import { render } from './render.js';
+import { isTouchDevice, setupTouch } from './touch.js';
 
 const SAVE_KEY = 'wedge-of-dawn-save-v1';
 const storage = {
@@ -23,16 +24,38 @@ attachKeyboard(input, window);
 window.addEventListener('keydown', () => sfx.unlock(), { once: false });
 window.addEventListener('pointerdown', () => sfx.unlock());
 
+// ゲーム画面は #stage の大きさに合わせて 16:9 で最大化する（縦向きのスマホでは下に操作盤が入る）
+const stage = document.getElementById('stage') || canvas.parentElement;
 function fit() {
-  const s = Math.min(window.innerWidth / VIEW_W, window.innerHeight / VIEW_H);
+  const w = stage.clientWidth || window.innerWidth, h = stage.clientHeight || window.innerHeight;
+  const s = Math.max(0.1, Math.min(w / VIEW_W, h / VIEW_H));
   const dpr = window.devicePixelRatio || 1;
   canvas.style.width = `${Math.floor(VIEW_W * s)}px`;
   canvas.style.height = `${Math.floor(VIEW_H * s)}px`;
-  canvas.width = Math.floor(VIEW_W * Math.max(1, Math.min(2, s * dpr)));
-  canvas.height = Math.floor(VIEW_H * Math.max(1, Math.min(2, s * dpr)));
+  const k = Math.max(1, Math.min(2, s * dpr));
+  canvas.width = Math.floor(VIEW_W * k);
+  canvas.height = Math.floor(VIEW_H * k);
 }
 window.addEventListener('resize', fit);
+if (window.ResizeObserver) new ResizeObserver(fit).observe(stage);
+
+if (isTouchDevice()) {
+  document.body.classList.add('touch');
+  game.touch = true;
+  setupTouch(input, document.body);
+}
 fit();
+
+// 画面のタップ：メニューの項目や強化カードを直接選ぶ
+canvas.addEventListener('pointerdown', (e) => {
+  const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) * VIEW_W / r.width, y = (e.clientY - r.top) * VIEW_H / r.height;
+  if (game.handleTap(x, y)) { input.set('confirm', true, 'tap'); input.set('confirm', false, 'tap'); }
+});
+// 別のアプリへ切り替えたら中断する
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { input.clear(); if (game.scene === 'play' && !game.modal && game.player && game.player.state !== 'dead') game.openPause(); }
+});
 
 let acc = 0, last = performance.now();
 let manual = false; // テストから手動で進めるとき

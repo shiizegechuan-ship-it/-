@@ -159,7 +159,7 @@ function drawDialog(ctx, game, m) {
     if (i === m.sel) { ctx.fillStyle = 'rgba(242,193,78,0.15)'; ctx.fillRect(x + 12, cy - 15, w - 24, 20); }
     text(ctx, (i === m.sel ? '▶ ' : '　') + c.label, x + 22, cy, { size: 13, color: i === m.sel ? C.gold : '#ddd' });
   });
-  if (!choices.length) text(ctx, last ? 'Z：閉じる' : 'Z：次へ', x + w - 14, top + h - 10, { size: 10, align: 'right', color: C.muted });
+  if (!choices.length) text(ctx, game.touch ? (last ? 'タップで閉じる' : 'タップで次へ') : (last ? 'Z：閉じる' : 'Z：次へ'), x + w - 14, top + h - 10, { size: 10, align: 'right', color: C.muted });
 }
 
 function drawBoonPick(ctx, game, m) {
@@ -188,7 +188,7 @@ function drawBoonPick(ctx, game, m) {
     if (!hints.length && def.school !== 'risk') text(ctx, `同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted });
     ctx.globalAlpha = 1;
   });
-  text(ctx, '← → 選ぶ　Z 決定', VIEW_W / 2, 412, { size: 12, align: 'center', color: C.muted });
+  text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定', VIEW_W / 2, 412, { size: 12, align: 'center', color: C.muted });
   // 現在の手持ち
   if (p.boons.length) text(ctx, '手持ち：' + p.boons.map((b) => BOONS[b.id].name + (b.tier > 1 ? 'II' : '')).join('・'), VIEW_W / 2, 440, { size: 11, align: 'center', color: '#bbb' });
 }
@@ -218,7 +218,7 @@ function drawCode(ctx, game, m) {
   }
   const known = game.meta.knowledge.code;
   text(ctx, known ? `記録帳：「書庫の扉 ${game.meta.code.join('-')}」` : '番号の手がかりはまだない', VIEW_W / 2, y + 180, { size: 12, align: 'center', color: known ? '#7fb8ff' : C.muted });
-  text(ctx, '←→ 桁　↑↓ 数字　Z 決定　C 戻る', VIEW_W / 2, y + 204, { size: 10, align: 'center', color: C.muted });
+  text(ctx, game.touch ? '数字の上半分で＋・下半分で−／この帯をタップで決定' : '←→ 桁　↑↓ 数字　Z 決定　C 戻る', VIEW_W / 2, y + 204, { size: 10, align: 'center', color: C.muted });
 }
 
 function drawPause(ctx, game, m) {
@@ -230,7 +230,7 @@ function drawPause(ctx, game, m) {
     const yy = y + 74 + i * 32;
     text(ctx, (i === m.sel ? '▶ ' : '') + o.label, VIEW_W / 2, yy, { size: 14, align: 'center', color: i === m.sel ? C.gold : '#ddd' });
   });
-  text(ctx, '移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃）　回避 C　時歪 V　調べる ↑/E', VIEW_W / 2, VIEW_H - 30, { size: 11, align: 'center', color: C.muted });
+  if (!game.touch) text(ctx, '移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃）　回避 C　時歪 V　調べる ↑/E', VIEW_W / 2, VIEW_H - 30, { size: 11, align: 'center', color: C.muted });
 }
 
 const TABS = ['人物', '謎', '敵', '問い'];
@@ -270,7 +270,7 @@ export function drawJournal(ctx, game, m) {
     const c = bossCounter(meta.lastLoop);
     if (c) draw('刻守の記憶', `前の夜の戦い方を覚えている：${COUNTERS[c].name}――${COUNTERS[c].desc}`, false, '#ff9a7a');
   }
-  text(ctx, '←→ タブ　Tab/Esc 閉じる', x + w - 20, y + h - 14, { size: 10, align: 'right', color: C.muted });
+  text(ctx, game.touch ? 'タブをタップ／枠の外をタップで閉じる' : '←→ タブ　Tab/Esc 閉じる', x + w - 20, y + h - 14, { size: 10, align: 'right', color: C.muted });
 }
 
 // ───────── タイトル ─────────
@@ -299,7 +299,7 @@ export function drawTitle(ctx, game) {
   }
   const opts = game.titleOptions();
   opts.forEach((o, i) => text(ctx, (i === game.titleSel ? '▶ ' : '') + o.label, VIEW_W / 2, 410 + i * 28, { size: 16, align: 'center', color: i === game.titleSel ? C.gold : '#bbb' }));
-  text(ctx, '↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　時歪 V　調べる ↑', VIEW_W / 2, VIEW_H - 18, { size: 11, align: 'center', color: C.muted });
+  text(ctx, game.touch ? 'タップで選ぶ' : '↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　時歪 V　調べる ↑', VIEW_W / 2, VIEW_H - 18, { size: 11, align: 'center', color: C.muted });
   if (game.meta && game.meta.flags.ending) text(ctx, '― 夜明けを迎えた ―', VIEW_W / 2, 386, { size: 11, align: 'center', color: '#ffd38a' });
 }
 
@@ -348,7 +348,7 @@ export function drawRewind(ctx, game) {
     ctx.globalAlpha = 1;
   });
   ctx.globalAlpha = 1;
-  if (t < 3.2) { text(ctx, 'Z：とばす', VIEW_W - 20, VIEW_H - 16, { size: 10, align: 'right', color: C.muted }); return; }
+  if (t < 3.2) { text(ctx, game.touch ? 'タップでとばす' : 'Z：とばす', VIEW_W - 20, VIEW_H - 16, { size: 10, align: 'right', color: C.muted }); return; }
   // 選択肢
   const by = rep.tip ? 396 : 380;
   if (r.mode === 'view') {

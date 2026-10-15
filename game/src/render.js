@@ -3,6 +3,7 @@ import { TILE, VIEW_W, VIEW_H, ZOOM, COLORS as C, PLAYER as PC } from './config.
 import { SOLID, ONEWAY } from './tilemap.js';
 import { cx, cy, clamp } from './util.js';
 import { drawHud, drawModal, drawTitle, drawRewind, drawEnding, FONT } from './ui.js';
+import { drawPlayer, drawSoldier, drawBat, drawTurret, drawKnight, drawBoss, drawLira, drawGlen } from './characters.js';
 
 const FLOOR_SKY = [
   ['#2a1b2e', '#140e19'],
@@ -12,7 +13,6 @@ const FLOOR_SKY = [
 
 export function render(ctx, game) {
   ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = C.bg0;
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   if (game.scene === 'title') drawTitle(ctx, game);
@@ -31,6 +31,17 @@ function renderPlay(ctx, game) {
   ctx.save();
   ctx.scale(ZOOM, ZOOM);
   ctx.translate(-Math.round(camX * ZOOM) / ZOOM, -Math.round(camY * ZOOM) / ZOOM);
+  if (game.silhouette) {
+    // 検証用：キャラクターを黒一色の影絵にして、輪郭だけで敵味方が分かるか確かめる
+    ctx.fillStyle = '#e9e3d6'; ctx.fillRect(camX - 50, camY - 50, VIEW_W, VIEW_H);
+    ctx.filter = 'brightness(0)';
+    for (const it of game.room.items) if (it.kind === 'npc') drawItem(ctx, game, it);
+    for (const e of game.room.enemies) drawEnemy(ctx, game, e);
+    drawPlayer(ctx, game, game.player);
+    ctx.filter = 'none';
+    ctx.restore();
+    return;
+  }
   drawTiles(ctx, game.map, camX);
   for (const it of game.room.items) drawItem(ctx, game, it);
   for (const g of fx.ghosts) drawGhost(ctx, g);
@@ -155,60 +166,6 @@ function drawTiles(ctx, map, camX) {
   }
 }
 
-function drawPlayer(ctx, game, p) {
-  const blink = p.state === 'hurt' || (p.iframeT > 0 && !p.dodging && p.state !== 'dead');
-  if (blink && Math.floor(game.time * 20) % 2 === 0) return;
-  const sq = p.squash;
-  const w = p.w * (1 - sq * 0.5), h = p.h * (1 + sq);
-  const x = cx(p), by = p.y + p.h;
-  ctx.save();
-  if (p.dodging) ctx.globalAlpha = 0.65;
-  if (p.state === 'dead') ctx.globalAlpha = clamp(1 - game.run.deathT / 1.2, 0, 1);
-  // 溜め
-  if (p.state === 'charge') {
-    const k = clamp(p.holdT / PC.heavyCharge, 0, 1);
-    ctx.fillStyle = p.charged ? `rgba(242,193,78,${0.25 + Math.sin(game.time * 30) * 0.12})` : `rgba(242,193,78,${k * 0.2})`;
-    ctx.beginPath(); ctx.arc(x, by - h / 2, 22 + k * 8, 0, Math.PI * 2); ctx.fill();
-  }
-  // マフラー（速度に応じてたなびく）
-  const sway = Math.sin(game.time * 12) * 2;
-  ctx.strokeStyle = C.scarf; ctx.lineWidth = 4; ctx.lineCap = 'round';
-  ctx.beginPath();
-  const nx = x - p.face * 2, ny = by - h + 9;
-  ctx.moveTo(nx, ny);
-  ctx.quadraticCurveTo(nx - p.face * 10 - p.vx * 0.02, ny + 2 + sway - p.vy * 0.01, nx - p.face * 18 - p.vx * 0.04, ny + 6 + sway - p.vy * 0.02);
-  ctx.stroke();
-  // 体（外套）
-  ctx.fillStyle = p.state === 'dead' ? '#777' : C.player;
-  ctx.beginPath();
-  ctx.moveTo(x - w / 2 + 1, by - h + 10);
-  ctx.lineTo(x + w / 2 - 1, by - h + 10);
-  ctx.lineTo(x + w / 2 + 2, by);
-  ctx.lineTo(x - w / 2 - 2, by);
-  ctx.closePath(); ctx.fill();
-  // 頭
-  ctx.beginPath(); ctx.arc(x, by - h + 6, 7, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#1a1420'; ctx.fillRect(x + p.face * 3 - 1, by - h + 4, 2, 3);
-  // 足（走り）
-  if (p.onGround && Math.abs(p.vx) > 30) {
-    const k = Math.sin(p.runAnim * 1.6) * 4;
-    ctx.fillStyle = '#3a3040';
-    ctx.fillRect(x - 4 + k, by - 3, 4, 3); ctx.fillRect(x + 1 - k, by - 3, 4, 3);
-  }
-  // 剣（構え）
-  if (p.state !== 'attack') {
-    ctx.strokeStyle = '#cfd6e0'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(x - p.face * 4, by - h / 2 + 2); ctx.lineTo(x - p.face * 14, by - h / 2 + 14); ctx.stroke();
-  }
-  // 楔を打つ動作
-  if (p.state === 'channel') {
-    const k = clamp(p.stateT / p.channel.duration, 0, 1);
-    ctx.strokeStyle = C.gold; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(x, by - h / 2, 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.stroke();
-  }
-  ctx.restore();
-}
-
 function drawGhost(ctx, g) {
   ctx.globalAlpha = 0.35 * (1 - g.t / g.life);
   ctx.fillStyle = '#9fe3ff';
@@ -260,8 +217,8 @@ function drawEnemy(ctx, game, e) {
       case 'soldier': drawSoldier(c, e, t); break;
       case 'bat': drawBat(c, e, t); break;
       case 'turret': drawTurret(c, e, t); break;
-      case 'knight': drawKnight(c, e, t); break;
-      case 'boss': drawBoss(c, game, e, t); break;
+      case 'knight': drawKnight(c, e, t, drawGear); break;
+      case 'boss': drawBoss(c, game, e, t, FONT); break;
     }
   };
   ctx.save();
@@ -282,160 +239,6 @@ function drawEnemy(ctx, game, e) {
   } else drawBody(ctx);
   ctx.restore();
   hpBar(ctx, e, e.elite ? 50 : 30);
-}
-
-function tellOutline(ctx, e, color) {
-  if (e.tell <= 0) return;
-  ctx.strokeStyle = color; ctx.globalAlpha = 0.4 + e.tell * 0.6; ctx.lineWidth = 2 + e.tell * 2;
-  ctx.strokeRect(e.x - 2, e.y - 2, e.w + 4, e.h + 4);
-  ctx.globalAlpha = 1;
-}
-
-function drawSoldier(ctx, e, t) {
-  const x = e.x, y = e.y, f = e.face;
-  ctx.fillStyle = '#7a4a32'; ctx.fillRect(x + 2, y + 10, e.w - 4, e.h - 10);
-  ctx.fillStyle = '#9a6a48'; ctx.fillRect(x + 1, y, e.w - 2, 12);
-  ctx.fillStyle = '#ffcf6b'; ctx.fillRect(x + (f > 0 ? e.w - 7 : 3), y + 5, 4, 2);
-  // 剣：予備動作で振り上げる
-  const sx = cx(e) + f * 6, sy = y + 16;
-  let ang = f > 0 ? 0.3 : Math.PI - 0.3;
-  if (e.state === 'windup') ang = f > 0 ? -Math.PI * 0.5 - e.tell * 0.5 : -Math.PI * 0.5 + e.tell * 0.5;
-  if (e.state === 'slash') ang = f > 0 ? 0.1 : Math.PI - 0.1;
-  ctx.strokeStyle = '#c8b9a0'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(ang) * 26, sy + Math.sin(ang) * 26); ctx.stroke();
-  if (e.state === 'windup' && e.tell < 0.35) {
-    // 振り上げ直後のきらめき
-    const gx = sx + Math.cos(ang) * 26, gy = sy + Math.sin(ang) * 26, s = 10 * (1 - e.tell / 0.35);
-    ctx.fillStyle = '#fff'; ctx.beginPath();
-    ctx.moveTo(gx, gy - s); ctx.lineTo(gx + 2, gy); ctx.lineTo(gx, gy + s); ctx.lineTo(gx - 2, gy); ctx.closePath(); ctx.fill();
-    ctx.fillRect(gx - s, gy - 1, s * 2, 2);
-  }
-  if (e.state === 'slash') {
-    ctx.strokeStyle = 'rgba(255,120,80,0.8)'; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.arc(cx(e) + f * 8, cy(e), 30, f > 0 ? -1 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 1); ctx.stroke();
-  }
-  tellOutline(ctx, e, '#ff7a4a');
-  if (e.state === 'recover') { ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = `10px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText('…', cx(e), y - 4); }
-}
-
-function drawBat(ctx, e, t) {
-  const x = cx(e), y = cy(e);
-  if (e.state === 'tell' && e.target) {
-    ctx.strokeStyle = `rgba(255,70,50,${0.25 + e.tell * 0.6})`; ctx.lineWidth = 1 + e.tell * 3;
-    ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(e.target.x, e.target.y); ctx.stroke(); ctx.setLineDash([]);
-    ctx.beginPath(); ctx.arc(e.target.x, e.target.y, 10 - e.tell * 4, 0, Math.PI * 2); ctx.stroke();
-  }
-  const flap = e.state === 'dive' ? -0.2 : Math.sin(t * 18) * 0.6;
-  ctx.fillStyle = '#3d2f4f';
-  for (const s of [-1, 1]) {
-    ctx.beginPath(); ctx.moveTo(x, y);
-    ctx.lineTo(x + s * 16, y - 8 + flap * 10 * s * s); ctx.lineTo(x + s * 13, y + 4); ctx.closePath(); ctx.fill();
-  }
-  ctx.fillStyle = e.state === 'stunned' ? '#888' : '#c9a24a';
-  ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ff5a3c'; ctx.fillRect(x - 3, y - 2, 2, 2); ctx.fillRect(x + 1, y - 2, 2, 2);
-  if (e.state === 'stunned') { ctx.fillStyle = '#fff'; ctx.font = `10px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText('@', x, e.y - 4); }
-}
-
-function drawTurret(ctx, e, t) {
-  const x = cx(e), y = cy(e), r = 13;
-  ctx.fillStyle = '#4a3b2a'; ctx.fillRect(e.x, e.y + e.h - 6, e.w, 6);
-  ctx.fillStyle = e.tell > 0 ? `rgb(${200 + e.tell * 55},${200 - e.tell * 120},${170 - e.tell * 120})` : '#d9ceb2';
-  ctx.beginPath(); ctx.arc(x, y - 2, r, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#3a2c1c'; ctx.lineWidth = 2; ctx.stroke();
-  // 12時の目盛り
-  ctx.fillStyle = '#e35d5d'; ctx.fillRect(x - 1, y - 2 - r + 1, 2, 4);
-  const a = e.hand * Math.PI * 2 - Math.PI / 2;
-  ctx.strokeStyle = '#1a1420'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(x, y - 2); ctx.lineTo(x + Math.cos(a) * (r - 3), y - 2 + Math.sin(a) * (r - 3)); ctx.stroke();
-}
-
-function drawKnight(ctx, e, t) {
-  const x = e.x, y = e.y, f = e.face;
-  drawGear(ctx, cx(e), y + 24, 15, t * (e.state === 'stagger' ? 0.5 : 2), '#8a7a5a');
-  ctx.fillStyle = '#5b5060'; ctx.fillRect(x + 4, y + 8, e.w - 8, e.h - 8);
-  ctx.fillStyle = '#6e6475'; ctx.fillRect(x + 6, y, e.w - 12, 12);
-  ctx.fillStyle = '#ffcf6b'; ctx.fillRect(x + (f > 0 ? e.w - 12 : 8), y + 4, 4, 2);
-  // 盾
-  const guarding = e.guarding;
-  const shx = f > 0 ? x + e.w - 2 : x - 8;
-  if (e.state !== 'stagger') {
-    ctx.fillStyle = guarding ? '#b8a68a' : '#7a6e5c';
-    if (e.tellKind === 'shield' && e.tell > 0) ctx.fillStyle = `rgb(255,${180 - e.tell * 100},${80 - e.tell * 60})`;
-    ctx.fillRect(shx, y + 8, 10, e.h - 14);
-    if (guarding) { ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fillRect(shx + (f > 0 ? 7 : 1), y + 10, 2, e.h - 18); }
-  }
-  // ハンマー
-  if (e.state === 'slamWind' || e.state === 'slam') {
-    const up = e.state === 'slamWind';
-    const hx = cx(e) + f * (up ? -4 : 30), hy = up ? y - 18 - e.tell * 8 : y + e.h - 14;
-    ctx.fillStyle = '#9c8a70'; ctx.fillRect(hx - 9, hy - 7, 18, 14);
-    ctx.strokeStyle = '#6a5a44'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx(e), y + 14); ctx.lineTo(hx, hy); ctx.stroke();
-    if (up) { ctx.fillStyle = `rgba(255,90,60,${e.tell})`; ctx.font = `bold 16px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText('！', cx(e), y - 34); }
-  }
-  if (e.state === 'stagger') { ctx.fillStyle = '#f2c14e'; ctx.font = `bold 12px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText('崩れ', cx(e), y - 12); }
-  tellOutline(ctx, e, '#ff7a4a');
-}
-
-function drawBoss(ctx, game, e, t) {
-  const x = e.x, y = e.y, f = e.face;
-  // 背後の時計の光輪
-  ctx.strokeStyle = e.trueDuel ? 'rgba(255,211,138,0.6)' : 'rgba(242,193,78,0.45)';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(cx(e), y + 8, 26, 0, Math.PI * 2); ctx.stroke();
-  for (let i = 0; i < 12; i++) {
-    const a = i / 12 * Math.PI * 2 + (e.phase === 3 ? -t : 0) * 0.5;
-    ctx.fillRect(cx(e) + Math.cos(a) * 26 - 1, y + 8 + Math.sin(a) * 26 - 1, 2, 2);
-  }
-  // 残響喰いの輪
-  if (e.ringT > 0) { ctx.strokeStyle = 'rgba(182,124,240,0.85)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx(e), cy(e), 44 + Math.sin(t * 8) * 3, 0, Math.PI * 2); ctx.stroke(); }
-  // 跳躍の着地点
-  if (e.state === 'leap') {
-    ctx.fillStyle = 'rgba(255,60,40,0.35)';
-    const gy = game.map.groundBelow(e.leapX, e.y + e.h);
-    ctx.beginPath(); ctx.ellipse(e.leapX, gy, 46, 7, 0, 0, Math.PI * 2); ctx.fill();
-  }
-  // 振り子斬りの予告弧
-  if (e.state === 'swingWind') {
-    ctx.fillStyle = `rgba(255,90,60,${0.12 + e.tell * 0.25})`;
-    ctx.beginPath(); ctx.moveTo(cx(e), cy(e));
-    ctx.arc(cx(e), cy(e) - 4, 118, f > 0 ? -0.9 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 0.9); ctx.closePath(); ctx.fill();
-  }
-  if (e.state === 'handsWind' && e.targets) {
-    ctx.strokeStyle = `rgba(255,90,60,${0.3 + e.tell * 0.6})`; ctx.lineWidth = 1 + e.tell * 2; ctx.setLineDash([6, 6]);
-    for (const tg of e.targets) { ctx.beginPath(); ctx.moveTo(cx(e), y + 16); ctx.lineTo(tg.x, tg.y); ctx.stroke(); }
-    ctx.setLineDash([]);
-  }
-  // 体（長衣）
-  ctx.fillStyle = e.trueDuel ? '#3c3448' : '#2e2638';
-  ctx.beginPath();
-  ctx.moveTo(cx(e) - 10, y + 12); ctx.lineTo(cx(e) + 10, y + 12);
-  ctx.lineTo(x + e.w + 6, y + e.h); ctx.lineTo(x - 6, y + e.h); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#d8ccb4'; ctx.beginPath(); ctx.arc(cx(e), y + 8, 9, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#f2c14e'; ctx.fillRect(cx(e) + f * 4 - 1, y + 6, 2, 2);
-  // 振り子の剣
-  let ang = f > 0 ? 0.6 : Math.PI - 0.6;
-  if (e.state === 'swingWind') ang = f > 0 ? Math.PI + 0.6 + e.tell * 0.5 : -0.6 - e.tell * 0.5;
-  if (e.state === 'swing' || e.state === 'riposte' || e.state === 'step') ang = f > 0 ? 0.1 : Math.PI - 0.1;
-  ctx.strokeStyle = '#e2d6b8'; ctx.lineWidth = 4;
-  const hx = cx(e), hy = y + 22;
-  ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + Math.cos(ang) * 60, hy + Math.sin(ang) * 60); ctx.stroke();
-  ctx.fillStyle = '#f2c14e'; ctx.beginPath(); ctx.arc(hx + Math.cos(ang) * 60, hy + Math.sin(ang) * 60, 7, 0, Math.PI * 2); ctx.fill();
-  if (e.state === 'swing') { ctx.strokeStyle = 'rgba(255,200,120,0.85)'; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(cx(e), cy(e) - 4, 100, f > 0 ? -0.9 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 0.9); ctx.stroke(); }
-  // 懐中時計（時止めの予兆）
-  if (e.state === 'stopWind') {
-    const k = e.tell;
-    ctx.fillStyle = `rgba(255,255,255,${0.5 + k * 0.5})`;
-    ctx.beginPath(); ctx.arc(cx(e) - f * 6, y - 14 - k * 10, 8 + k * 3, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#1a1420'; ctx.lineWidth = 2; ctx.beginPath();
-    ctx.moveTo(cx(e) - f * 6, y - 14 - k * 10); ctx.lineTo(cx(e) - f * 6 + Math.cos(t * 12) * 6, y - 14 - k * 10 + Math.sin(t * 12) * 6); ctx.stroke();
-    ctx.strokeStyle = `rgba(255,255,255,${k * 0.5})`; ctx.beginPath(); ctx.arc(cx(e), cy(e), 40 + k * 80, 0, Math.PI * 2); ctx.stroke();
-  }
-  if (e.tellKind === 'parry' && e.state === 'parry') { ctx.strokeStyle = 'rgba(90,169,230,0.95)'; ctx.lineWidth = 4; ctx.strokeRect(x - 6, y - 6, e.w + 12, e.h + 12); ctx.fillStyle = '#5aa9e6'; ctx.font = `bold 13px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText('受', cx(e), y - 26); }
-  if (e.state === 'stepWind') { ctx.strokeStyle = `rgba(255,60,40,${e.tell})`; ctx.lineWidth = 4; ctx.strokeRect(x - 6, y - 6, e.w + 12, e.h + 12); }
-  if (e.state === 'antiAirWind') { ctx.fillStyle = `rgba(255,90,60,${e.tell})`; ctx.beginPath(); ctx.moveTo(cx(e), y - 40); ctx.lineTo(cx(e) - 9, y - 24); ctx.lineTo(cx(e) + 9, y - 24); ctx.closePath(); ctx.fill(); }
-  if (e.state === 'crouch' || e.tellKind === 'crouch' && e.state === 'leapWind') { ctx.fillStyle = 'rgba(255,90,60,0.6)'; ctx.fillRect(x - 4, y + e.h - 3, e.w + 8, 3); }
-  if (e.state === 'stagger') { ctx.fillStyle = '#f2c14e'; ctx.font = `bold 13px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText('崩れ', cx(e), y - 24); }
 }
 
 function drawProjectile(ctx, pr) {
@@ -558,16 +361,9 @@ function drawItem(ctx, game, it) {
 
 function drawNpc(ctx, game, it, t) {
   const x = cx(it), by = it.y + it.h;
-  if (it.who === 'lira') {
-    ctx.fillStyle = '#c9b8d8';
-    ctx.beginPath(); ctx.moveTo(x - 6, by - 22); ctx.lineTo(x + 6, by - 22); ctx.lineTo(x + 9, by); ctx.lineTo(x - 9, by); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#e8dcc4'; ctx.beginPath(); ctx.arc(x, by - 27, 6, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#d24d3a'; ctx.fillRect(x - 7, by - 33, 5, 3);
-  } else {
-    ctx.fillStyle = '#6a5040'; ctx.fillRect(x - 11, by - 30, 22, 30);
-    ctx.fillStyle = '#9a8060'; ctx.fillRect(x - 9, by - 22, 18, 18);
-    ctx.fillStyle = '#d8b898'; ctx.beginPath(); ctx.arc(x, by - 34, 7, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#5a3a2a'; ctx.fillRect(x - 7, by - 30, 14, 4);
+  if (it.who === 'lira') drawLira(ctx, x, by, t);
+  else {
+    drawGlen(ctx, x, by, t);
     if (it.inDanger && game.run.glen === 'attacked') {
       const k = clamp(game.room.glenHp / 60, 0, 1);
       ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 22, it.y - 16, 44, 6);
