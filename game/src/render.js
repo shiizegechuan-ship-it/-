@@ -87,9 +87,16 @@ function renderPlay(ctx, game) {
   // 守りの秒針（常時の術）
   if (game.player.cloud && game.player.state !== 'dead') { // 頭上の雷雲
     const c = game.player.cloud, x = Math.round(c.x / 2), y = Math.round(c.y / 2) + Math.round(Math.sin(game.time * 3));
+    const big = game.player.cloud.big;
+    if (big) { for (const [dx, dy, r] of [[-9, 2, 4], [9, 2, 4]]) disc(b, x + dx, y + dy, r, '#3a4058'); if (Math.floor(game.time * 10) % 4 === 0) line(b, x - 3, y + 6, x - 1, y + 10, '#ffe14a'); }
     for (const [dx, dy, r] of [[-5, 1, 4], [0, -1, 5], [5, 1, 4]]) disc(b, x + dx, y + dy, r, '#4a5266');
     for (const [dx, dy, r] of [[-4, 0, 3], [1, -2, 3]]) disc(b, x + dx, y + dy, r, '#6a7590');
     if (Math.floor(game.time * 6) % 5 === 0) pset(b, x + 2, y + 5, '#cfe8ff');
+  }
+  for (const g of game.player.orbitGears || []) { // 歯車の輪舞：大きな回る歯車
+    const x = Math.round(g.x / 2), y = Math.round(g.y / 2);
+    disc(b, x, y, 3, '#8a6a34'); pset(b, x, y, '#ffe14a');
+    for (let i = 0; i < 6; i++) { const a2 = g.a * 3 + i / 6 * Math.PI * 2; pset(b, x + Math.round(Math.cos(a2) * 4), y + Math.round(Math.sin(a2) * 4), i % 2 ? '#f2c14e' : '#c9a052'); }
   }
   for (const h of game.player.orbitHands || []) {
     const x = Math.round(h.x / 2), y = Math.round(h.y / 2), ux = Math.cos(h.a + Math.PI / 2), uy = Math.sin(h.a + Math.PI / 2);
@@ -403,7 +410,8 @@ function drawSpell(b, sp, t) {
       if (k < 1) {
         const sx = (sp.from.x + (sp.x - sp.from.x) * k) / 2, sy = (sp.from.y + (sp.y - sp.from.y) * k) / 2;
         dashLine(b, sx - 10, sy - 20, sx, sy, 'rgba(255,225,74,0.6)', 2, 1);
-        rect(b, sx - 3, sy, 7, 1, '#ffe14a'); rect(b, sx, sy - 3, 1, 7, '#ffe14a'); pset(b, sx, sy, '#ffffff');
+        if (sp.sword) { line(b, sx - 3, sy - 8, sx, sy, '#e8f4ff', 2); rect(b, sx - 4, sy - 7, 4, 1, '#ffe14a'); pset(b, sx, sy + 1, '#ffffff'); }
+        else { rect(b, sx - 3, sy, 7, 1, '#ffe14a'); rect(b, sx, sy - 3, 1, 7, '#ffe14a'); pset(b, sx, sy, '#ffffff'); }
         pset(b, sx - 1, sy - 1, '#fff6d0'); pset(b, sx + 1, sy + 1, '#fff6d0');
       } else {
         const r = Math.round((k - 1) * 40);
@@ -419,7 +427,8 @@ function drawSpell(b, sp, t) {
       for (let i = 2; i >= 0; i--) {
         b.globalAlpha = i === 0 ? 1 : 0.3 / i;
         const ox = x - f * i * 6;
-        arc(b, ox - f * h, y, h, f > 0 ? -0.5 * Math.PI : 0.5 * Math.PI, f > 0 ? 0.5 * Math.PI : 1.5 * Math.PI, i === 0 ? '#9fe3ff' : '#5aa9e6', 3);
+        // 剣の道の斬撃は白金色、術の斬撃は青
+        arc(b, ox - f * h, y, h, f > 0 ? -0.5 * Math.PI : 0.5 * Math.PI, f > 0 ? 0.5 * Math.PI : 1.5 * Math.PI, i === 0 ? (sp.melee ? '#fff2c0' : '#9fe3ff') : (sp.melee ? '#f2c14e' : '#5aa9e6'), sp.small ? 2 : 3);
         if (i === 0) arc(b, ox - f * h, y, h - 3, f > 0 ? -0.4 * Math.PI : 0.6 * Math.PI, f > 0 ? 0.4 * Math.PI : 1.4 * Math.PI, '#ffffff', 1);
       }
       b.globalAlpha = 1;
@@ -501,6 +510,21 @@ function drawSpell(b, sp, t) {
       b.globalAlpha = 1 - k * k;
       const h = 2 + ((Math.floor(t * 18) + Math.floor(sp.x)) % 3);
       rect(b, x - 1, y + 3 - h, 3, h, '#ff7a3c'); pset(b, x, y + 2 - h, '#ffe14a'); rect(b, x - 2, y + 3, 5, 1, 'rgba(255,120,60,0.6)');
+      b.globalAlpha = 1;
+      break;
+    }
+    case 'cross': { // 残心：遅れて走る十字の斬撃
+      if (sp.t < sp.delay) break;
+      const k = (sp.t - sp.delay) / 0.22, r = Math.round(10 * Math.min(1, k * 3));
+      b.globalAlpha = 1 - k;
+      line(b, x - r, y - r, x + r, y + r, '#ffffff', 2); line(b, x - r, y + r, x + r, y - r, '#ffffff', 2);
+      line(b, x - r, y - r, x + r, y + r, '#9fe3ff', 1);
+      b.globalAlpha = 1;
+      break;
+    }
+    case 'vblade': { // 天裂：縦に飛ぶ刃
+      const d = Math.sign(sp.vy);
+      for (let i = 2; i >= 0; i--) { b.globalAlpha = i === 0 ? 1 : 0.3 / i; arc(b, x, y - d * i * 5, 8, d < 0 ? Math.PI * 1.1 : Math.PI * 0.1, d < 0 ? Math.PI * 1.9 : Math.PI * 0.9, i === 0 ? '#e8f4ff' : '#9fe3ff', 2); }
       b.globalAlpha = 1;
       break;
     }

@@ -1,7 +1,7 @@
 // 術（じゅつ）：秒針ゲージで放つ「発動する術」と、条件で自動的に出る「発動条件つきの術」。
 // 術の当たり判定はここで持ち、ダメージ計算は game.dealDamage（cat:'skill', spell:true）に任せる。
 import { cx, cy, sign, clamp } from './util.js';
-import { PASSIVE_IDS, passiveSynergy } from './boons.js';
+import { PASSIVE_IDS, FUSED_PASSIVES, passiveSynergy } from './boons.js';
 
 const lvMul = (lv) => 1 + 0.4 * (lv - 1);
 // 発動する術（V／時歪ボタン）。1 つだけ装着でき、取り直すと Lv が上がる
@@ -25,6 +25,8 @@ function enemiesNear(game, x, y, r) {
 }
 function strike(game, sp, e, base, extra = {}) {
   if (!e.alive) return;
+  // 剣の道の飛ぶ斬撃は「連撃」扱い（術の守りに阻まれない・対策は連撃として受ける）
+  if (sp.melee) { game.dealDamage(e, { base, cat: 'combo', knock: extra.knock || 120, dir: extra.dir || sign(cx(e) - sp.x) || 1, proj: true, ...extra }); return; }
   game.dealDamage(e, { base, cat: 'skill', knock: extra.knock || 120, dir: extra.dir || sign(cx(e) - sp.x) || 1, spell: true, passive: !!sp.passive, ...extra });
 }
 
@@ -67,6 +69,33 @@ export function spawnWave(game, p) {
   const f = p.face;
   game.room.spells.push(new Spell('blade', cx(p) + f * 18, cy(p), { vx: f * 480, life: 0.45, h: 34, dmg: 30, face: f }));
 }
+
+// ───────── 剣の道（素の攻撃から出る斬撃） ─────────
+export const MELEE = {
+  // 剣気：連撃の振りから飛ぶ斬撃（千刃なら 3 本）
+  qi(game, p) {
+    const st = p.stats, f = p.face;
+    const lv = st.thousand || st.swordqi;
+    const n = st.thousand ? 3 : lv >= 3 ? 2 : 1;
+    const dmg = (st.thousand ? 16 : 14) * lvMul(lv);
+    for (let i = 0; i < n; i++) {
+      const oy = n === 1 ? 0 : (i - (n - 1) / 2) * 12;
+      game.room.spells.push(new Spell('blade', cx(p) + f * 18, cy(p) + oy, { melee: true, vx: f * 540, life: 0.38, h: 26, dmg, face: f, small: true }));
+    }
+  },
+  // 残心：少し遅れて十字の追撃
+  cross(game, e, lv) { game.room.spells.push(new Spell('cross', cx(e), cy(e), { melee: true, delay: 0.3, dmg: 34 * lvMul(lv), target: e })); },
+  // 破砕：重撃から床を走る衝撃波
+  crush(game, p, lv) {
+    const fy = Math.min(game.map.groundBelow(cx(p), p.y + p.h - 4), game.map.pxH);
+    game.room.spells.push(new Spell('groundwave', cx(p) + p.face * 20, fy, { melee: true, vx: p.face * 480, life: 0.8, dmg: 40 * lvMul(lv), big: true }));
+    game.fx.shake(3, 0.1);
+  },
+  // 天裂：上攻撃は真上へ、下攻撃は真下へ刃
+  rend(game, p, lv, dir) { game.room.spells.push(new Spell('vblade', cx(p), cy(p) + dir * 10, { melee: true, vy: dir * 560, life: 0.4, dmg: 34 * lvMul(lv) })); },
+  // 剣聖：会心の一撃で斬撃が飛ぶ
+  saint(game, p, lv) { game.room.spells.push(new Spell('blade', cx(p) + p.face * 18, cy(p), { melee: true, vx: p.face * 600, life: 0.45, h: 44, dmg: 30 * lvMul(lv), face: p.face })); },
+};
 
 // ───────── 発動条件つき ─────────
 export const PROCS = {
@@ -173,8 +202,26 @@ export function updateSpells(game, dt) {
         if (sp.t > sp.life) sp.alive = false;
         break;
       }
+      case 'cross': {
+        if (sp.t >= sp.delay && !sp.boomed) {
+          sp.boomed = true;
+          const e = sp.target;
+          if (e && e.alive) { sp.x = cx(e); sp.y = cy(e); strike(game, sp, e, sp.dmg, { knock: 80 }); }
+          game.fx.sparks(sp.x, sp.y, '#ffffff', 6, 200);
+        }
+        if (sp.t > sp.delay + 0.22) sp.alive = false;
+        break;
+      }
+      case 'vblade': {
+        sp.y += sp.vy * dt;
+        const box = { x: sp.x - 16, y: sp.y - 20, w: 32, h: 40 };
+        for (const e of room.enemies) if (e.alive && !sp.hit.has(e.id) && e.x < box.x + box.w && e.x + e.w > box.x && e.y < box.y + box.h && e.y + e.h > box.y) { sp.hit.add(e.id); strike(game, sp, e, sp.dmg, { knock: 60, lift: sp.vy < 0 ? 300 : 0 }); }
+        if (sp.t > sp.life || game.map.solidAt(sp.x, sp.y + Math.sign(sp.vy) * 20)) sp.alive = false;
+        break;
+      }
       case 'groundwave': {
-        // 床を走る衝撃波：床の上にいる敵に一度ずつ当たる
+        // 床を走る衝撃波：床の上にいる敵に一度ずつ当たる（t が負の間は待機）
+        if (sp.t < 0) break;
         sp.x += sp.vx * dt;
         for (const e of room.enemies) if (e.alive && !(e.boss && e.defeated) && !sp.hit.has(e.id) && Math.abs(cx(e) - sp.x) < e.w / 2 + 14 && Math.abs(e.y + e.h - sp.y) < 40) { sp.hit.add(e.id); strike(game, sp, e, sp.dmg, { knock: 60, dir: sign(sp.vx) }); }
         if (sp.t > sp.life || game.map.solidAt(sp.x + sign(sp.vx) * 8, sp.y - 10)) sp.alive = false;
@@ -183,8 +230,8 @@ export function updateSpells(game, dt) {
       case 'spike': {
         if (sp.t >= sp.delay && !sp.boomed) {
           sp.boomed = true;
-          for (const e of room.enemies) if (e.alive && !(e.boss && e.defeated) && Math.abs(cx(e) - sp.x) < e.w / 2 + 16 && Math.abs(e.y + e.h - sp.y) < 50) strike(game, sp, e, sp.dmg, { knock: 40 });
-          game.fx.sparks(sp.x, sp.y - 10, '#e8f0ff', 6, 220);
+          for (const e of room.enemies) if (e.alive && !(e.boss && e.defeated) && Math.abs(cx(e) - sp.x) < e.w / 2 + 16 && Math.abs(e.y + e.h - sp.y) < 50) { strike(game, sp, e, sp.dmg, { knock: 40 }); if (sp.ice && !e.boss && !e.elite) e.lag = Math.max(e.lag || 0, 1.5); }
+          game.fx.sparks(sp.x, sp.y - 10, sp.ice ? '#9fe3ff' : '#e8f0ff', 6, 220);
         }
         if (sp.t > sp.delay + 0.45) sp.alive = false;
         break;
@@ -263,7 +310,7 @@ export function updatePassives(game, dt) {
   const T = (p.passiveT ||= { orbitHit: {} });
   dt *= p.stats.passiveSpeed || 1; // 星の心臓：常時の術が速く回る
   const px = cx(p), py = cy(p);
-  const owned = PASSIVE_IDS.filter((id) => pv[id]).length;
+  const owned = PASSIVE_IDS.filter((id) => pv[id]).length + FUSED_PASSIVES.filter((id) => pv[id]).length; // 合成した術は 2 種ぶん
   const syn = passiveSynergy(owned) * (p.stats.passiveMul || 1); // 星界の地図
   p.passiveSyn = syn;
   const dmg = (base, id) => base * lvMul(pv[id]) * syn;
@@ -335,7 +382,7 @@ export function updatePassives(game, dt) {
         game.fx.sparks(cx(e), cy(e), '#cfe8ff', 6, 200);
       }
     }
-  } else p.cloud = null;
+  } else if (!pv.thundergod) p.cloud = null;
   // 雷冠（アーティファクト）：常時の術ではないので脅威には数えない
   if (p.stats.stormcrown && (T.crown = (T.crown || 0) + dt) >= 2.5) {
     const e = nearestTargets(game, px, py, 300)[0];
@@ -357,6 +404,68 @@ export function updatePassives(game, dt) {
   }
   if (pv.emberfloor && anyFoe() && tick('emberfloor', 5)) {
     game.room.spells.push(new Spell('burnfloor', px, floorY(), { passive: true, life: 2.2, half: 150, dmg: dmg(7, 'emberfloor') }));
+  }
+  // ───── 合成した常時の術 ─────
+  if (pv.gearwaltz) {
+    T.gw = (T.gw || 0) + dt;
+    const n = 4 + pv.gearwaltz, r = 46;
+    p.orbitGears = [];
+    for (let i = 0; i < n; i++) {
+      const a = T.gw * 3 + i / n * Math.PI * 2;
+      const hx = px + Math.cos(a) * r, hy = py + Math.sin(a) * r * 0.75;
+      p.orbitGears.push({ x: hx, y: hy, a });
+      for (const e of game.room.enemies) {
+        if (!e.alive || (e.boss && e.defeated)) continue;
+        if (hx < e.x - 9 || hx > e.x + e.w + 9 || hy < e.y - 9 || hy > e.y + e.h + 9) continue;
+        if ((T.orbitHit['g' + e.id] || 0) > T.gw) continue;
+        T.orbitHit['g' + e.id] = T.gw + 0.35;
+        game.dealDamage(e, { base: dmg(20, 'gearwaltz'), cat: 'skill', knock: 70, dir: sign(cx(e) - px) || 1, spell: true, passive: true });
+        game.fx.sparks(hx, hy, '#c9a052', 4, 160);
+      }
+    }
+    if (anyFoe() && tick('gwThrow', 2)) for (const f of [-1, 1]) game.room.spells.push(new Spell('gear', px, py - 4, { passive: true, vx: f * 520, ox: px, face: f, life: 1.3, dmg: dmg(20, 'gearwaltz') }));
+  } else p.orbitGears = null;
+  if (pv.starblade && (T.sb = (T.sb || 0) + dt) >= 2.5) {
+    const ts = nearestTargets(game, px, py, 460);
+    if (ts.length) {
+      T.sb = 0;
+      for (let i = 0; i < 4 + pv.starblade; i++) {
+        const e = ts[i % ts.length], tx = cx(e) + (i >= ts.length ? (Math.random() - 0.5) * 60 : 0);
+        game.room.spells.push(new Spell('star', tx, cy(e), { passive: true, delay: i * 0.07, fall: 0.25, dmg: dmg(60, 'starblade'), from: { x: tx - 60, y: cy(e) - 300 }, sword: true }));
+      }
+    }
+  }
+  if (pv.thundergod) {
+    p.cloud = { x: px - p.face * 10, y: py - 62, big: true };
+    if ((T.tg = (T.tg || 0) + dt) >= 0.7) {
+      const ts = nearestTargets(game, p.cloud.x, p.cloud.y, 320);
+      if (ts.length) {
+        T.tg = 0;
+        const e = ts[Math.floor(Math.random() * Math.min(3, ts.length))];
+        const sp = new Spell('zap', p.cloud.x, p.cloud.y, { passive: true, tx: cx(e), ty: cy(e), life: 0.2 });
+        game.room.spells.push(sp);
+        strike(game, sp, e, dmg(34, 'thundergod'), { knock: 40 });
+        const o = ts.find((x) => x !== e);
+        if (o) { game.room.spells.push(new Spell('zap', cx(e), cy(e), { passive: true, tx: cx(o), ty: cy(o), life: 0.2 })); strike(game, sp, o, dmg(34, 'thundergod') * 0.6, { knock: 30 }); }
+        game.fx.sparks(cx(e), cy(e), '#cfe8ff', 8, 220);
+      }
+    }
+  }
+  if (pv.inferno && anyFoe() && tick('inferno', 2.5)) {
+    game.room.spells.push(new Spell('flamering', px, py + 6, { passive: true, r: 0, maxR: 125, pulses: 1, pulse: 0, dmg: dmg(40, 'inferno') }));
+    game.room.spells.push(new Spell('burnfloor', px, floorY(), { passive: true, life: 2, half: 170, dmg: dmg(9, 'inferno') }));
+  }
+  if (pv.icejail && (T.ij = (T.ij || 0) + dt) >= 3) {
+    const ts = nearestTargets(game, px, py, 360).slice(0, 3 + pv.icejail);
+    if (ts.length) {
+      T.ij = 0;
+      for (const e of ts) game.room.spells.push(new Spell('spike', cx(e), Math.min(game.map.groundBelow(cx(e), e.y + e.h - 4), game.map.pxH), { passive: true, delay: 0.3, dmg: dmg(60, 'icejail'), ice: true }));
+    }
+  }
+  if (pv.earthpulse && anyFoe() && tick('earthpulse', 2)) {
+    const fy = floorY();
+    for (const d of [0, 0.35]) for (const v of [-480, 480]) { const w = new Spell('groundwave', px, fy, { passive: true, vx: v, life: 0.9, dmg: dmg(45, 'earthpulse'), big: true }); w.t = -d; game.room.spells.push(w); }
+    game.fx.shake(2.5, 0.1); game.fx.dust(px, fy, 10);
   }
   if (pv.wake && p.onGround && Math.abs(p.vx) > 150 && tick('wake', 0.12)) {
     game.room.spells.push(new Spell('trail', px, p.y + p.h - 6, { passive: true, life: 1.4, dmg: dmg(7, 'wake') }));

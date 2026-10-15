@@ -5,11 +5,11 @@ import { TileMap } from './tilemap.js';
 import { Player } from './player.js';
 import { makeEnemy, RustSoldier, GearKnight, Warden } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
-import { castArt, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell } from './arts.js';
+import { castArt, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell, MELEE } from './arts.js';
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
 import { Fx } from './fx.js';
 import { NullSfx } from './audio.js';
-import { BOONS, rollOffer, rollRare, boonMax, PASSIVE_IDS } from './boons.js';
+import { BOONS, rollOffer, rollRare, boonMax, PASSIVE_IDS, passiveWeight, readyFusions, countsForThreat } from './boons.js';
 import { expToNext, expFor, levelBonus, LEVEL } from './level.js';
 import { rewindGrid, lbRowAt } from './layout.js';
 import { LAYOUTS, FLOOR_NAMES, buildPlan, layoutRows, extraEnemyTypes } from './world.js';
@@ -21,7 +21,7 @@ import {
 
 const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
 // 脅威 1 段あたりの上がり幅（常時の術 3 つごとに 1 段）
-export const THREAT = { per: 3, hp: 0.7, dmg: 0.15, bossHp: 0.55, extraCap: 4 };
+export const THREAT = { free: 3, per: 3, hp: 0.7, dmg: 0.15, bossHp: 0.55, extraCap: 4 }; // 最初の 3 つ（Lv の合計）は数えない
 const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourglass: '砂時計', gold: '金貨', artifact: 'アーティファクト' };
 // 敵ごとの金貨（夜が深いほど多い）
 const GOLD = { soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
@@ -188,10 +188,10 @@ export class Game {
     this.emit('enterRoom', { fi, ri, type: desc.type, layout: desc.layout });
   }
 
-  // 脅威：常時の術を 3 つ積むごとに 1 段。敵の HP と攻撃が上がり、弓兵以外の敵が増える
+  // 脅威：常時の術や剣の道を 3 つ積むごとに 1 段。敵の HP と攻撃が上がり、弓兵以外の敵が増える
   threatStep() {
-    const n = this.player.boons.filter((b) => PASSIVE_IDS.includes(b.id)).reduce((a, b) => a + (b.tier || 1), 0);
-    return Math.floor(n / THREAT.per);
+    const n = this.player.boons.filter((b) => countsForThreat(b.id)).reduce((a, b) => a + passiveWeight(b), 0);
+    return Math.floor(Math.max(0, n - THREAT.free) / THREAT.per);
   }
   // 脅威で敵の動きも速くなる（積み上がる術の速さに追いつくように）。回避への対策をした雑魚はさらに速い
   enemyHaste(e) {
@@ -347,6 +347,11 @@ export class Game {
     if (input.pressed('pause') && this.player.state !== 'dead') { this.openPause(); return; }
     if (input.pressed('journal')) { this.openJournal(); return; }
     if (this.run.pendingRare > 0 && this.player.state === 'normal') { this.openRarePick(); return; }
+    // 合成できる組み合わせがあれば知らせる（「今はしない」を選んだものは、次に強化を得るまで聞かない）
+    if (this.player.state === 'normal' && !this.transition) {
+      const f = readyFusions(this.player.boons).find((x) => !(this.run.fusionDeclined || []).includes(x.to));
+      if (f) { this.modal = { type: 'fusion', recipe: f, sel: 0, t: 0 }; this.sfx.play('charged'); return; }
+    }
     // ヒットストップ中の入力は捨てずに持ち越す（連撃・回避の取りこぼし防止）
     if (this.hitstop > 0) {
       this.hitstop = Math.max(0, this.hitstop - DT);
@@ -424,8 +429,10 @@ export class Game {
       if (!overlap(hb, e)) continue;
       a.hitIds.add(e.id);
       const dir = a.def.spin || a.def.dir ? sign(cx(e) - cx(p)) || p.face : p.face;
-      const info = { base: a.def.dmg, cat: a.def.cat, knock: a.def.knock, dir, stop: a.def.stop, breaks: !!a.def.breaks, shake: a.def.shake || 0, heavy: a.name === 'heavy', parry: !!a.def.parry, lift: a.def.lift || 0 };
+      const info = { base: a.def.dmg, cat: a.def.cat, knock: a.def.knock * p.stats.rangeMul, dir, stop: a.def.stop, breaks: !!a.def.breaks, shake: a.def.shake || 0, heavy: a.name === 'heavy', parry: !!a.def.parry, lift: a.def.lift || 0 };
       this.dealDamage(e, info);
+      // 残心：連撃の 3 段目以降の命中に、遅れて十字の追撃
+      if (p.stats.zanshin && (a.name === 'combo3' || a.name === 'combo4')) MELEE.cross(this, e, p.stats.zanshin);
       // 双牙：もう一度当たる
       if (p.stats.twinfang && e.alive && this.run.critRng.next() < p.stats.twinfang) { this.dealDamage(e, { ...info, parry: false }); this.fx.text(cx(e), e.y - 46, '双牙', '#ffd84a', 12); }
       // 下突き：当たったら跳ね上がる（2段ジャンプと空中回避も回復）
@@ -458,7 +465,12 @@ export class Game {
     if (e.hp <= e.maxHp * 0.35) dmg *= st.executeMul;
     let crit = false;
     let cat = info.cat;
-    const direct = !info.echo && !info.spell;
+    const direct = !info.echo && !info.spell && !info.proj;
+    // 断罪：重撃で弱った雑魚を断つ。中ボス以上には大きく効く
+    if (info.heavy && st.judgement) {
+      if (!e.boss && !e.elite && e.hp <= e.maxHp * 0.25) { dmg = Math.max(dmg, e.hp + 1); this.fx.text(cx(e), e.y - 40, '断罪', '#ff4a2a', 18); }
+      else if ((e.boss || e.elite) && e.hp <= e.maxHp * 0.35) dmg *= 2;
+    }
     if (!info.echo) {
       if (e.hp >= e.maxHp && st.openerMul > 1) dmg *= st.openerMul;
       if (p.onGround && Math.abs(p.vx) > 150 && st.momentumMul > 1) dmg *= st.momentumMul;
@@ -478,9 +490,11 @@ export class Game {
     if (!e.boss && e.counter && (info.echo ? 'echo' : info.cat) === e.counter) { dmg *= e.elite ? 0.55 : 0.75; countered = true; }
     // 刻守は術そのものに強い。中ボス・刻守は術で削れる量に上限
     if (info.spell && e.boss) dmg *= 0.6;
+    // 剣の道の飛ぶ斬撃は、中ボス・刻守には浅くしか入らない（本体の剣で斬るのが本命）
+    if (info.proj && (e.boss || e.elite)) dmg *= e.boss ? 0.5 : 0.7;
     if (info.spell && (e.boss || e.elite)) dmg = this.spellGuard(e, dmg);
     dmg = Math.round(dmg);
-    const res = e.takeHit(this, { dmg, dir: info.dir, knock: info.knock, breaks: info.breaks, echo: !!info.echo, cat: info.cat, lift: info.lift || 0, passive: !!info.passive });
+    const res = e.takeHit(this, { dmg, dir: info.dir, knock: info.knock, breaks: info.breaks, echo: !!info.echo, cat: info.cat, lift: info.lift || 0, passive: !!info.passive || (!!info.proj && !!e.boss) });
     if (res.silent) return res;
     if (res.absorbed) { this.fx.text(cx(e), e.y - 10, '吸収', '#b67cf0', 12); return res; }
     if (res.parried) {
@@ -513,7 +527,7 @@ export class Game {
     if (countered) res.resisted = true;
     if (res.resisted) { this.fx.text(cx(e) + 14, e.y - 22, '耐性', '#8a8a92', 11); this.fx.text(cx(e) + (Math.random() - 0.5) * 10, e.y - 6, num, '#8a8a92', 12); this.addCombo(); this.learnOnce(e); return res; }
     this.fx.text(cx(e) + (Math.random() - 0.5) * 10, e.y - 6, num, crit ? '#ffe14a' : info.echo ? '#c9a0ff' : info.heavy ? '#f2c14e' : '#ffffff', crit ? 20 : info.heavy ? 18 : 13);
-    if (info.spell) {
+    if (info.spell || info.proj) {
       this.sfx.play(crit ? 'heavyHit' : 'hit');
       this.hitstop = Math.max(this.hitstop, crit ? 2 / 60 : 1 / 60);
       this.fx.shake(crit ? 3 * 1.5 : 1.5, 0.06); // 会心はさらに 1.5 倍
@@ -525,6 +539,10 @@ export class Game {
       if (crit) this.fx.ring(cx(e), cy(e), '#ffe14a', 28, 0.2);
       p.gauge = Math.min(PC.gaugeMax, p.gauge + PC.gaugePerHit * st.gaugeMul);
       if (st.lagTime && !e.boss && !e.elite) e.lag = Math.max(e.lag, st.lagTime); // 中ボス・刻守には効かない
+      // 乱舞：連撃が当たるほど速くなる
+      if (st.frenzy && info.cat === 'combo') { p.frenzyN = Math.min(5, (p.frenzyN || 0) + 1); p.frenzyT = 3; }
+      // 剣聖：会心の一撃で斬撃が飛ぶ
+      if (crit && st.swordsaint && !(p.saintT > 0)) { p.saintT = 0.2; MELEE.saint(this, p, st.swordsaint); }
       // 発動条件つきの術
       if (info.heavy && st.procs.thunderbell && e.alive) PROCS.thunderbell(this, st.procs.thunderbell, e);
       if (info.cat === 'air' && st.procs.plunge && !p.onGround) { p.airHits = (p.airHits || 0) + 1; if (p.airHits >= 3 && !p.plunging) { p.airHits = 0; PROCS.plunge(this, st.procs.plunge); } }
@@ -709,9 +727,24 @@ export class Game {
     this.modal = { type: 'artifact', offer, sel: 0, rarity, thenDoors, t: 0 };
     this.sfx.play('pickup');
   }
+  // 合成：素材 2 つを消し、上位の強化を Lv1 で得る
+  fuse(recipe) {
+    const p = this.player;
+    const { a, b, to } = recipe;
+    if (!p.boons.some((x) => x.id === a) || !p.boons.some((x) => x.id === b)) return false;
+    p.setBoons([...p.boons.filter((x) => x.id !== a && x.id !== b), { id: to, tier: 1 }]);
+    const col = BOON_COLORS[BOONS[to].school];
+    this.fx.burst(cx(p), cy(p), '#ffd84a', 40); this.fx.ring(cx(p), cy(p), '#ffffff', 90, 0.5); this.fx.ring(cx(p), cy(p), col, 60, 0.4);
+    this.fx.screenFlash('#ffd84a', 0.35); this.fx.shake(6, 0.25);
+    this.fx.setBanner(`合成：${BOONS[to].name}`, BOONS[to].desc(1), '#ffd84a', 2.2);
+    this.sfx.play('perfect'); this.sfx.play('guardBreak');
+    this.emit('fusion', { to });
+    return true;
+  }
   // 強化を 1 つ得る（Lv アップ・発動する術の持ち替えを含む）
   grantBoon(id) {
     const p = this.player;
+    this.run.fusionDeclined = [];
     const own = p.boons.find((b) => b.id === id);
     if (own) p.setBoons(p.boons.map((b) => (b.id === id ? { ...b, tier: Math.min(boonMax(id), b.tier + 1) } : b)));
     else if (BOONS[id].active) p.setBoons([...p.boons.filter((b) => !BOONS[b.id].active), { id, tier: 1 }]);
@@ -1600,6 +1633,11 @@ export class Game {
         if (last) this.modal = null; else { m.idx++; m.t = 0; }
         return false;
       }
+      case 'fusion': {
+        if (m.t < 0.3) return false;
+        if (y > 400 && y < 450) { const i = x < VIEW_W / 2 ? 0 : 1; if (m.sel === i) return true; m.sel = i; this.sfx.play('select'); }
+        return false;
+      }
       case 'shop': {
         const i = lbRowAt(m.stock.length, m.sel, x, y, m);
         if (i === -2) { this.modal = null; return false; }
@@ -1732,6 +1770,19 @@ export class Game {
         if (input.pressed('down')) { m.sel = (m.sel + 1) % n; this.sfx.play('select'); }
         if (back) { this.modal = null; return; }
         if ((input.pressed('confirm') || input.pressed('jump')) && m.t > 0.15) this.buyShop(m);
+        break;
+      }
+      case 'fusion': {
+        if (m.t < 0.3) return;
+        if (input.pressed('left') || input.pressed('up')) { m.sel = 0; this.sfx.play('select'); }
+        if (input.pressed('right') || input.pressed('down')) { m.sel = 1; this.sfx.play('select'); }
+        if (back) { m.sel = 1; }
+        if (input.pressed('confirm') || input.pressed('jump') || back) {
+          input.consume('jump'); input.consume('attack');
+          this.modal = null;
+          if (m.sel === 0) this.fuse(m.recipe);
+          else { (this.run.fusionDeclined ||= []).push(m.recipe.to); this.sfx.play('select'); }
+        }
         break;
       }
       case 'artifact': {

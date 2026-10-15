@@ -355,7 +355,7 @@ test('脅威：常時の術を 3 つ積むごとに敵が強く・多くなる�
   const g = newGame(21);
   g.enterRoom(0, 1); g.modal = null;
   const base = g.room.enemies.length, hp = g.room.enemies.map((e) => e.maxHp);
-  g.player.setBoons([{ id: 'orbit', tier: 3 }, { id: 'aura', tier: 3 }]); // 計 6 → 脅威 2
+  g.player.setBoons([{ id: 'orbit', tier: 5 }, { id: 'aura', tier: 4 }]); // 計 9（最初の 3 は数えない）→ 脅威 2
   assert.equal(g.threatStep(), 2);
   g.enterRoom(0, 1); g.modal = null;
   assert.equal(g.room.enemies.length, base + 2);
@@ -567,4 +567,85 @@ test('刻守の撃破：爆発の連鎖のあと消滅し、鐘が鳴って巻�
   assert.ok(b.vanished && g.fx.pillars.length > 0);
   d.until(() => g.scene === 'rewind', 400);
   assert.equal(g.scene, 'rewind');
+});
+
+test('合成：素材 2 つが Lv2 以上になると合成を聞かれ、上位の強化（Lv1）に置き換わる', () => {
+  const { g, d } = arena(RustSoldier, 400);
+  g.player.setBoons([{ id: 'orbit', tier: 2 }, { id: 'gearsaw', tier: 2 }, { id: 'edge', tier: 1 }]);
+  d.frame(2);
+  assert.equal(g.modal && g.modal.type, 'fusion');
+  assert.equal(g.modal.recipe.to, 'gearwaltz');
+  g.modal.t = 1; d.frame(1, ['confirm']);
+  const ids = g.player.boons.map((b) => b.id).sort();
+  assert.deepEqual(ids, ['edge', 'gearwaltz']);
+  assert.equal(g.player.boons.find((b) => b.id === 'gearwaltz').tier, 1);
+  // 合成済みの素材と、合成でしか得られないものは候補に出ない
+  for (let s = 0; s < 30; s++) { const o = rollOffer(makeRng(s), g.player.boons, ['arts', 'power', 'haste'], 4); assert.ok(!o.some((id) => ['orbit', 'gearsaw', 'gearwaltz', 'starblade'].includes(id)), o.join()); }
+  // 脅威：合成した術は素材ぶんとして数える（合成で脅威が下がる抜け道にならない）
+  assert.equal(g.threatStep(), Math.floor((1 + 3 + 1 - 3) / 3)); // 歯車の輪舞(1+3)＋研ぎ澄まし(1)、最初の 3 は数えない
+});
+
+test('合成：「今はしない」を選ぶと、次に強化を得るまで聞かれない', () => {
+  const { g, d } = arena(RustSoldier, 400);
+  g.player.setBoons([{ id: 'edge', tier: 2 }, { id: 'crit', tier: 2 }]);
+  d.frame(2);
+  assert.equal(g.modal.type, 'fusion');
+  g.modal.t = 1; g.modal.sel = 1; d.frame(1, ['confirm']);
+  d.frame(5);
+  assert.equal(g.modal, null);
+  g.grantBoon('opener'); d.frame(2);
+  assert.equal(g.modal && g.modal.type, 'fusion');
+});
+
+test('合成した術は Lv1 でも、素材 2 つ（Lv2）を合わせたより強い', () => {
+  const dealt = (boons) => {
+    const { g, d, e } = arena(RustSoldier, 40);
+    e.hp = e.maxHp = 1e7; e.cool = 99;
+    g.player.setBoons(boons); g.run.fusionDeclined = ['gearwaltz', 'starblade', 'thundergod', 'inferno', 'icejail', 'earthpulse'];
+    d.frame(60 * 8); g.modal = null;
+    return e.maxHp - e.hp;
+  };
+  for (const f of [['orbit', 'gearsaw', 'gearwaltz'], ['meteor', 'swordrain', 'starblade'], ['stormcloud', 'chainlight', 'thundergod'], ['aura', 'emberfloor', 'inferno'], ['frostnova', 'spikes', 'icejail'], ['quakeline', 'wake', 'earthpulse']]) {
+    const before = dealt([{ id: f[0], tier: 2 }, { id: f[1], tier: 2 }]);
+    const after = dealt([{ id: f[2], tier: 1 }]);
+    assert.ok(after > before, `${f[2]}: ${after} > ${before}`);
+  }
+});
+
+test('剣の道：剣気の斬撃は連撃扱いで刻守の「術の守り」に阻まれず、断罪は弱った雑魚を断つ', () => {
+  const g = newGame(41);
+  const bi = g.run.plan.floors[2].findIndex((r) => r.type === 'boss');
+  g.enterRoom(2, bi); g.modal = null;
+  const b = g.room.boss; b.setState('idle');
+  const hp0 = b.hp;
+  for (let i = 0; i < 8; i++) g.dealDamage(b, { base: 30, cat: 'combo', knock: 0, dir: 1, proj: true });
+  assert.ok(hp0 - b.hp > b.maxHp * 0.12, `melee projectiles are not capped by the spell guard (${hp0 - b.hp})`);
+  const { g: g2, e } = arena(RustSoldier, 60);
+  g2.player.setBoons([{ id: 'judgement', tier: 1 }]);
+  e.hp = e.maxHp * 0.2;
+  g2.dealDamage(e, { base: 1, cat: 'heavy', knock: 0, dir: 1, heavy: true });
+  assert.ok(!e.alive || e.hp <= 0);
+});
+
+test('剣の道：剣気・破砕・天裂は振りから斬撃が出て敵に当たり、乱舞は連撃を速く、剛剣は判定を広げる', () => {
+  for (const [id, act, pre] of [['swordqi', ['attack'], null], ['crusher', null, 'heavy'], ['skyrend', ['up', 'attack'], null]]) {
+    const { g, d, e } = arena(RustSoldier, 160);
+    e.hp = e.maxHp = 1e6; e.cool = 99;
+    if (id === 'skyrend') { e.x = g.player.x; e.y = g.player.y - 130; e.gravity = false; }
+    g.player.setBoons([{ id, tier: 3 }]);
+    if (pre) g.player.startAttack(g, 1, pre); else d.frame(1, act);
+    d.frame(40);
+    assert.ok(g.room.spells.length >= 0);
+    assert.ok(e.hp < e.maxHp, id);
+  }
+  const { g, d } = arena(RustSoldier, 400);
+  const p = g.player;
+  const base = p.attackDef('combo1').recovery;
+  p.setBoons([{ id: 'frenzy', tier: 5 }]); p.frenzyN = 5; p.frenzyT = 3;
+  assert.ok(p.attackDef('combo1').recovery < base);
+  p.setBoons([{ id: 'greatsword', tier: 2 }]);
+  p.startAttack(g, 1); d.until(() => p.hitbox(), 20);
+  const w1 = p.hitbox().w;
+  p.setBoons([]); d.frame(40); p.startAttack(g, 1); d.until(() => p.hitbox(), 20);
+  assert.ok(w1 > p.hitbox().w);
 });

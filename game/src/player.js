@@ -3,7 +3,7 @@ import { approach, sign } from './util.js';
 import { moveBody, standingOnOneway } from './tilemap.js';
 import { computeStats } from './boons.js';
 import { applyArtifacts } from './artifacts.js';
-import { spawnWave } from './arts.js';
+import { spawnWave, MELEE } from './arts.js';
 
 export class Player {
   constructor(x, y) {
@@ -79,6 +79,8 @@ export class Player {
     if (this.comboGrace > 0) this.comboGrace -= dt; else if (this.state === 'normal') this.comboIndex = 0;
     if (this.dropT > 0) this.dropT -= dt;
     if (this.parryT > 0) this.parryT -= dt;
+    if (this.frenzyT > 0) { this.frenzyT -= dt; if (this.frenzyT <= 0) this.frenzyN = 0; }
+    if (this.saintT > 0) this.saintT -= dt;
     this.squash = approach(this.squash, 0, dt * 5);
     this.landedThisFrame = false;
 
@@ -240,8 +242,9 @@ export class Player {
 
   attackDef(name) {
     const d = ATTACKS[name];
-    if (this.stats.comboSpeed !== 1 && d.cat === 'combo') {
-      const k = 1 / this.stats.comboSpeed;
+    const speed = this.stats.comboSpeed * (1 + 0.04 * (this.stats.frenzy || 0) * (this.frenzyN || 0)); // 乱舞
+    if (speed !== 1 && d.cat === 'combo') {
+      const k = 1 / speed;
       return { ...d, startup: d.startup * k, active: d.active, recovery: d.recovery * k, cancel: d.cancel * k };
     }
     if (name === 'combo4') return { ...d, dmg: this.stats.fourthDmg };
@@ -275,9 +278,11 @@ export class Player {
   hitbox() {
     const a = this.atk;
     if (!a || this.state !== 'attack') return null;
-    const d = a.def;
+    let d = a.def;
     if (a.t < d.startup || a.t >= d.startup + d.active) return null;
     const mx = this.x + this.w / 2;
+    const rm = this.stats.rangeMul || 1; // 剛剣
+    if (rm !== 1) d = { ...d, w: d.w * rm, h: d.h * rm };
     // 頭上・足元の攻撃：体ごと覆う
     if (d.dir === 'up') return { x: mx - d.w / 2, y: this.y - d.h, w: d.w, h: d.h + this.h };
     if (d.dir === 'down') return { x: mx - d.w / 2, y: this.y, w: d.w, h: this.h + d.h };
@@ -298,6 +303,14 @@ export class Player {
     if (!a.swung && a.t >= d.startup) {
       a.swung = true; game.sfx.play(a.name === 'heavy' ? 'heavySwing' : 'swing'); game.fx.slash(this, a.name);
       if (this.stats.wave && this.onGround && game.room) spawnWave(game, this);
+      // 剣の道：振りから飛ぶ斬撃・衝撃波・刃
+      const st = this.stats;
+      if (game.room) {
+        if ((st.swordqi || st.thousand) && this.onGround && a.name.startsWith('combo')) MELEE.qi(game, this);
+        if (st.crusher && a.name === 'heavy') MELEE.crush(game, this, st.crusher);
+        if (st.skyrend && (a.name === 'up' || a.name === 'upAir')) MELEE.rend(game, this, st.skyrend, -1);
+        if (st.skyrend && a.name === 'down') MELEE.rend(game, this, st.skyrend, 1);
+      }
       if (this.onGround && d.lunge >= 90) game.fx.step(this.x + this.w / 2 - this.face * 6, this.y + this.h, -this.face); // 踏み込みの土煙
     }
     // 移動：地上は踏み込み後に減速、空中はゆるく制御可能
@@ -332,7 +345,7 @@ export class Player {
   updateCharge(game, input, dt, dirX) {
     if (dirX !== 0) this.face = dirX;
     this.horizontal(dirX, dt, 0.35);
-    if (!this.charged && this.holdT >= P.heavyCharge) {
+    if (!this.charged && this.holdT >= P.heavyCharge * (this.stats.chargeMul || 1)) {
       this.charged = true;
       game.sfx.play('charged');
       game.fx.ring(this.x + this.w / 2, this.y + this.h / 2, '#f2c14e', 26);

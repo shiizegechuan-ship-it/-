@@ -36,6 +36,23 @@ export const BOONS = {
   bloodclock: { school: 'power', max: 5, name: '血の秒針', desc: (t) => `撃破ごとに この夜の与ダメージ +${2 * t}%（累積）` },
   opener: { school: 'power', max: 5, name: '先手', desc: (t) => `無傷の敵への一撃 +${pc(60 * t)}` },
   momentum: { school: 'power', max: 5, name: '勢い', desc: (t) => `走りながらの攻撃 +${pc(25 * t)}` },
+  // 剣の道：素の攻撃を伸ばす（脅威を増やさない。飛ぶ斬撃は「連撃」扱いで、術の守りに阻まれない）
+  swordqi: { school: 'power', max: 5, melee: true, name: '剣気', desc: (t) => `[剣] 地上の連撃を振るたび、剣気の斬撃が飛ぶ（${Math.round(14 * (1 + 0.4 * (t - 1)))}${t >= 3 ? '・2 本' : ''}）` },
+  frenzy: { school: 'haste', max: 5, melee: true, name: '乱舞', desc: (t) => `[剣] 連撃が当たるたびに攻撃の速さ +${4 * t}%（最大 5 重・3 秒で切れる）` },
+  zanshin: { school: 'power', max: 5, melee: true, name: '残心', desc: (t) => `[剣] 連撃の 3 段目以降が当たると、少し遅れて十字の追撃（${Math.round(34 * (1 + 0.4 * (t - 1)))}）` },
+  greatsword: { school: 'power', max: 5, melee: true, name: '剛剣', desc: (t) => `[剣] 攻撃の当たり判定が +${15 * t}% 大きくなり、吹き飛ばしも強くなる` },
+  crusher: { school: 'power', max: 5, melee: true, name: '破砕', desc: (t) => `[剣] 重撃が床を走る衝撃波を放つ（${Math.round(40 * (1 + 0.4 * (t - 1)))}）。溜め時間 -${8 * t}%` },
+  skyrend: { school: 'power', max: 5, melee: true, name: '天裂', desc: (t) => `[剣] 上攻撃は真上へ、下攻撃は真下へ刃が飛ぶ（${Math.round(34 * (1 + 0.4 * (t - 1)))}）` },
+  // 合成でしか得られない上位の強化（素材を両方 Lv2 以上で合成。Lv1 から始まるが素材より強い）
+  gearwaltz: { school: 'arts', max: 5, fusion: true, name: '歯車の輪舞', desc: (t) => `[合成・常時] 大きな歯車が${4 + t}つ回り（各${Math.round(20 * (1 + 0.4 * (t - 1)))}）、2 秒ごとに左右へ歯車を投げる` },
+  starblade: { school: 'arts', max: 5, fusion: true, name: '星剣の雨', desc: (t) => `[合成・常時] 2.5 秒ごとに星の剣が${4 + t}本、敵へ降り注いで爆ぜる（各${Math.round(60 * (1 + 0.4 * (t - 1)))}）` },
+  thundergod: { school: 'arts', max: 5, fusion: true, name: '雷神の雲', desc: (t) => `[合成・常時] 頭上の雷雲が 0.7 秒ごとに雷を落とし、もう 1 体へ連鎖（${Math.round(34 * (1 + 0.4 * (t - 1)))}）` },
+  inferno: { school: 'arts', max: 5, fusion: true, name: '劫火', desc: (t) => `[合成・常時] 2.5 秒ごとに炎の大輪が広がり、床を焼く（${Math.round(40 * (1 + 0.4 * (t - 1)))}＋床）` },
+  icejail: { school: 'arts', max: 5, fusion: true, name: '氷針の牢', desc: (t) => `[合成・常時] 3 秒ごとに敵${3 + t}体の足元から氷の針。雑魚は凍えて遅くなる（${Math.round(60 * (1 + 0.4 * (t - 1)))}）` },
+  earthpulse: { school: 'arts', max: 5, fusion: true, name: '大地の鼓動', desc: (t) => `[合成・常時] 2 秒ごとに大きな衝撃波が床を二度走る（${Math.round(45 * (1 + 0.4 * (t - 1)))}×2）` },
+  swordsaint: { school: 'power', max: 5, fusion: true, melee: true, name: '剣聖', desc: (t) => `[合成・剣] 与ダメージ +${70 + 15 * (t - 1)}%、会心率 +${30 + 5 * (t - 1)}%。会心の一撃で斬撃が飛ぶ` },
+  judgement: { school: 'power', max: 5, fusion: true, melee: true, name: '断罪', desc: (t) => `[合成・剣] 重撃 ×${(2.5 + 0.5 * (t - 1)).toFixed(1)}。HP25%以下の雑魚は重撃で即断ち、中ボス以上には +100%` },
+  thousand: { school: 'power', max: 5, fusion: true, melee: true, name: '千刃', desc: (t) => `[合成・剣] コンボ1ごとの加算 +${2 + t}%。連撃のたびに剣気が 3 本飛ぶ（各${Math.round(16 * (1 + 0.4 * (t - 1)))}）` },
   // 術：発動する術（V で放つ。装着は 1 つ、取り直すと Lv アップ）
   flamering: { school: 'arts', max: 5, active: true, name: '刻炎陣', desc: (t) => `[術] 周囲に炎の輪を3度広げる（${Math.round(22 * (1 + 0.4 * (t - 1)))}×3）ゲージ${40 - 3 * (t - 1)}` },
   starfall: { school: 'arts', max: 5, active: true, name: '星落とし', desc: (t) => `[術] 近くの敵に星を${4 + t}つ降らせる（各${Math.round(30 * (1 + 0.4 * (t - 1)))}）ゲージ${55 - 4 * (t - 1)}` },
@@ -73,7 +90,27 @@ export const BOONS = {
   lastlight: { school: 'arts', max: 5, name: '残り火', desc: (t) => `[条件] HP30%以下のとき、命中した敵が炎を噴く（${Math.round(12 * (1 + 0.4 * (t - 1)))}）` },
 };
 // 常に発動する術の一覧。種類を多く持つほど、すべての常時の術が強くなる（術の共鳴）
-export const PASSIVE_IDS = ['orbit', 'aura', 'seeker', 'chainlight', 'meteor', 'frostnova', 'swordrain', 'gearsaw', 'stormcloud', 'wake', 'quakeline', 'spikes', 'emberfloor'];
+export const FUSED_PASSIVES = ['gearwaltz', 'starblade', 'thundergod', 'inferno', 'icejail', 'earthpulse'];
+export const PASSIVE_IDS = ['orbit', 'aura', 'seeker', 'chainlight', 'meteor', 'frostnova', 'swordrain', 'gearsaw', 'stormcloud', 'wake', 'quakeline', 'spikes', 'emberfloor', ...FUSED_PASSIVES];
+// 合成のレシピ：素材 a と b を両方 Lv2 以上で持つと、上位の強化に合成できる
+export const FUSIONS = [
+  { a: 'orbit', b: 'gearsaw', to: 'gearwaltz' },
+  { a: 'meteor', b: 'swordrain', to: 'starblade' },
+  { a: 'stormcloud', b: 'chainlight', to: 'thundergod' },
+  { a: 'aura', b: 'emberfloor', to: 'inferno' },
+  { a: 'frostnova', b: 'spikes', to: 'icejail' },
+  { a: 'quakeline', b: 'wake', to: 'earthpulse' },
+  { a: 'edge', b: 'crit', to: 'swordsaint' },
+  { a: 'heavyart', b: 'execute', to: 'judgement' },
+  { a: 'comboheat', b: 'swordqi', to: 'thousand' },
+];
+// 脅威の数え方：常時の術と剣の道の Lv の合計。合成したものは Lv +3（素材 2 つぶん）として数える
+export const passiveWeight = (b) => (b.tier || 1) + (BOONS[b.id].fusion ? 3 : 0);
+export const countsForThreat = (id) => PASSIVE_IDS.includes(id) || !!BOONS[id].melee;
+export function readyFusions(boons) {
+  const lv = Object.fromEntries(boons.map((b) => [b.id, b.tier || 1]));
+  return FUSIONS.filter((f) => (lv[f.a] || 0) >= 2 && (lv[f.b] || 0) >= 2 && !lv[f.to]);
+}
 export const passiveSynergy = (n) => 1 + 0.15 * Math.max(0, n - 1);
 for (const id of PASSIVE_IDS) { const d = BOONS[id].desc; BOONS[id].desc = (t) => d(t) + '（常時の術が多いほど強化）'; }
 export const boonMax = (id) => BOONS[id].max || 2;
@@ -95,7 +132,7 @@ export const CROSS = [
 ];
 
 export function schoolCounts(boons) {
-  const c = { haste: 0, stasis: 0, echo: 0, risk: 0, power: 0, arts: 0 };
+  const c = { haste: 0, stasis: 0, echo: 0, risk: 0, power: 0, arts: 0, rare: 0 };
   for (const b of boons) c[BOONS[b.id].school]++;
   return c;
 }
@@ -109,7 +146,7 @@ export function computeStats(boons) {
   const s = {
     has,
     counts,
-    dmgMul: (t('sandglass') ? 1.4 : 1) * (t('crown') ? 1.5 : 1),
+    dmgMul: (t('sandglass') ? 1.4 : 1) * (t('crown') ? 1.5 : 1) * (t('swordsaint') ? 1.7 + 0.15 * (t('swordsaint') - 1) : 1),
     maxHpMul: t('sandglass') ? 0.7 : 1,
     afterimageTime: t('afterimage') ? (t('afterimage') > 1 ? 0.8 : 0.6) : 0,
     afterimageMul: t('afterimage') ? (t('afterimage') > 1 ? 2.0 : 1.6) : 1,
@@ -133,15 +170,18 @@ export function computeStats(boons) {
     resonateHeal: t('resonate') ? (t('resonate') > 1 ? 2 : 1) : 0,
     moveMul: counts.haste >= 2 ? 1.1 : 1,
     comboSpeed: counts.haste >= 2 ? 1.15 : 1,
+    // 剣の道
+    swordqi: t('swordqi'), frenzy: t('frenzy'), zanshin: t('zanshin'), rangeMul: 1 + 0.15 * t('greatsword'), crusher: t('crusher'), chargeMul: 1 - 0.08 * t('crusher'), skyrend: t('skyrend'),
+    swordsaint: t('swordsaint'), judgement: t('judgement'), thousand: t('thousand'),
     slowWindupMul: counts.stasis >= 2 ? 1.3 : 1,
     doubleEchoOnSlow: !!(t('lag') && t('echo')),
     // 火力
     edgeMul: 1 + 0.2 * t('edge'),
-    comboPer: 0.01 * (1 + t('comboheat')) * (t('eternal') ? 2 : 1),
+    comboPer: (0.01 * (1 + t('comboheat')) + (t('thousand') ? 0.01 * (2 + t('thousand')) : 0)) * (t('eternal') ? 2 : 1),
     // 稀少
     phoenix: !!t('phoenix'), passiveSpeed: t('starheart') ? 1.7 : 1, stormstep: !!t('stormstep'), lifesteal: t('lifesteal') ? 0.03 : 0, eternal: !!t('eternal'), wave: !!t('wave'),
-    heavyMul: 1 + 0.4 * t('heavyart'),
-    critChance: 0.1 * t('crit') + (counts.power >= 2 ? 0.05 : 0) + (t('goldeye') ? 0.25 : 0),
+    heavyMul: (1 + 0.4 * t('heavyart')) * (t('judgement') ? 2.5 + 0.5 * (t('judgement') - 1) : 1),
+    critChance: 0.1 * t('crit') + (counts.power >= 2 ? 0.05 : 0) + (t('goldeye') ? 0.25 : 0) + (t('swordsaint') ? 0.3 + 0.05 * (t('swordsaint') - 1) : 0),
     critMul: 2 + 0.5 * t('critdmg') + (t('goldeye') ? 1 : 0),
     executeMul: 1 + 0.3 * t('execute'),
     airMul: 1 + 0.35 * t('aerial'),
@@ -162,7 +202,9 @@ export function computeStats(boons) {
 // 火力系統は手持ちでも Lv が上限未満なら「Lv アップ」として候補に出る。
 export function rollOffer(rng, owned, unlockedSchools, n = 3) {
   const lv = Object.fromEntries(owned.map((b) => [b.id, b.tier || 1]));
-  const pool = Object.keys(BOONS).filter((id) => unlockedSchools.includes(BOONS[id].school) && (!(id in lv) || (BOONS[id].max && lv[id] < BOONS[id].max)));
+  // 合成でしか得られないもの・合成済みの素材は候補に出ない
+  const usedUp = new Set(FUSIONS.filter((f) => f.to in lv).flatMap((f) => [f.a, f.b]));
+  const pool = Object.keys(BOONS).filter((id) => !BOONS[id].fusion && !usedUp.has(id) && unlockedSchools.includes(BOONS[id].school) && (!(id in lv) || (BOONS[id].max && lv[id] < BOONS[id].max)));
   // 手持ちの系統を少し出やすくして構築を成立させる
   const counts = schoolCounts(owned);
   const weighted = [];
@@ -172,6 +214,8 @@ export function rollOffer(rng, owned, unlockedSchools, n = 3) {
     if (sc === 'power' || sc === 'arts') w = id in lv ? 3 : 2;
     // 常時の術は、持つほど出やすい（積み上げる楽しさ）
     if (PASSIVE_IDS.includes(id)) w += Math.min(4, owned.filter((b) => PASSIVE_IDS.includes(b.id)).length);
+    // 剣の道も、持つほど出やすい（素の攻撃のビルドを組めるように）
+    if (BOONS[id].melee) w += 1 + Math.min(4, owned.filter((b) => BOONS[b.id].melee).length);
     for (let i = 0; i < w; i++) weighted.push(id);
   }
   const out = [];
@@ -196,6 +240,10 @@ export function synergyHints(id, owned) {
   const counts = schoolCounts(owned);
   const owns = owned.some((b) => b.id === id);
   if (sc !== 'risk' && RESONANCE[sc] && counts[sc] === 1 && !owns) hints.push(`共鳴成立：${RESONANCE[sc]}`);
+  for (const f of FUSIONS) {
+    const other = f.a === id ? f.b : f.b === id ? f.a : null;
+    if (other) hints.push(`合成：${BOONS[other].name}と両方 Lv2 以上で「${BOONS[f.to].name}」`);
+  }
   for (const c of CROSS) {
     const other = c.a === id ? c.b : c.b === id ? c.a : null;
     if (other && owned.some((b) => b.id === other)) hints.push(`相乗：${c.text}`);

@@ -141,7 +141,7 @@ export function drawHud(ctx, game) {
     const x = 18 + (i % 8) * 112, y = VIEW_H - 22 - Math.floor(i / 8) * 20;
     ctx.fillStyle = col; ctx.save(); ctx.translate(x + 5, y - 4); ctx.rotate(Math.PI / 4); ctx.fillRect(-4, -4, 8, 8); ctx.restore();
     const wedged = meta.wedges.some((w) => w.target === 'boon' && w.boon.id === b.id);
-    text(ctx, def.name + (def.max ? ` ${b.tier}` : b.tier > 1 ? ' II' : ''), x + 14, y, { size: 11, color: wedged ? C.gold : '#ddd' });
+    text(ctx, (def.fusion ? '★' : '') + def.name + (def.max ? ` ${b.tier}` : b.tier > 1 ? ' II' : ''), x + 14, y, { size: 11, color: wedged ? C.gold : def.fusion ? '#ffd84a' : '#ddd' });
   });
   const res = Object.entries(counts).filter(([s, n]) => RESONANCE[s] && n >= 2).map(([s]) => SCHOOLS[s].name);
   if (res.length) text(ctx, `共鳴：${res.join('・')}`, 18, VIEW_H - 22 - (Math.ceil(p.boons.length / 8)) * 20, { size: 10, color: '#f2c14e' });
@@ -217,6 +217,7 @@ export function drawModal(ctx, game) {
   if (m.type === 'forge') drawForge(ctx, game, m);
   if (m.type === 'shop') drawShop(ctx, game, m);
   if (m.type === 'artifact') drawArtifactPick(ctx, game, m);
+  if (m.type === 'fusion') drawFusion(ctx, game, m);
   if (m.type === 'code') drawCode(ctx, game, m);
   if (m.type === 'pause') drawPause(ctx, game, m);
   if (m.type === 'analysis') drawAnalysis(ctx, game, m);
@@ -285,6 +286,37 @@ function drawBoonPick(ctx, game, m) {
 function drawShop(ctx, game, m) {
   const items = m.stock.map((s) => { const l = game.shopLabel(s); const can = !s.sold && game.run.gold >= s.price; return { label: l.name, color: s.sold ? '#5a5260' : s.kind === 'key' ? '#ffd84a' : s.kind === 'artifact' ? '#7fe0d0' : '#d8d0c4', right: s.sold ? '売り切れ' : `${s.price} G`, rightColor: s.sold ? '#5a5260' : can ? '#ffd84a' : '#8a6a7a', desc: l.desc }; });
   drawLightbox(ctx, game, { title: '行商人の店', right: `● 金貨 ${game.run.gold}`, items, sel: m.sel, color: '#ffd84a', st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: game.touch ? 'タップで選択、もう一度タップで買う／枠の外で閉じる' : '↑↓ 選ぶ　Z 買う　C 閉じる' });
+}
+
+// 合成：素材 A ＋ 素材 B → 上位の強化
+function drawFusion(ctx, game, m) {
+  const { a, b, to } = m.recipe, p = game.player;
+  const lv = (id) => (p.boons.find((x) => x.id === id) || {}).tier || 1;
+  const k = clamp(m.t / 0.5, 0, 1);
+  text(ctx, '合成できる！', VIEW_W / 2, 74, { size: 26, align: 'center', color: '#ffd84a' });
+  text(ctx, '素材の 2 つは消え、上位の強化を Lv1 で得る（Lv1 でも素材より強い。さらに Lv5 まで伸びる）', VIEW_W / 2, 100, { size: 13, align: 'center', color: C.muted });
+  const card = (id, x, y, w, h, tier, big) => {
+    const d = BOONS[id], col = SCHOOLS[d.school].color;
+    panel(ctx, x, y, w, h, big ? '#ffd84a' : col, 'rgba(18,14,26,0.97)');
+    ctx.fillStyle = big ? '#ffd84a' : col; ctx.fillRect(x, y, w, 4);
+    text(ctx, (big ? '★ ' : '') + d.name, x + 14, y + 32, { size: big ? 22 : 17, color: big ? '#ffe9a0' : '#efe6d2' });
+    text(ctx, `Lv${tier}`, x + w - 14, y + 32, { size: 14, align: 'right', color: big ? '#ffd84a' : '#ffe14a' });
+    wrap(ctx, d.desc(tier), w - 26, big ? 15 : 12).slice(0, 5).forEach((l, i) => text(ctx, l, x + 13, y + 58 + i * (big ? 21 : 17), { size: big ? 15 : 12, color: '#e0d8c8' }));
+  };
+  card(a, 50, 130, 220, 150, lv(a));
+  text(ctx, '+', 285, 216, { size: 34, align: 'center', color: '#ffd84a' });
+  card(b, 50 + 250, 130, 220, 150, lv(b));
+  ctx.globalAlpha = k;
+  text(ctx, '→', 50 + 480 + 8, 210, { size: 30, color: '#ffd84a' });
+  card(to, 50 + 520, 116, 340, 180, 1, true);
+  ctx.globalAlpha = 1;
+  const opts = ['合成する', '今はしない'];
+  opts.forEach((o, i) => {
+    const x = i === 0 ? VIEW_W / 2 - 230 : VIEW_W / 2 + 30, on = m.sel === i;
+    panel(ctx, x, 400, 200, 44, on ? '#ffd84a' : 'rgba(255,255,255,0.2)', on ? 'rgba(60,44,10,0.95)' : 'rgba(14,11,20,0.95)');
+    text(ctx, (on ? '▶ ' : '') + o, x + 100, 429, { size: 18, align: 'center', color: on ? '#ffe9a0' : '#bbb' });
+  });
+  text(ctx, game.touch ? 'ボタンをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定　C 今はしない', VIEW_W / 2, 470, { size: 12, align: 'center', color: C.muted });
 }
 
 // アーティファクトの選択（カード）
