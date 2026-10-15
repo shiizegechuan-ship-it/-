@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>夜明けの楔</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Noto+Serif+JP:wght@500;700&display=swap">
+<style>
+  html, body { margin: 0; height: 100%; background: #050408; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; image-rendering: auto; background: #0d0b14; outline: none; }
+  #err { position: fixed; left: 8px; bottom: 8px; color: #ff8a6a; font: 12px monospace; white-space: pre-wrap; max-width: 90vw; }
+</style>
+</head>
+<body>
+<canvas id="game" width="960" height="540" tabindex="0"></canvas>
+<div id="err"></div>
+<script>
+  window.addEventListener('error', (e) => { document.getElementById('err').textContent += (e.message || e) + '\n'; });
+  if (location.protocol === 'file:') {
+    document.getElementById('err').textContent = 'ファイルを直接開くと ES モジュールが読み込めません。README の「起動方法」を参照してください（npx serve game など）。';
+  }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
