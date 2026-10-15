@@ -92,10 +92,11 @@ export class RustSoldier extends Enemy {
     this.dir = -1;
   }
   think(game, dt) {
-    const p = game.player, map = game.map;
+    // 救出戦ではプレイヤーが離れているとグレンを狙う
+    const p = game.targetFor ? game.targetFor(this) : game.player, map = game.map;
     const dx = this.dx(p), adx = Math.abs(dx), ady = Math.abs(this.dy(p));
     if (this.cool > 0) this.cool -= dt;
-    const sees = adx < 280 && ady < 70 && p.state !== 'dead';
+    const sees = (adx < 280 && ady < 70 && p.state !== 'dead') || p.isNpc;
     switch (this.state) {
       case 'patrol':
         this.vx = this.dir * 45; this.face = this.dir;
@@ -107,7 +108,8 @@ export class RustSoldier extends Enemy {
         const want = adx > 58 ? this.face * 100 : 0;
         const blocked = this.ledgeAhead(map, this.face) || this.wallAhead(map, this.face);
         this.vx = approach(this.vx, blocked ? 0 : want, 900 * dt);
-        if (adx < 72 && ady < 40 && this.cool <= 0) { this.setState('windup'); game.sfx.play('tell'); }
+        if (adx < 72 && ady < 40 && this.cool <= 0 && !p.isNpc) { this.setState('windup'); game.sfx.play('tell'); }
+        this.nearNpc = p.isNpc && adx < 60;
         if (!sees && this.stateT > 1) this.setState('patrol');
         break;
       }

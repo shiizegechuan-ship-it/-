@@ -730,8 +730,9 @@ export class Game {
   updateRoomLogic(dt) {
     const room = this.room, run = this.run;
     if (room.desc.type === 'forge' && run.glen === 'attacked') {
-      const attackers = room.enemies.filter((e) => e.alive).length;
-      room.glenHp -= attackers * 2.2 * dt;
+      const attackers = room.enemies.filter((e) => e.alive && e.nearNpc).length;
+      if (attackers && Math.floor(room.t * 3) !== Math.floor((room.t - dt) * 3)) { const g = this.glenItem(); if (g) this.fx.sparks(cx(g), g.y + 12, '#ff8a6a', 3, 120); }
+      room.glenHp -= attackers * 4.5 * dt;
       if (room.glenHp <= 0) {
         run.glen = 'dead';
         const g = room.items.find((x) => x.kind === 'npc' && x.who === 'glen');
@@ -749,6 +750,17 @@ export class Game {
         else this.endRun('bell');
       }
     }
+  }
+
+  glenItem() { return this.room.items.find((x) => x.kind === 'npc' && x.who === 'glen'); }
+  // 敵の狙い：救出戦で、プレイヤーが離れている間はグレンを襲う
+  targetFor(e) {
+    const p = this.player;
+    if (this.room.desc.type === 'forge' && this.run.glen === 'attacked' && Math.abs(cx(p) - cx(e)) > 150) {
+      const g = this.glenItem();
+      if (g) return { x: g.x, y: g.y, w: g.w, h: g.h, isNpc: true };
+    }
+    return p;
   }
 
   readDiary() {

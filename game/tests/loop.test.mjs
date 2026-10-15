@@ -215,3 +215,37 @@ test('すべての部屋で、敵・仕掛け・出口にジャンプで到達�
     }
   }
 });
+
+test('扉と人物・仕掛けが重ならない（調べる対象を取り違えない）', async () => {
+  const { Game } = await import('../src/game.js');
+  const { addWedge } = await import('../src/meta.js');
+  const { overlap } = await import('../src/util.js');
+  const g = new Game({ deterministicFx: true });
+  g.newGame(31);
+  g.meta.slots = 3; addWedge(g.meta, { target: 'glen' }); addWedge(g.meta, { target: 'knight' });
+  for (let fi = 0; fi < 3; fi++) for (let ri = 0; ri < g.run.plan.floors[fi].length; ri++) {
+    g.enterRoom(fi, ri); g.modal = null;
+    for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
+    g.openDoors();
+    const doors = g.room.items.filter((i) => i.kind === 'door');
+    const others = g.room.items.filter((i) => i.kind !== 'door' && i.kind !== 'reward' && i.kind !== 'sign');
+    for (const d of doors) for (const o of others) assert.ok(!overlap(d, o), `${g.roomDesc().type}: door overlaps ${o.kind}`);
+  }
+});
+
+test('救出戦：放っておくと錆兵がグレンを襲い、近づくと引きつけられる', () => {
+  const g = newGame(3);
+  const d = new Driver(g);
+  g.run.clock = 10;
+  g.enterRoom(0, 3);
+  for (const e of g.room.enemies) e.lag = 0;
+  // 入口に立ったまま放置
+  d.frame(60 * 4);
+  const hpIgnored = g.room.glenHp;
+  assert.ok(hpIgnored < 60, `glen takes damage when ignored (${hpIgnored})`);
+  // 錆兵のすぐそばへ
+  const e = g.room.enemies[0];
+  g.player.x = e.x - 40; g.player.y = e.y + e.h - g.player.h; g.player.hp = 9999; g.player.maxHp = 9999;
+  d.frame(30);
+  assert.ok(g.targetFor(e) === g.player, 'nearby soldier targets the player');
+});

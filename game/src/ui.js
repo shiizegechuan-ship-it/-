@@ -97,7 +97,7 @@ export function drawHud(ctx, game) {
 
   // 鍛冶屋の危機
   if (game.room.desc.type === 'forge' && run.glen === 'attacked') {
-    text(ctx, 'グレンを守れ', VIEW_W / 2, 78, { size: 13, align: 'center', color: '#ff8a6a', bold: true });
+    text(ctx, 'グレンを守れ ― 近づいて錆兵を引きつけろ', VIEW_W / 2, 78, { size: 13, align: 'center', color: '#ff8a6a', bold: true });
   }
   // 刻守のHP
   const b = game.room.boss;
