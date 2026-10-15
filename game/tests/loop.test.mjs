@@ -173,7 +173,7 @@ test('因果：歯止めに楔 → 刻守は時止めを使わず、第2段階�
   const g = newGame(8);
   addWedge(g.meta, { target: 'brake' });
   g.endRun('death'); g.startLoop();
-  g.enterRoom(2, 2);
+  g.enterRoom(2, g.run.plan.floors[2].findIndex((r) => r.type === 'boss'));
   const b = g.room.boss;
   assert.ok(b.brake);
   assert.equal(b.p2At, 0.75);

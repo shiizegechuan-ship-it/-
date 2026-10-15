@@ -156,7 +156,7 @@ export function updateSpells(game, dt) {
         for (const e of enemiesNear(game, sp.x, sp.y, sp.r)) if (!sp.hit.has(e.id)) {
           sp.hit.add(e.id);
           strike(game, sp, e, sp.dmg, { knock: sp.kind === 'toll' ? 320 : 160 });
-          if (sp.kind === 'toll' && e.alive && !e.boss && e.setState) { e.setState('flinch'); e.stateT = -0.6; }
+          if (sp.kind === 'toll' && e.alive && !e.boss && !e.elite && e.setState) { e.setState('flinch'); e.stateT = -0.6; }
         }
         if (sp.t > dur + 0.25) sp.alive = false;
         break;
@@ -173,6 +173,32 @@ export function updateSpells(game, dt) {
         if (sp.t > sp.life) sp.alive = false;
         break;
       }
+      case 'groundwave': {
+        // 床を走る衝撃波：床の上にいる敵に一度ずつ当たる
+        sp.x += sp.vx * dt;
+        for (const e of room.enemies) if (e.alive && !(e.boss && e.defeated) && !sp.hit.has(e.id) && Math.abs(cx(e) - sp.x) < e.w / 2 + 14 && Math.abs(e.y + e.h - sp.y) < 40) { sp.hit.add(e.id); strike(game, sp, e, sp.dmg, { knock: 60, dir: sign(sp.vx) }); }
+        if (sp.t > sp.life || game.map.solidAt(sp.x + sign(sp.vx) * 8, sp.y - 10)) sp.alive = false;
+        break;
+      }
+      case 'spike': {
+        if (sp.t >= sp.delay && !sp.boomed) {
+          sp.boomed = true;
+          for (const e of room.enemies) if (e.alive && !(e.boss && e.defeated) && Math.abs(cx(e) - sp.x) < e.w / 2 + 16 && Math.abs(e.y + e.h - sp.y) < 50) strike(game, sp, e, sp.dmg, { knock: 40 });
+          game.fx.sparks(sp.x, sp.y - 10, '#e8f0ff', 6, 220);
+        }
+        if (sp.t > sp.delay + 0.45) sp.alive = false;
+        break;
+      }
+      case 'burnfloor': {
+        sp.tick = (sp.tick || 0) - dt;
+        if (sp.tick <= 0) {
+          sp.tick = 0.3;
+          for (const e of room.enemies) if (e.alive && !(e.boss && e.defeated) && Math.abs(cx(e) - sp.x) < sp.half && Math.abs(e.y + e.h - sp.y) < 34) strike(game, sp, e, sp.dmg, { knock: 0 });
+        }
+        if (Math.random() < 0.5) game.fx.sparks(sp.x + (Math.random() - 0.5) * sp.half * 2, sp.y - 2, Math.random() < 0.5 ? '#ff7a3c' : '#ffe14a', 1, 70);
+        if (sp.t > sp.life) sp.alive = false;
+        break;
+      }
       case 'riposte': case 'thunder': case 'zap':
         if (sp.t > sp.life) sp.alive = false;
         break;
@@ -180,7 +206,7 @@ export function updateSpells(game, dt) {
         sp.r = clamp(sp.t / 0.3, 0, 1) * sp.maxR;
         for (const e of enemiesNear(game, sp.x, sp.y, sp.r)) if (!sp.hit.has(e.id)) {
           sp.hit.add(e.id); strike(game, sp, e, sp.dmg, { knock: 80 });
-          e.lag = Math.max(e.lag || 0, sp.slow);
+          if (!e.boss && !e.elite) e.lag = Math.max(e.lag || 0, sp.slow);
           game.fx.sparks(cx(e), cy(e), '#cfe8ff', 5, 160);
         }
         if (sp.t > 0.55) sp.alive = false;
@@ -314,6 +340,23 @@ export function updatePassives(game, dt) {
   if (p.stats.stormcrown && (T.crown = (T.crown || 0) + dt) >= 2.5) {
     const e = nearestTargets(game, px, py, 300)[0];
     if (e) { T.crown = 0; PROCS.thunderbell(game, 1, e, 50 / 45, true); }
+  }
+  // 床を攻める術：足元の床の高さを基準にする
+  const floorY = () => Math.min(game.map.groundBelow(px, p.y + p.h - 4), game.map.pxH);
+  if (pv.quakeline && anyFoe() && tick('quakeline', 3)) {
+    const fy = floorY();
+    for (const v of [-430, 430]) game.room.spells.push(new Spell('groundwave', px, fy, { passive: true, vx: v, life: 0.9, dmg: dmg(18, 'quakeline') }));
+    game.fx.shake(1.5, 0.06); game.fx.dust(px, fy, 6);
+  }
+  if (pv.spikes && (T.spikes = (T.spikes || 0) + dt) >= 4) {
+    const ts = nearestTargets(game, px, py, 320).filter((e) => e.gravity !== false).slice(0, 2 + pv.spikes);
+    if (ts.length) {
+      T.spikes = 0;
+      for (const e of ts) game.room.spells.push(new Spell('spike', cx(e), Math.min(game.map.groundBelow(cx(e), e.y + e.h - 4), game.map.pxH), { passive: true, delay: 0.35, dmg: dmg(30, 'spikes') }));
+    }
+  }
+  if (pv.emberfloor && anyFoe() && tick('emberfloor', 5)) {
+    game.room.spells.push(new Spell('burnfloor', px, floorY(), { passive: true, life: 2.2, half: 150, dmg: dmg(7, 'emberfloor') }));
   }
   if (pv.wake && p.onGround && Math.abs(p.vx) > 150 && tick('wake', 0.12)) {
     game.room.spells.push(new Spell('trail', px, p.y + p.h - 6, { passive: true, life: 1.4, dmg: dmg(7, 'wake') }));

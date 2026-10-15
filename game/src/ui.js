@@ -341,7 +341,7 @@ function drawPause(ctx, game, m) {
     text(ctx, (i === m.sel ? '▶ ' : '') + o.label, VIEW_W / 2, yy, { size: 14, align: 'center', color: i === m.sel ? C.gold : '#ddd' });
   });
   drawDawnStrip(ctx, game, y + h + 30);
-  if (!game.touch) text(ctx, '移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃）　回避 C　時歪/術 V　調べる ↑/E', VIEW_W / 2, VIEW_H - 30, { size: 11, align: 'center', color: C.muted });
+  if (!game.touch) text(ctx, '移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃・↑↓＋Xで上下）　回避 C　術 V（ゲージ消費／術がなければ時歪）　調べる ↑/E', VIEW_W / 2, VIEW_H - 30, { size: 11, align: 'center', color: C.muted });
 }
 
 const TABS = ['人物', '謎', '敵', '夜明け'];
@@ -373,7 +373,7 @@ export function drawJournal(ctx, game, m) {
       const k = (key) => !!meta.knowledge[key];
       const cast = [
         ['あなた', '刻守の弟子。師に習った「時の楔」で、夜をまたいで覚えていられる唯一の人。'],
-        ['刻守', '時計塔の主で、あなたの師。夜の終わりに鐘を鳴らし、夜を戻し続けている。' + (k('master_reason') ? '娘を見送る朝を恐れている。' : '')],
+        ['刻守', '時計塔の主で、あなたの師。禁忌の鐘で夜を戻し続け、そのたびに自分の命を削っている。' + (k('master_reason') ? '娘を見送る朝を恐れている。' : '')],
         k('lira_father') ? ['リラ', '師の娘。朝の汽車で遠くの療養所へ発つ。'] : k('lira_name') ? ['リラ', '市場の少女。師が名を呼んだ。'] : ['市場の少女', '朝を待ちながら、父の見送りを気にしている。'],
         ['グレン', '鍛冶屋。師の古い友で、塔の歯車を共に作った。' + (k('glen_time') || k('glen_saved') ? '夜の途中で時計人形に襲われる。' : '')],
       ];
@@ -437,8 +437,9 @@ export function drawRewind(ctx, game) {
   ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(VIEW_W / 2, VIEW_H / 2); ctx.lineTo(VIEW_W / 2 + Math.cos(spin / 12) * 120, VIEW_H / 2 + Math.sin(spin / 12) * 120); ctx.stroke();
   ctx.restore();
   const causeText = rep.cause === 'bell' ? '鐘が鳴った。夜が戻る。' : 'あなたは倒れた。夜が戻る。';
-  text(ctx, causeText, VIEW_W / 2, 52, { size: 20, align: 'center', font: SERIF, color: rep.cause === 'bell' ? C.gold : '#efe6d2' });
-  text(ctx, `第 ${rep.loop} 夜 → 第 ${meta.loop} 夜`, VIEW_W / 2, 76, { size: 12, align: 'center', color: C.muted });
+  text(ctx, causeText + `　（第 ${rep.loop} 夜 → 第 ${meta.loop} 夜）`, VIEW_W / 2, 50, { size: 19, align: 'center', font: SERIF, color: rep.cause === 'bell' ? C.gold : '#efe6d2' });
+  // 夜ごとに変わる語り（時間の経過と、師の変化）
+  if (rep.story) { ctx.globalAlpha = clamp(t / 0.8, 0, 1); text(ctx, rep.story, VIEW_W / 2, 80, { size: 14, align: 'center', font: SERIF, color: '#d9c7a8' }); ctx.globalAlpha = 1; }
   if (rep.tip && t > 2.2) text(ctx, '◆ ' + rep.tip, VIEW_W / 2, 366, { size: 12, align: 'center', color: '#f2c14e' });
   const cols = [
     { title: '残ったもの', color: C.gold, items: rep.kept, at: 0.5 },

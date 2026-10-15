@@ -81,6 +81,8 @@ function renderPlay(ctx, game) {
   for (const g of fx.ghosts) { b.globalAlpha = 0.45 * (1 - g.t / g.life); drawSprite(b, spr('hero', 'dodge', 'ghost'), (g.x + g.w / 2) / 2, (g.y + g.h) / 2, g.face); }
   b.globalAlpha = 1;
   for (const e of game.room.enemies) drawEnemy(b, game, e);
+  // 対策をしてきた敵：頭上に小さな赤い目
+  for (const e of game.room.enemies) if (e.counter && e.alive && !e.boss) { const x = Math.round(cx(e) / 2), y = Math.round(e.y / 2) - 4; pset(b, x - 1, y, '#ff4a2a'); pset(b, x + 1, y, '#ff4a2a'); pset(b, x, y - 1, '#ffb0a0'); }
   drawPlayer(b, game, game.player);
   // 守りの秒針（常時の術）
   if (game.player.cloud && game.player.state !== 'dead') { // 頭上の雷雲
@@ -106,6 +108,13 @@ function renderPlay(ctx, game) {
     if (r.flat) { // 足元の平たい輪（2段ジャンプ）
       for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; pset(b, r.x / 2 + Math.cos(a) * rr, r.y / 2 + Math.sin(a) * rr * 0.3, r.color); }
     } else circle(b, r.x / 2, r.y / 2, rr, r.color);
+  }
+  for (const s of fx.pillars || []) { // 撃破の光の柱：太く立ち上がり、細くなって消える
+    const k = s.t / s.life, x = Math.round(s.x / 2), y = Math.round(s.y / 2);
+    const w = Math.max(1, Math.round(22 * (k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85)));
+    b.globalAlpha = 0.35 * (1 - k); rect(b, x - w - 4, 0, (w + 4) * 2, y, s.color);
+    b.globalAlpha = 0.9 * (1 - k); rect(b, x - w, 0, w * 2, y, '#fff6d8');
+    b.globalAlpha = 1;
   }
   for (const s of fx.streaks || []) { // 跳躍の風切り線
     const k = s.t / s.life;
@@ -495,6 +504,28 @@ function drawSpell(b, sp, t) {
       b.globalAlpha = 1;
       break;
     }
+    case 'groundwave': { // 床を走る衝撃波：岩の棘が波打つ
+      const dir = Math.sign(sp.vx), k = sp.t / sp.life;
+      b.globalAlpha = 1 - k * 0.6;
+      for (let i = 0; i < 6; i++) { const h = Math.round(Math.sin((i / 5) * Math.PI) * 7); rect(b, x - dir * i * 2, y - h, 2, h, i % 2 ? '#d8b878' : '#a08050'); }
+      pset(b, x + dir, y - 8, '#ffffff');
+      b.globalAlpha = 1;
+      break;
+    }
+    case 'spike': { // 時針の剣山：予兆の光る印 → 針が突き出す
+      if (sp.t < sp.delay) { const k = sp.t / sp.delay; b.globalAlpha = 0.4 + 0.6 * k; rect(b, x - 5, y - 1, 11, 1, '#9fe3ff'); pset(b, x, y - 2, '#ffffff'); b.globalAlpha = 1; break; }
+      const k = (sp.t - sp.delay) / 0.45, h = Math.round(16 * Math.min(1, k * 4) * (1 - Math.max(0, k - 0.6) * 2.5));
+      for (const [dx, s] of [[-3, 0.7], [0, 1], [3, 0.8]]) { const hh = Math.round(h * s); line(b, x + dx, y, x + dx, y - hh, '#e8f0ff'); pset(b, x + dx, y - hh, '#ffffff'); }
+      break;
+    }
+    case 'burnfloor': { // 灼熱の床：炎の帯
+      const k = sp.t / sp.life, half = Math.round(sp.half / 2);
+      b.globalAlpha = k > 0.8 ? (1 - k) * 5 : 1;
+      rect(b, x - half, y - 1, half * 2, 1, '#ff7a3c');
+      for (let i = -half; i < half; i += 3) { const h = 1 + ((i * 7 + Math.floor(t * 14)) % 4 + 4) % 4; rect(b, x + i, y - 1 - h, 1, h, (i / 3) % 2 ? '#ffb04a' : '#ff6a2a'); }
+      b.globalAlpha = 1;
+      break;
+    }
     case 'riposte': {
       const k = sp.t / sp.life, tx = Math.round(sp.tx / 2), ty = Math.round(sp.ty / 2);
       b.globalAlpha = 1 - k;
@@ -675,7 +706,30 @@ function drawEnemy(b, game, e) {
       if (up && e.tell > 0.5) { b.globalAlpha = (e.tell - 0.5) * 2; circle(b, bx, by - 9, 10 + Math.round(e.tell * 4), '#f2c14e'); b.globalAlpha = 1; }
       break;
     }
-    case 'boss': drawBoss(b, game, e, bx, by, t, flash, slowGlow); break;
+    case 'warden': { // 振り子の番人：大きな柱時計の体・文字盤の顔・胸の振り子
+      const x0 = bx - 10, y0 = by - 28;
+      const tellCol = e.tell > 0 ? (e.tell > 0.6 ? '#ff4a2a' : '#c0402a') : null;
+      if (tellCol) { rect(b, x0 - 1, y0 - 1, 22, 30, tellCol); }
+      else if (slowGlow) { rect(b, x0 - 1, y0 - 1, 22, 30, '#5aa9e6'); }
+      rect(b, x0, y0, 20, 28, flash ? '#ffffff' : '#3a2a22');
+      rect(b, x0 + 1, y0 + 1, 18, 26, flash ? '#ffffff' : '#5a3e2c');
+      rect(b, x0, y0 + 10, 20, 1, '#c9a052'); rect(b, x0 + 2, by - 2, 16, 2, '#2a1e18');
+      // 文字盤の顔と赤い目
+      disc(b, bx, y0 + 5, 4, '#e8dcc4'); pset(b, bx - 2, y0 + 5, '#ff3a2a'); pset(b, bx + 2, y0 + 5, '#ff3a2a');
+      const ha = t * 2; line(b, bx, y0 + 5, bx + Math.round(Math.cos(ha) * 3), y0 + 5 + Math.round(Math.sin(ha) * 3), '#2a1e18');
+      // 胸の振り子（予兆中は大きく振れる）
+      const amp = e.state === 'sweepWind' ? 0.9 : 0.35, pa = Math.sin(e.pend || 0) * amp;
+      const pl = 12, px1 = bx + Math.round(Math.sin(pa) * pl), py1 = y0 + 12 + Math.round(Math.cos(pa) * pl);
+      line(b, bx, y0 + 12, px1, py1, '#c9a052'); disc(b, px1, py1, 2, '#f2c14e');
+      // 腕と大振り子の刃
+      if (e.state === 'sweepWind') dashLine(b, bx + f * 10, by - 14, bx + f * 46, by - 14 + Math.round(e.tell * 6), e.tell > 0.6 ? '#ff4a2a' : '#c0402a');
+      if (e.state === 'sweep') { arc(b, bx + f * 6, by - 16, 34, f > 0 ? -1.1 : Math.PI - 0.8, f > 0 ? 0.8 : Math.PI + 1.1, '#ff8a5a', 3); arc(b, bx + f * 6, by - 16, 30, f > 0 ? -0.9 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 0.9, '#ffffff', 1); }
+      if (e.state === 'tollWind') { const bt = Math.round(e.tell * 4); for (let i = 0; i < 6; i++) rect(b, bx - 2 - Math.floor(i / 2), y0 - 10 - bt + i, 5 + Math.floor(i / 2) * 2, 1, '#f2c14e'); }
+      if (e.state === 'jump' && e.tell) { const gy = Math.round(game.map.groundBelow(cx(e), e.y + e.h) / 2); b.globalAlpha = 0.5; rect(b, bx - 10, gy - 1, 20, 1, '#ff4a2a'); b.globalAlpha = 1; }
+      if (e.state === 'recover' || e.state === 'stagger') for (let i = 0; i < 3; i++) pset(b, bx - 3 + i * 3, y0 - 4 - (Math.floor(t * 6 + i) % 2), '#9a8fa6');
+      break;
+    }
+    case 'boss': if (!e.vanished) drawBoss(b, game, e, bx, by, t, flash, slowGlow); break;
   }
   hpBar(b, e);
 }
@@ -848,6 +902,16 @@ function drawItem(b, game, it) {
       disc(b, sx + 7, bot - 11, 2, '#5fd18b'); disc(b, sx + 13, bot - 11, 2, '#ff6a6a');
       for (let i = 0; i < 3; i++) rect(b, sx + sw - 14 + i * 3, bot - 12 - (i % 2), 2, 3, '#ffd84a');
       if (Math.floor(t * 3) % 3 === 0) pset(b, sx + sw - 11, bot - 14, '#ffffff');
+      break;
+    }
+    case 'shrine': { // 時の祠：石の台座に浮かぶ砂時計
+      rect(b, x + 2, bot - 8, w - 4, 8, '#3a3242'); rect(b, x + 1, bot - 9, w - 2, 1, '#5c5068');
+      rect(b, mid - 2, bot - 22, 5, 13, '#2a2433');
+      if (!it.used) {
+        const yy = bot - 32 + Math.round(Math.sin(t * 2) * 2);
+        b.globalAlpha = 0.35; disc(b, mid, yy, 7, '#e35d5d'); b.globalAlpha = 1;
+        glyph(b, 'hourglass', mid, yy, '#ffb0a0');
+      }
       break;
     }
     case 'goldchest': {

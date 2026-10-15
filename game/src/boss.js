@@ -274,7 +274,7 @@ export class Tokimori extends Enemy {
     this.hp -= dmg;
     this.hitFlash = 0.1;
     // 怯みゲージ：溜まると大きくよろめく（HP に比例）
-    this.poiseDmg += dmg * (info.cat === 'heavy' ? 2 : 1);
+    if (!info.passive) this.poiseDmg += dmg * (info.cat === 'heavy' ? 2 : 1); // 常時の術ではよろめかない
     const busy = ['stopped', 'stopWind', 'leap', 'phaseShift'].includes(this.state);
     if (this.poiseDmg >= this.maxHp * 0.14 && !busy) { this.poiseDmg = 0; this.setState('stagger'); game.sfx.play('guardBreak'); game.fx.shake(5); return { blocked: false, guardBreak: true }; }
     this.checkPhase(game);

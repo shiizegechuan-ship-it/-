@@ -6,7 +6,7 @@ import { addWedge } from '../src/meta.js';
 function bossRoom(seed = 3, setup = () => {}) {
   const g = newGame(seed);
   setup(g);
-  g.enterRoom(2, 2);
+  g.enterRoom(2, g.run.plan.floors[2].findIndex((r) => r.type === 'boss'));
   g.modal = null;
   const d = new Driver(g);
   g.player.hp = g.player.maxHp = 99999;

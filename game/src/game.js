@@ -3,7 +3,7 @@ import { DT, TILE, VIEW_W, VIEW_H, ZOOM, PLAYER as PC } from './config.js';
 import { overlap, cx, cy, clamp, lerp, makeRng, sign } from './util.js';
 import { TileMap } from './tilemap.js';
 import { Player } from './player.js';
-import { makeEnemy, RustSoldier, GearKnight } from './enemies.js';
+import { makeEnemy, RustSoldier, GearKnight, Warden } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
 import { castArt, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell } from './arts.js';
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
@@ -16,12 +16,12 @@ import { LAYOUTS, FLOOR_NAMES, buildPlan, layoutRows, extraEnemyTypes } from './
 import {
   newMeta, serialize, deserialize, endLoop, learn, knows, hasWedge, addWedge, removeWedge, freeSlots,
   bossCounter, trueEndReady, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
-  upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount, habitAnalysis, dawnProgress,
+  upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount, habitAnalysis, dawnProgress, MOB_COUNTERS,
 } from './meta.js';
 
 const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
 // 脅威 1 段あたりの上がり幅（常時の術 3 つごとに 1 段）
-export const THREAT = { per: 3, hp: 0.7, dmg: 0.18, bossHp: 0.55, extraCap: 4 };
+export const THREAT = { per: 3, hp: 0.7, dmg: 0.15, bossHp: 0.55, extraCap: 4 };
 const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourglass: '砂時計', gold: '金貨', artifact: 'アーティファクト' };
 // 敵ごとの金貨（夜が深いほど多い）
 const GOLD = { soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
@@ -103,6 +103,7 @@ export class Game {
       rareRng: makeRng(plan.offerSeed ^ 0x7a2e),
       level: 1, exp: 0, pendingRare: 0, phoenixUsed: false,
       gold: 0, keys: 0, shops: {}, firstDoorDone: false, aegisUsed: false,
+      mobCounter: bossCounter(meta.lastLoop), // 雑魚・中ボスも前の夜の戦い方を覚えている
       scale: enemyScale(meta),
     };
     // 発動する術は 1 つだけ（楔と継承で重なったら Lv の高い方）
@@ -125,7 +126,9 @@ export class Game {
     if (meta.loop === 1 && !meta.flags.ending) this.openDialog([
       { who: '', text: 'あなたは時計塔の主「刻守」の弟子。この町は、同じ夜を繰り返している。' },
       { who: '', text: '夜の終わりに師が鐘を鳴らすと、時は夜のはじめに戻る。それを覚えていられるのは、師から「時の楔」を習ったあなただけ。' },
-      { who: '', text: '目的は「夜明けを迎える」こと。師を倒すだけでは鐘が鳴り、夜は戻る。師が夜を止める理由を探そう。', note: '進み具合は 記録帳（Tab）の「夜明け」で確認できる' },
+      { who: '', text: '時戻しの鐘は禁忌の技。鳴らすたびに、鳴らした者の命を一夜ぶん削る。このままでは、師は朝を待たずに尽きてしまう。' },
+      { who: '', text: '目的は「夜明けを迎える」こと。師を倒して鐘を止めても、夜は戻る。師が命を削ってまで夜を止める理由を探そう。', note: '進み具合は 記録帳（Tab）の「夜明け」で確認できる' },
+      { who: '', text: '攻撃を当てると秒針ゲージがたまる。V（術ボタン）でゲージを消費して、装着した術を放つ。術がまだなければ「時歪」――周りの時を遅くする。', note: '術は強化の「術」系統で手に入る' },
       { who: '', text: '倒れても、知ったことと、楔を打ったものは次の夜に残る。' },
     ]);
     this.save();
@@ -165,9 +168,18 @@ export class Game {
       study: () => this.setupStudy(),
       boss: () => this.setupBoss(),
       shop: () => this.setupShop(),
+      shrine: () => this.setupShrine(),
+      elite2: () => this.setupWarden(),
+      trial: () => { room0.wave = 0; for (const e of desc.waves[0]) this.addEnemy(makeEnemy(e.type, e.x * TILE, e.y * TILE)); this.fx.setBanner('試練の間', '2 波を退けると、アーティファクトと金貨', '#ff9a7a', 1.8); },
       golden: () => this.setupGolden(),
     }[desc.type];
+    const room0 = this.room;
     setup();
+    // 番人たちの対策を、その夜の最初の戦いで知らせる
+    if (this.run.mobCounter && !this.run.counterShown && this.room.enemies.some((e) => e.counter)) {
+      this.run.counterShown = true;
+      this.fx.setBanner('番人たちも学んだ', `あなたの${COUNTERS[this.run.mobCounter].habit}：${MOB_COUNTERS[this.run.mobCounter]}`, '#ff7a5a', 2.4);
+    }
     // 鐘の欠片：敵のいる部屋に入ると衝撃
     if (this.player.stats.bellshard && this.room.enemies.some((e) => !e.boss)) this.room.spells.push(new Spell('toll', cx(this.player), cy(this.player), { r: 0, maxR: 220, dmg: 40 }));
     for (const m of this.map.markers) if (m.c === 'Q' && this.meta.loop <= 2) this.addSign(m);
@@ -180,6 +192,24 @@ export class Game {
   threatStep() {
     const n = this.player.boons.filter((b) => PASSIVE_IDS.includes(b.id)).reduce((a, b) => a + (b.tier || 1), 0);
     return Math.floor(n / THREAT.per);
+  }
+  // 脅威で敵の動きも速くなる（積み上がる術の速さに追いつくように）。回避への対策をした雑魚はさらに速い
+  enemyHaste(e) {
+    const s = this.threatStep();
+    const h = e.boss ? Math.min(1.25, 1 + 0.03 * s) : Math.min(1.4, 1 + 0.05 * s);
+    return h * (e.counter === 'dodge' && !e.boss ? 1.15 : 1);
+  }
+  // 中ボス・刻守は、術で一度に削れる量に上限がある（1 秒あたり最大HPの数%。超えた分はごくわずかしか通らない）
+  spellGuard(e, dmg) {
+    const now = this.run.clock;
+    let cap = e.maxHp * (e.boss ? 0.03 : 0.09);
+    if (e.counter === 'skill') cap *= 0.5;
+    const g = (e.sg ||= { b: cap, t: now });
+    g.b = Math.min(cap * 1.5, g.b + (now - g.t) * cap); g.t = now;
+    if (g.b >= dmg) { g.b -= dmg; return dmg; }
+    const ok = Math.max(0, g.b); g.b = 0;
+    if (!e.sgText || now - e.sgText > 0.8) { e.sgText = now; this.fx.text(cx(e), e.y - 22, '術の守り', '#9fd0ff', 12); }
+    return ok + Math.min((dmg - ok) * 0.03, e.maxHp * (e.boss ? 0.001 : 0.002)); // 上限を超えた分はごくわずか
   }
   threatHp() { return 1 + THREAT.hp * this.threatStep(); }
   enemyDmgMul() { return this.run.scale.dmg * (1 + THREAT.dmg * this.threatStep()); }
@@ -205,8 +235,9 @@ export class Game {
     const sc = this.run.scale;
     e.maxHp = e.hp = Math.round(e.maxHp * sc.hp * (e.boss ? 1 + THREAT.bossHp * this.threatStep() : this.threatHp()));
     e.tier = sc.tier;
+    if (!e.boss && this.run.mobCounter) e.counter = this.run.mobCounter;
     this.room.enemies.push(e);
-    const tellKey = { soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
+    const tellKey = { warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
     if (tellKey) e.tellKey = tellKey;
     return e;
   }
@@ -215,11 +246,11 @@ export class Game {
   addItem(it) { this.room.items.push({ w: 24, h: 40, ...it }); return it; }
   addSign(m) {
     const texts = this.touch ? [
-      '左のスティックで移動。右のボタンで 跳ぶ・攻撃（長押しで重撃）・回避',
-      '時歪は秒針ゲージを消費して周囲を遅くする。光る印の前で「調べる」',
+      '左のスティックで移動。右のボタンで 跳ぶ・攻撃（長押しで重撃）・回避。上下＋攻撃で上攻撃・下攻撃',
+      '術ボタン：攻撃でたまる秒針ゲージを消費して、装着した術を放つ（術がなければ時歪＝周りを遅くする）。光る印の前で「調べる」',
     ] : [
-      '←→ 移動　Z ジャンプ　X 攻撃（長押しで重撃）　C 回避',
-      'V 時歪（秒針ゲージ消費）　↑/E 調べる　Tab 記録帳　Esc 中断',
+      '←→ 移動　Z ジャンプ（空中でもう一度）　X 攻撃（長押しで重撃、↑↓＋Xで上・下攻撃）　C 回避',
+      'V 術：攻撃でたまる秒針ゲージを消費して、装着した術を放つ（術がなければ時歪＝周りを遅くする）　↑/E 調べる　Tab 記録帳',
     ];
     const i = this.map.markers.filter((x) => x.c === 'Q').indexOf(m);
     this.addItem({ kind: 'sign', x: m.x, y: m.y + TILE - 40, text: texts[i] || texts[0] });
@@ -291,8 +322,8 @@ export class Game {
     b.face = -1;
     this.room.boss = b;
     const lines = [];
-    if (this.meta.flags.bossBeaten) lines.push({ who: '刻守（師）', text: 'また来たか、弟子よ。何度来ても鐘は鳴らす。朝は来させん。' });
-    else lines.push({ who: '刻守（師）', text: '弟子よ、なぜ夜を進めようとする。……下がっていろ。鐘の時刻だ。' });
+    if (this.meta.flags.bossBeaten) lines.push({ who: '刻守（師）', text: 'また来たか、弟子よ。この命が尽きるまで、鐘は鳴らす。朝は来させん。' });
+    else lines.push({ who: '刻守（師）', text: '弟子よ、時戻しは禁忌だ。代償は私の命で払っている。お前が背負うものではない……下がっていろ。' });
     if (counter) lines.push({ who: '刻守（師）', text: `前の夜、お前は${COUNTERS[counter].habit}に頼りすぎた。もう通じんぞ。` });
     if (hasWedge(this.meta, 'brake')) lines.push({ who: '刻守（師）', text: '歯止めに楔を……！ 私の教えた技で、私を止めるか。ならば力で応えよう！', note: '時止め封印／第2段階が早まり、技が速くなる' });
     // 前の夜の戦い方の分析を先に見せる
@@ -347,7 +378,7 @@ export class Game {
     if (p.state === 'normal' && p.onGround && (input.pressed('interact') || input.pressed('up'))) this.tryInteract();
     this.resolvePlayerAttacks();
     for (const e of room.enemies) {
-      const edt = this.timeStopT > 0 && !e.boss ? dt * 0.3 : dt;
+      const edt = (this.timeStopT > 0 && !e.boss ? dt * 0.3 : dt) * this.enemyHaste(e);
       if (e.alive) e.update(this, edt);
     }
     this.resolveEnemyAttacks();
@@ -371,7 +402,10 @@ export class Game {
   updateCamera(dt, snap = false) {
     const p = this.player;
     const vw = VIEW_W / ZOOM, vh = VIEW_H / ZOOM;
-    const tx = clamp(cx(p) - vw / 2 + p.face * 40, 0, Math.max(0, this.map.pxW - vw));
+    // 刻守の撃破演出の間は、カメラが刻守の方へ寄る
+    const b = this.room && this.room.boss && this.room.bossOutroT != null ? this.room.boss : null;
+    const fx0 = b ? lerp(cx(p), cx(b), 0.75) : cx(p) + p.face * 40;
+    const tx = clamp(fx0 - vw / 2, 0, Math.max(0, this.map.pxW - vw));
     const ty = clamp(cy(p) - vh * 0.6, 0, Math.max(0, this.map.pxH - vh));
     const k = snap ? 1 : 1 - Math.pow(0.001, dt);
     this.cam.x = lerp(this.cam.x, tx, k);
@@ -439,6 +473,12 @@ export class Game {
       }
     }
     if (e.warp > 0) cat = 'skill';
+    // 雑魚・中ボスの対策：前の夜にいちばん使った手段が効きにくい
+    let countered = false;
+    if (!e.boss && e.counter && (info.echo ? 'echo' : info.cat) === e.counter) { dmg *= e.elite ? 0.55 : 0.75; countered = true; }
+    // 刻守は術そのものに強い。中ボス・刻守は術で削れる量に上限
+    if (info.spell && e.boss) dmg *= 0.6;
+    if (info.spell && (e.boss || e.elite)) dmg = this.spellGuard(e, dmg);
     dmg = Math.round(dmg);
     const res = e.takeHit(this, { dmg, dir: info.dir, knock: info.knock, breaks: info.breaks, echo: !!info.echo, cat: info.cat, lift: info.lift || 0, passive: !!info.passive });
     if (res.silent) return res;
@@ -470,6 +510,7 @@ export class Game {
     if (info.heavy || crit) for (let i = 0; i < 4; i++) this.fx.parts.push({ x: hx, y: cy(e), vx: (Math.random() - 0.5) * 300, vy: -100 - Math.random() * 200, life: 0.5, t: 0, color: '#c9a052', size: 3, g: 900 }); // 歯車の破片
     this.fx.sparks(hx, cy(e), info.echo ? '#b67cf0' : info.heavy ? '#f2c14e' : '#fff3d6', info.heavy ? 14 : 7, info.heavy ? 380 : 260, info.dir);
     const num = fmtNum(dmg) + (crit ? '!' : '');
+    if (countered) res.resisted = true;
     if (res.resisted) { this.fx.text(cx(e) + 14, e.y - 22, '耐性', '#8a8a92', 11); this.fx.text(cx(e) + (Math.random() - 0.5) * 10, e.y - 6, num, '#8a8a92', 12); this.addCombo(); this.learnOnce(e); return res; }
     this.fx.text(cx(e) + (Math.random() - 0.5) * 10, e.y - 6, num, crit ? '#ffe14a' : info.echo ? '#c9a0ff' : info.heavy ? '#f2c14e' : '#ffffff', crit ? 20 : info.heavy ? 18 : 13);
     if (info.spell) {
@@ -483,7 +524,7 @@ export class Game {
       this.fx.shake(Math.max(info.shake || 0, crit ? 4 : info.heavy ? 5 : 2) * (crit ? 1.5 : 1), crit || info.heavy ? 0.14 : 0.07); // 会心はさらに 1.5 倍
       if (crit) this.fx.ring(cx(e), cy(e), '#ffe14a', 28, 0.2);
       p.gauge = Math.min(PC.gaugeMax, p.gauge + PC.gaugePerHit * st.gaugeMul);
-      if (st.lagTime) e.lag = Math.max(e.lag, st.lagTime);
+      if (st.lagTime && !e.boss && !e.elite) e.lag = Math.max(e.lag, st.lagTime); // 中ボス・刻守には効かない
       // 発動条件つきの術
       if (info.heavy && st.procs.thunderbell && e.alive) PROCS.thunderbell(this, st.procs.thunderbell, e);
       if (info.cat === 'air' && st.procs.plunge && !p.onGround) { p.airHits = (p.airHits || 0) + 1; if (p.airHits >= 3 && !p.plunging) { p.airHits = 0; PROCS.plunge(this, st.procs.plunge); } }
@@ -588,6 +629,25 @@ export class Game {
     this.run.gold += n;
     if (x != null) this.fx.text(x, y, `+${n}G`, '#ffd84a', 11);
     this.emit('gold', { n });
+  }
+  setupShrine() {
+    const N = this.marker('N');
+    this.addItem({ kind: 'shrine', x: N.x - 6, y: N.y + TILE - 44, w: 42, h: 44, used: false });
+  }
+  setupWarden() {
+    const Z = this.marker('Z');
+    this.addEnemy(new Warden(Z.x, Z.y + TILE));
+    this.fx.setBanner('振り子の番人', '大技のあとに長い隙。そこへ重撃を', '#f2c14e', 1.8);
+  }
+  useShrine(it) {
+    const p = this.player;
+    if (it.used) return;
+    const cost = Math.round(p.maxHp * 0.2);
+    this.openDialog([{ who: '', text: '時の祠。古い文字が刻まれている――「時を欲する者は、命で払え」' }], [
+      { label: `命を捧げる（HP -${cost}）：強化を 1 つ得る`, fn: () => { it.used = true; p.hp = Math.max(1, p.hp - cost); this.fx.text(cx(p), p.y - 20, `-${cost}`, '#ff5a3c', 16); this.fx.burst(cx(it), cy(it), '#e35d5d', 20); this.sfx.play('hurt'); this.openBoonPick(1, null, true); } },
+      { label: '祈る：HP を最大の 25% 回復', fn: () => { it.used = true; const a = Math.round(p.maxHp * 0.25 * p.stats.healMul); p.hp = Math.min(p.maxHp, p.hp + a); this.fx.text(cx(p), p.y - 20, `+${a}`, '#5fd18b', 16); this.fx.ring(cx(p), cy(p), '#5fd18b', 40); this.sfx.play('heal'); } },
+      { label: '立ち去る', fn: () => {} },
+    ]);
   }
   setupShop() {
     const V = this.marker('V');
@@ -771,7 +831,7 @@ export class Game {
     if (st.procs.riposte) PROCS.riposte(this, st.procs.riposte);
     if (st.perfectNextMul > 1) p.empowerNext = st.perfectNextMul;
     if (st.freezeTime) {
-      for (const e of this.room.enemies) if (e.alive && Math.hypot(cx(e) - cx(p), cy(e) - cy(p)) < 220) e.lag = Math.max(e.lag, st.freezeTime);
+      for (const e of this.room.enemies) if (e.alive && !e.boss && !e.elite && Math.hypot(cx(e) - cx(p), cy(e) - cy(p)) < 220) e.lag = Math.max(e.lag, st.freezeTime);
       this.fx.ring(cx(p), cy(p), '#5aa9e6', 220, 0.4);
     }
     this.emit('perfect');
@@ -876,7 +936,14 @@ export class Game {
     room.enemies = room.enemies.filter((e) => e.alive || e.boss);
     const living = room.enemies.filter((e) => e.alive && !e.boss).length;
     const t = room.desc.type;
-    if (!room.cleared && living === 0 && (t === 'combat' || t === 'elite' || (t === 'forge' && this.run.glen === 'attacked'))) {
+    // 試練の間：1 波目を倒すと 2 波目
+    if (t === 'trial' && !room.cleared && living === 0 && room.wave === 0) {
+      room.wave = 1;
+      for (const e of room.desc.waves[1]) this.addEnemy(makeEnemy(e.type, e.x * TILE, e.y * TILE));
+      this.fx.setBanner('第二波', '', '#ff9a7a', 1.0); this.sfx.play('tellBig');
+      return;
+    }
+    if (!room.cleared && living === 0 && (t === 'combat' || t === 'elite' || t === 'elite2' || t === 'trial' || (t === 'forge' && this.run.glen === 'attacked'))) {
       if (t === 'forge') this.onGlenSaved();
       else this.clearRoom(false);
     }
@@ -890,6 +957,8 @@ export class Game {
     let reward = null;
     if (t === 'combat') reward = this.run.nextReward || 'boon';
     if (t === 'elite' && !room.desc.knightWedged) reward = 'boon2';
+    if (t === 'elite2') reward = 'boon2';
+    if (t === 'trial') { reward = 'artifact'; this.dropGold(Math.round(60 * (1 + 0.25 * this.run.scale.level)), cx(this.player), this.player.y - 10, 1.4); }
     if (!quiet) {
       this.addShards(3 + this.run.scale.level);
       this.fx.setBanner('制圧', '', '#f2c14e', 1.0);
@@ -929,7 +998,7 @@ export class Game {
       choices.forEach((rw) => this.addItem({ kind: 'door', x: X.x + dir * (n++) * 90 - 6, y: doorY, w: 36, h: 50, to: next, reward: rw }));
     } else {
       n++;
-      this.addItem({ kind: 'door', x: X.x - 6, y: doorY, w: 36, h: 50, to: next, reward: null, label: next.stairs ? '階段' : { forge: '鍛冶場', elite: '強敵', archive: '書庫', study: '書斎', boss: '鐘楼', shop: '店', entry: '' }[next.desc.type], causal: ['forge', 'archive', 'study'].includes(next.desc.type), boss: next.desc.type === 'boss', elite: next.desc.type === 'elite' });
+      this.addItem({ kind: 'door', x: X.x - 6, y: doorY, w: 36, h: 50, to: next, reward: null, label: next.stairs ? '階段' : { forge: '鍛冶場', elite: '強敵', elite2: '強敵', archive: '書庫', study: '書斎', boss: '鐘楼', shop: '店', shrine: '時の祠', trial: '試練の間', entry: '' }[next.desc.type], causal: ['forge', 'archive', 'study'].includes(next.desc.type), boss: next.desc.type === 'boss', elite: next.desc.type === 'elite' || next.desc.type === 'elite2' || next.desc.type === 'trial' });
     }
     this.run.firstDoorDone = true;
     // 黄金の鍵があれば、黄金の部屋への扉が増える（鐘楼の前は除く）
@@ -1005,6 +1074,7 @@ export class Game {
       case 'wreck': return it.wedged ? '' : '楔を打つ';
       case 'lift': return it.dead ? '動かない' : '昇降機に乗る（上層・書斎へ）';
       case 'merchant': return '店を見る';
+      case 'shrine': return it.used ? '' : '祠に触れる';
       case 'goldchest': return it.opened ? '' : '黄金の宝箱を開ける';
     }
     return '';
@@ -1016,6 +1086,7 @@ export class Game {
     switch (it.kind) {
       case 'door': this.goDoor(it); break;
       case 'merchant': this.openShop(); break;
+      case 'shrine': this.useShrine(it); break;
       case 'goldchest':
         if (it.opened) break;
         it.opened = true;
@@ -1101,7 +1172,7 @@ export class Game {
       this.learnK('lira_father');
     } else {
       lines.push({ who: 'リラ', text: '来てくれた。……ちゃんと覚えてるよ、何度も同じ夜だったこと。' });
-      lines.push({ who: 'リラ', text: 'お父さんは、わたしを見送る朝が来ないように、鐘で夜を戻してるんだね。' });
+      lines.push({ who: 'リラ', text: 'お父さんは、わたしを見送る朝が来ないように、鐘で夜を戻してるんだね。……夜が戻るたび、お父さんのしわが増えていくの。' });
       lines.push({ who: 'リラ', text: 'お父さんに伝えて。「リラは覚えてる。朝が来ても、ちゃんと治して帰ってくる」って。', note: '記録帳に追加：リラの伝言' });
       this.learnK('lira_message');
     }
@@ -1120,7 +1191,8 @@ export class Game {
     const lines = [];
     if (hasWedge(this.meta, 'glen') && this.room.desc.type === 'entry') {
       lines.push({ who: 'グレン', text: '妙な夢を見た。お前に助けられた夢だ。……借りは返すぜ、刻守の弟子。' });
-      lines.push({ who: 'グレン', text: 'あいつは娘を見送るのが怖ぇのさ。だから朝を来させねえ。止めてやれるのはお前だけだ。' });
+      lines.push({ who: 'グレン', text: 'あの鐘は人の命を喰う禁忌の道具だ。あいつ、もう何百夜ぶん削ってると思う？' });
+      lines.push({ who: 'グレン', text: '娘を見送るのが怖ぇのさ。このままじゃ朝より先に、あいつが尽きる。止めてやれるのはお前だけだ。' });
     } else {
       lines.push({ who: 'グレン', text: '助かった、刻守の弟子か。あの人形どもは塔の番人だ。夜が止まってから狂っちまった。' });
       lines.push({ who: 'グレン', text: '礼だ。腕を見せな、一つ鍛えてやる。' });
@@ -1160,8 +1232,32 @@ export class Game {
     }
     if (room.desc.type === 'forge' && run.glen === 'dead' && !room.cleared && room.enemies.every((e) => !e.alive)) this.clearRoom(true);
     if (room.boss && room.boss.defeated && room.bossOutroT != null) {
+      const b = room.boss, t0 = room.bossOutroT;
       room.bossOutroT += dt;
-      if (room.bossOutroT > 3.2 && !run.ended) {
+      const t1 = room.bossOutroT;
+      // 撃破の演出：体のあちこちで連鎖する爆発 → 光の柱とともに消滅（大きな揺れと白い閃光）
+      if (t1 < 1.7 && Math.floor(t1 / 0.13) !== Math.floor(t0 / 0.13)) {
+        const ex = b.x + this.fx.rand() * b.w, ey = b.y + this.fx.rand() * b.h;
+        this.fx.burst(ex, ey, this.fx.rand() < 0.5 ? '#f2c14e' : '#ffffff', 14);
+        this.fx.impact(ex, ey, '#ffe14a', 10);
+        this.fx.shake(3 + t1 * 3, 0.12);
+        b.hitFlash = 0.08;
+        this.sfx.play('heavyHit');
+      }
+      if (t1 >= 1.7 && !room.bossVanished) {
+        room.bossVanished = true;
+        b.vanished = true;
+        this.fx.shake(18, 0.9);
+        this.fx.screenFlash('#ffffff', 0.9);
+        this.fx.pillar(cx(b), b.y + b.h, room.trueEnd ? '#ffd38a' : '#f2c14e');
+        for (const r of [60, 120, 200, 300]) this.fx.ring(cx(b), cy(b), r === 300 ? '#ffffff' : '#f2c14e', r, 0.5 + r / 600);
+        this.fx.sparks(cx(b), cy(b), '#ffe14a', 50, 520);
+        this.fx.sparks(cx(b), cy(b), '#ffffff', 30, 380);
+        for (let i = 0; i < 16; i++) this.fx.parts.push({ x: cx(b), y: cy(b), vx: (this.fx.rand() - 0.5) * 700, vy: -200 - this.fx.rand() * 500, life: 1.4, t: 0, color: '#c9a052', size: 4, g: 900 }); // 歯車の破片
+        this.sfx.play('bossBell'); this.sfx.play('guardBreak');
+        this.slowT = 0.5; this.slowScale = 0.35;
+      }
+      if (room.bossOutroT > 4.4 && !run.ended) {
         if (room.trueEnd) this.startEnding();
         else this.endRun('bell');
       }
@@ -1185,7 +1281,8 @@ export class Game {
     const lines = [
       { who: '師の日誌', text: '明日の朝、リラは一番の汽車で療養所へ発つ。治るかどうかは、わからない。' },
       { who: '師の日誌', text: '鐘には時を戻す力がある。鳴らせば、夜は今夜のはじめに戻る。' },
-      { who: '師の日誌', text: 'あの子が家にいる夜を、何度でも。朝など、来なくていい。' },
+      { who: '師の日誌', text: '鐘は禁忌。鳴らすたび、私の胸の時計が一夜ぶん進む。構わない。残りの命で、あの子が家にいる夜を買えるなら。' },
+      { who: '師の日誌', text: '朝など、来なくていい。' },
     ];
     if (first && !this.meta.flags.diaryRead) {
       this.meta.flags.diaryRead = true;
@@ -1559,7 +1656,7 @@ export class Game {
     this.modal = { type: 'dialog', lines, idx: 0, choices, sel: 0, t: 0 };
     this.player.vx = 0;
   }
-  openBoonPick(count, school) {
+  openBoonPick(count, school, noDoors = false) {
     const p = this.player;
     let offer;
     if (school) {
@@ -1567,7 +1664,7 @@ export class Game {
       offer = this.run.offerRng.shuffle(ids).slice(0, 3);
     } else offer = rollOffer(this.run.offerRng, p.boons, this.meta.unlocked, 3 + upLv(this.meta, 'choice'));
     if (!offer.length) { p.hp = Math.min(p.maxHp, p.hp + 90); this.openDoors(); return; }
-    this.modal = { type: 'boon', offer, sel: 1 % offer.length, count, school, t: 0 };
+    this.modal = { type: 'boon', offer, sel: 1 % offer.length, count, school, noDoors, t: 0 };
     this.sfx.play('pickup');
   }
   openForge() {
@@ -1623,7 +1720,7 @@ export class Game {
           const threat1 = this.threatStep();
           if (threat1 > threat0) this.fx.text(cx(this.player), this.player.y - 48, `脅威 ${threat1}：敵が強く・多くなる`, '#ff7a5a', 14);
           input.consume('jump'); input.consume('attack');
-          if (m.rare) { this.modal = null; }
+          if (m.rare || m.noDoors) { this.modal = null; }
           else if (m.count > 1) { this.modal = null; this.openBoonPick(m.count - 1, m.school); }
           else { this.modal = null; this.openDoors(); }
         }
@@ -1744,6 +1841,7 @@ export function fmtNum(n) {
 
 export const ENDING_PAGES = [
   ['刻守――師は、剣を下ろした。', '鐘楼の窓の外が、白みはじめている。'],
+  ['師の髪は、すっかり白くなっていた。', 'それでも胸の時計は、まだ静かに動いている。'],
   ['「リラは覚えている、か」', '「怖かったのは朝ではない。あの子を見送ることだったのだな」'],
   ['鐘は鳴らなかった。', '夜は戻らず、塔に、はじめての朝が来た。'],
   ['駅のホームで、少女が手を振っている。見送るのは、父だ。', '――いってきます、お父さん。'],

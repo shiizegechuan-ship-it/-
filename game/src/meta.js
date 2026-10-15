@@ -22,7 +22,7 @@ export const KNOWLEDGE = {
   lira_father: { cat: '人物', title: '塔の上の父', text: () => 'リラは師（刻守）の娘。朝の汽車で遠くの療養所へ発つ。父は塔の上から降りてこない。' },
   lira_message: { cat: '人物', title: 'リラの伝言', text: () => '「リラは覚えてる。朝が来ても、ちゃんと治して帰ってくる」――父に伝えてほしい言葉。' },
   code: { cat: '謎', title: '書庫の番号', text: (m) => `師の書斎の走り書き：「書庫の扉 ${m.code.join('-')}」` },
-  master_reason: { cat: '謎', title: '師の日誌', text: () => '娘のリラは夜明けの汽車で療養所へ発つ。別れを恐れた師は、鐘を鳴らして夜を戻し続けている。' },
+  master_reason: { cat: '謎', title: '師の日誌', text: () => '娘のリラは夜明けの汽車で療養所へ発つ。別れを恐れた師は、禁忌の鐘で夜を戻し続けている。鐘は鳴らすたびに師の命を一夜ぶん削る。' },
   knight_lift: { cat: '謎', title: '昇降機', text: () => '歯車騎士は昇降機の動力そのものだった。騎士が倒れたままなら、昇降機は動く。' },
   boss_bell: { cat: '謎', title: '鐘', text: () => '刻守を倒しても、彼が鐘を鳴らせば夜は戻る。力だけでは夜明けは来ない。' },
   tell_soldier: { cat: '敵', title: '錆兵', text: () => '剣を振り上げて光ったら踏み込み斬りが来る。振り上げ中は弱い攻撃では止まらない。振った後は隙だらけ。' },
@@ -33,6 +33,7 @@ export const KNOWLEDGE = {
   tell_archer: { cat: '敵', title: '時計弓兵', text: () => '距離を取って弓を引き絞る。照準線が出たら矢が来る。矢は斬り落とせる。近づけば逃げる。' },
   tell_phantom: { cat: '敵', title: '刻の亡霊', text: () => 'あなたの背後に紫の揺らぎを残し、そこへ跳んで斬る。揺らぎを見たら前へ回避。' },
   tell_bell: { cat: '敵', title: '鐘撞き', text: () => '槌を振り上げたら鐘が鳴り、音の輪が広がる。輪の帯に重なると当たる。回避の無敵か、輪の外へ。' },
+  tell_warden: { cat: '敵', title: '振り子の番人', text: () => '振り子を引いたら前方を大きく薙ぐ（怒ると振り返ってもう一度）。跳び上がったら着地の衝撃波が床を走る――跳べ。鐘を掲げたら音の輪。大技のあとの長い隙に重撃を当てると大きく崩れる。' },
   tell_boss: { cat: '敵', title: '刻守', text: () => '懐中時計を掲げたら時が止まる。時が戻る瞬間の刃に合わせて回避すれば、刹那が取れる。' },
 };
 
@@ -40,11 +41,21 @@ export const COUNTERS = {
   combo: { name: '歯車の外殻', habit: '連撃', resist: { combo: 0.3 }, desc: '歯車の外殻をまとい、連撃のダメージを 70% 弾く。3発続けて受けると跳び退いて斬り返す', weak: '重撃か術で外殻を割れ（割れると大きくよろめき、しばらく外殻が消える）' },
   heavy: { name: '受け流しの構え', habit: '重撃', resist: { heavy: 0.4 }, desc: '重撃のダメージを 60% 軽減。溜めを見ると青い構えで受け流し、斬り返す', weak: '青い構えに通常攻撃を当てると構えが崩れ、長くよろめく' },
   air: { name: '対空の針', habit: '空中攻撃', resist: { air: 0.35 }, desc: '空中攻撃のダメージを 65% 軽減。頭上を取られるとすぐに針を放つ', weak: '地上で戦え。針を撃った直後は長い隙がある' },
-  skill: { name: '術潰し', habit: '術', resist: { skill: 0.4 }, desc: '術のダメージを 60% 軽減し、時歪も半分に。術を使うと即座に突進してくる', weak: '近接で攻めろ。突進の後は長い隙がある' },
+  skill: { name: '術潰し', habit: '術', resist: { skill: 0.2 }, desc: '術のダメージを 80% 軽減し、術で削れる量の上限も半分に。時歪も半分。術を使うと即座に突進してくる', weak: '近接で攻めろ。突進の後は長い隙がある' },
   echo: { name: '残響喰い', habit: '残響', resist: { echo: 0.2 }, desc: '残響のダメージを 80% 軽減。紫の輪の間は残響を吸ってHPを回復する', weak: '輪の間に直接攻撃を3回当てると輪が割れ、よろめく' },
   dodge: { name: '読みのフェイント', habit: '回避', resist: {}, desc: '振りかぶったまま一拍止める。早すぎる回避は空振りになる', weak: '体が白く光った瞬間が本当の攻撃。そこで回避すれば刹那が取れる' },
 };
 
+
+// 雑魚・中ボスの対策（前の夜にいちばん使った手段）
+export const MOB_COUNTERS = {
+  combo: '連撃が効きにくく、連撃では怯まない',
+  heavy: '重撃が効きにくく、溜めを見ると跳び退く',
+  air: '空中攻撃が効きにくい',
+  skill: '術（常時の術を含む）が効きにくい',
+  echo: '残響が効きにくい',
+  dodge: '動きが速い（よく回避するあなたを追う）',
+};
 
 export function fmtClock(sec) {
   const s = Math.max(0, Math.floor(sec));
@@ -206,19 +217,21 @@ export function endLoop(m, run) {
     if (w.target !== 'boon') report.changed.push({ text: `代償：${t.cost}`, tone: 'risk' });
   }
   for (const k of run.learned || []) if (KNOWLEDGE[k] && KNOWLEDGE[k].cat !== '敵') report.changed.push({ text: `知った：${KNOWLEDGE[k].title}`, tone: 'blue' });
-  if (run.cause === 'bell') report.tip = '刻守を倒しても、鐘が鳴れば夜は戻る。夜明けには、刻守が夜を止める理由に答える必要がある（記録帳「夜明けへの道」）。';
+  if (run.cause === 'bell' && !m.flags.diaryRead) report.tip = '刻守を倒しても、鐘が鳴れば夜は戻る。師が命を削ってまで夜を止める理由を探そう（記録帳「夜明けへの道」）。';
   else if (report.loop === 1) report.tip = '金の時計の印がついたもの（人・残骸・仕掛け）に楔を打つと、次の夜もその状態のまま残る。';
-  else if (!m.flags.bossBeaten && report.loop === 2 && m.wedges.length === 0) report.tip = '楔は「巻き戻り」のときに、最後に持っていた強化にも打てる。';
+  else report.tip = progressLine(m) || TIPS[(report.loop - 2) % TIPS.length];
   m.lastLoop = { dmgByCat: { ...(run.dmgByCat || {}) }, cause: run.cause, floor: run.floor, boons: (run.boons || []).map((b) => ({ ...b })), loop: m.loop, dodges: run.dodges || 0, clock: run.clock || 0 };
   const nextCounter = bossCounter(m.lastLoop);
   if (nextCounter) {
     const a = habitAnalysis(m.lastLoop), c = COUNTERS[nextCounter];
     const share = nextCounter === 'dodge' ? `毎分 ${Math.round(a.dodgeRate)} 回` : `${Math.round(a.shares[nextCounter] * 100)}%`;
     report.changed.push({ text: `刻守の対策：${c.name}（あなたの${c.habit} ${share}）`, tone: 'risk', sub: `崩し方：${c.weak}` });
+    report.changed.push({ text: `塔の番人たちも学んだ：${MOB_COUNTERS[nextCounter]}`, tone: 'risk', sub: '雑魚・中ボスにも効く。戦い方を変えれば次の夜は外れる' });
   }
   else if (!nextCounter && prevCounter) report.changed.push({ text: '刻守の対策が消えた', tone: 'blue' });
   m.loop++;
   m.flags.seenRewind = true;
+  report.story = nightStory(m);
   const sc = enemyScale(m);
   report.changed.push({ text: `夜の深さ Lv${sc.level}：敵のHP ×${sc.hp.toFixed(2)}・攻撃 ×${sc.dmg.toFixed(2)}`, tone: 'risk' });
   if (sc.tier > prevTier) report.changed.push({ text: sc.tier === 2 ? '敵が新しい攻撃を覚えた（二段斬り・連続急降下・3方向弾 ほか）' : '敵がさらに凶暴になった（突き・爆弾・速射・跳躍叩きつけ ほか）', tone: 'risk' });
@@ -232,6 +245,42 @@ export function deserialize(s) {
     return validateMeta(m) ? migrate(m) : null;
   } catch { return null; }
 }
+
+// ───────── 夜ごとの語り ─────────
+// 巻き戻りのたびに変わる語り：夜が重なるほど、鐘に命を削られる師の姿が変わっていく
+const STORY = [
+  '鐘が鳴り終わると、町はまた夕暮れに戻っていた。鐘楼の窓に、師の影が見えた。',
+  '三度目の夕暮れ。町の人はまた同じ挨拶をする。鐘楼から、師の咳が聞こえた。',
+  '鐘の音が、前より少し掠れている。鳴らすたびに、何かがすり減っていく。',
+  '師の髪に白いものが目立ちはじめた。時戻しの鐘は、鳴らした者の命を喰う。',
+  '町の時計人形の錆が、また深くなった。止まった夜が、塔そのものを蝕んでいる。',
+  '師の手が震えている。それでも夜の終わりには、必ず鐘が鳴る。',
+  '市場の灯りが、少しずつ暗くなっていく。同じ夜を生きる人々の顔からも、色が抜けていく。',
+  '師の背中は、もう老人のそれだった。残された夜は、きっと多くない。',
+];
+export function nightStory(m) {
+  const n = m.loop;
+  if (m.flags.ending) return `第${n}夜。夜明けを知った塔に、それでも夜は来る――終わらない夜。`;
+  const line = STORY[Math.min(n - 2, STORY.length - 1)] || STORY[0];
+  return n - 2 >= STORY.length ? `第${n}夜。${line}` : line;
+}
+// 物語の進み具合に応じた一言（あれば巻き戻りの助言の代わりに出す）
+function progressLine(m) {
+  if (trueEndReady(m)) return 'リラの言葉を、師に届ける時が来た。鐘楼で、第三楽章まで戦い抜け。';
+  if (hasWedge(m, 'lira') && !knows(m, 'lira_message')) return 'リラだけが、この夜を覚えている。名前で呼びかけてみよう。';
+  if (knows(m, 'master_reason') && !hasWedge(m, 'lira')) return '師は命と引き換えに夜を買っている。止められるのは、師が守ろうとしている娘の言葉だけかもしれない。';
+  return null;
+}
+// 夜ごとに入れ替わる助言（同じ文が続かないように）
+const TIPS = [
+  '巻き戻りのとき、最後に持っていた強化にも楔を打てる。',
+  '時の欠片で刻んだ刻印は、夜が戻っても消えない。',
+  '刻守だけでなく、塔の番人たちも前の夜の戦い方を覚えている。戦い方を変えれば対策は外れる。',
+  '黄金の鍵は店で買える。黄金の部屋には強いアーティファクトが眠っている。',
+  '常時の術を積むほど、塔の番人たちも強く・多く・速くなる。',
+  '時の祠では、命を捧げて強化を得られる。HP に余裕のあるときに。',
+  '中ボスや刻守には、遅くする術が効かない。隙を見て重撃を。',
+];
 
 // ───────── 夜明けへの道（最終クリアまでの段階） ─────────
 export const DAWN_STEPS = [

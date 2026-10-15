@@ -466,3 +466,105 @@ test('拾い物：経験値の粒は自動で主人公に集まり、金貨は�
   assert.equal(g.run.gold, 20);
 });
 function cx0(e) { return e.x + e.w / 2; }
+
+test('番人たちの対策：前の夜に連撃ばかりなら、雑魚は連撃が効きにくく怯まない', () => {
+  const g = newGame(31);
+  g.meta.lastLoop = { dmgByCat: { combo: 900, heavy: 50 }, boons: [], clock: 120, dodges: 2 };
+  g.startLoop(); g.modal = null;
+  assert.equal(g.run.mobCounter, 'combo');
+  g.enterRoom(0, 1); g.modal = null;
+  const e = g.room.enemies.find((x) => x.kind === 'soldier') || g.room.enemies[0];
+  assert.equal(e.counter, 'combo');
+  e.hp = e.maxHp = 1e6; e.setState('idle');
+  const before = e.hp;
+  g.dealDamage(e, { base: 100, cat: 'combo', knock: 100, dir: 1 });
+  assert.notEqual(e.state, 'flinch', 'iron will: no flinch from combo');
+  const got = before - e.hp;
+  e.hp = 1e6;
+  g.dealDamage(e, { base: 100, cat: 'heavy', knock: 100, dir: 1, heavy: true });
+  assert.ok(got < (1e6 - e.hp), 'combo is resisted compared to heavy');
+});
+
+test('中ボス・刻守は術で一度に削れる量に上限がある（術の物量で一瞬では溶けない）', () => {
+  const g = newGame(32);
+  const bi = g.run.plan.floors[2].findIndex((r) => r.type === 'boss');
+  g.enterRoom(2, bi); g.modal = null;
+  const b = g.room.boss; b.setState('idle');
+  const hp0 = b.hp;
+  for (let i = 0; i < 60; i++) g.dealDamage(b, { base: 500, cat: 'skill', knock: 0, dir: 1, spell: true, passive: true });
+  assert.ok(hp0 - b.hp < b.maxHp * 0.25, `took ${hp0 - b.hp} of ${b.maxHp}`);
+  // 遅くする術は中ボス・刻守に効かない
+  g.player.setBoons([{ id: 'lag', tier: 2 }]);
+  g.dealDamage(b, { base: 5, cat: 'combo', knock: 0, dir: 1 });
+  assert.ok(!(b.lag > 0));
+});
+
+test('脅威が上がると敵の動きも速くなる', () => {
+  const g = newGame(33); g.enterRoom(0, 1); g.modal = null;
+  const e = g.room.enemies[0];
+  const h0 = g.enemyHaste(e);
+  g.player.setBoons([{ id: 'orbit', tier: 5 }, { id: 'aura', tier: 4 }]);
+  assert.ok(g.enemyHaste(e) > h0);
+});
+
+test('新しい部屋：時の祠・試練の間・振り子の番人が 1 夜の中にあり、それぞれ機能する', () => {
+  const g = newGame(34);
+  const find = (t) => { for (let fi = 0; fi < 3; fi++) { const ri = g.run.plan.floors[fi].findIndex((r) => r.type === t); if (ri >= 0) return [fi, ri]; } return null; };
+  for (const t of ['shrine', 'trial', 'elite2']) assert.ok(find(t), t);
+  // 祠：命を捧げて強化
+  g.enterRoom(...find('shrine')); g.modal = null;
+  const sh = g.room.items.find((i) => i.kind === 'shrine');
+  g.player.x = sh.x; g.player.y = sh.y + sh.h - g.player.h; g.tryInteract();
+  const hp = g.player.hp; g.modal.choices[0].fn();
+  assert.ok(g.player.hp < hp); assert.equal(g.modal.type, 'boon');
+  // 試練：1 波目を倒すと 2 波目
+  g.modal = null; g.enterRoom(...find('trial')); g.modal = null;
+  const d = new Driver(g);
+  for (const e of g.room.enemies) { e.hp = 0; e.alive = false; } d.frame(12);
+  assert.equal(g.room.wave, 1); assert.ok(g.room.enemies.some((e) => e.alive)); assert.ok(!g.room.cleared);
+  for (const e of g.room.enemies) { e.hp = 0; e.alive = false; } d.frame(12);
+  assert.ok(g.room.cleared);
+  // 振り子の番人：予兆を見せてから攻撃し、大技のあとに隙
+  g.enterRoom(...find('elite2')); g.modal = null;
+  const w = g.room.enemies.find((e) => e.kind === 'warden');
+  assert.ok(w && w.elite);
+  g.player.hp = g.player.maxHp = 1e6; w.hp = w.maxHp = 1e6;
+  g.player.x = w.x - 80;
+  const states = new Set(); let told = false;
+  for (let i = 0; i < 60 * 12; i++) { d.frame(1); states.add(w.state); if (w.tell > 0.5) told = true; g.player.iframeT = 0; }
+  assert.ok(told); assert.ok(states.has('recover'));
+  assert.ok(['sweep', 'slam'].some((s) => states.has(s)));
+  assert.ok(g.player.hp < g.player.maxHp, 'hits the player');
+});
+
+test('床を攻める常時の術（地走り・時針の剣山・灼熱の床）が地上の敵に当たる', () => {
+  for (const id of ['quakeline', 'spikes', 'emberfloor']) {
+    const { g, d, e } = arena(RustSoldier, 90);
+    e.hp = e.maxHp = 1e6; e.cool = 99;
+    g.player.setBoons([{ id, tier: 1 }]);
+    d.frame(60 * 6);
+    assert.ok(e.hp < e.maxHp, id);
+  }
+});
+
+test('巻き戻りの語りと助言は夜ごとに変わる', () => {
+  const g = newGame(35);
+  const stories = new Set(), tips = new Set();
+  for (let i = 0; i < 5; i++) { g.endRun('death'); stories.add(g.rewind.report.story); tips.add(g.rewind.report.tip); g.startLoop(); g.modal = null; }
+  assert.equal(stories.size, 5);
+  assert.ok(tips.size >= 4);
+});
+
+test('刻守の撃破：爆発の連鎖のあと消滅し、鐘が鳴って巻き戻る', () => {
+  const g = newGame(36);
+  const bi = g.run.plan.floors[2].findIndex((r) => r.type === 'boss');
+  g.enterRoom(2, bi); g.modal = null;
+  const d = new Driver(g); d.frame(5); g.modal = null;
+  const b = g.room.boss; b.setState('idle');
+  b.hp = 1; b.takeHit(g, { dmg: 5, dir: 1, knock: 0, cat: 'combo' });
+  assert.ok(b.defeated);
+  d.until(() => b.vanished, 200);
+  assert.ok(b.vanished && g.fx.pillars.length > 0);
+  d.until(() => g.scene === 'rewind', 400);
+  assert.equal(g.scene, 'rewind');
+});

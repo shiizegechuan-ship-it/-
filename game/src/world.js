@@ -4,7 +4,7 @@ import { makeRng } from './util.js';
 import { hasWedge } from './meta.js';
 
 // 18行。 '#'壁 '='すり抜け床 P出現 X出口 g地上敵枠 a空中敵枠 t砲台枠
-// 店：V行商人 J黄金の宝箱
+// 店：V行商人 J黄金の宝箱 ／ 中間の部屋：N時の祠 ／ 中ボス：Z振り子の番人
 // 因果・固定物：L少女 G鍛冶屋 C番号扉 Y日誌 R歯止め M刻守 K騎士 H回復の泉 U昇降機 O祭壇 Q看板 W書斎メモ
 const W = '#';
 const SHELL_TOP = '################################';
@@ -191,6 +191,53 @@ export const LAYOUTS = {
     '..........====..........====..................',
     'P...g......................................X..',
   ], 48), ...floorRows(48, '#'.repeat(9) + '.'.repeat(30) + '#'.repeat(9))],
+  // 廃墟：中央に崩れた石壁。越えるか、上の足場を渡る
+  ruins: [...frame([
+    '..........a.............a.........',
+    '..................................',
+    '.......=====........=====.........',
+    '..................................',
+    '..==..........######.........==...',
+    'P.....g.......######.....g.......X',
+  ], 36), ...floorRows(36)],
+  // 段々畑：右へ行くほど高くなる段を登る
+  terrace: [...frame([
+    '......................a.......',
+    '..............................',
+    '...........................X..',
+    '.....................#########',
+    '..........g......#############',
+    '.............#################',
+    'P.....g...####################',
+  ]), ...floorRows()],
+  // 回廊の吹き抜け：足場が交互に並ぶ広い部屋
+  atrium: [...frame([
+    '.....a..................a...............',
+    '........................................',
+    '..====.......====.......====.......====.',
+    '........................................',
+    '........====.......====.......====......',
+    '........................................',
+    '..............t.....................t...',
+    'P......g...........g............g......X',
+  ], 42), ...floorRows(42)],
+  // 時の祠：命を捧げて力を得るか、祈って癒やすか
+  shrine: [...frame([
+    '..............................',
+    '..............................',
+    '..........=========...........',
+    '..............................',
+    'P..............N.............X',
+  ]), ...floorRows()],
+  // 中ボス：振り子の番人の間（天井から振り子が下がる）
+  warden: [...frame([
+    '..............................',
+    '..............................',
+    '.....=====..........=====.....',
+    '..............................',
+    '..............................',
+    'P..................Z.........X',
+  ]), ...floorRows()],
   // 店：行商人の屋台
   shop: [...frame([
     '..............................',
@@ -272,9 +319,9 @@ export function extraEnemyTypes(floor, nl) {
   return { g: t.g.filter((c) => c !== 'A'), a: t.a };
 }
 const COMBAT_POOLS = [
-  ['alley', 'steps', 'pit', 'watch', 'hall', 'pillars', 'islands', 'cage'],
-  ['gears', 'watch', 'hall', 'pit', 'steps', 'bridge', 'twin', 'tower', 'canyon'],
-  ['gears', 'hall', 'alley', 'drop', 'tower', 'bridge', 'twin', 'canyon', 'islands'],
+  ['alley', 'steps', 'pit', 'watch', 'hall', 'pillars', 'islands', 'cage', 'ruins', 'terrace'],
+  ['gears', 'watch', 'hall', 'pit', 'steps', 'bridge', 'twin', 'tower', 'canyon', 'atrium', 'ruins'],
+  ['gears', 'hall', 'alley', 'drop', 'tower', 'bridge', 'twin', 'canyon', 'islands', 'atrium', 'terrace'],
 ];
 
 export const FLOOR_NAMES = ['下層・市場', '中層・歯車回廊', '上層・鐘楼'];
@@ -308,6 +355,12 @@ export function buildPlan(meta, seed) {
     if (mirror) for (const e of enemies) e.x = w - 1 - e.x;
     return { type: 'combat', layout, enemies, mirror };
   };
+  // 試練の間：2 波の敵を退けると、アーティファクトと金貨
+  const trial = (floor, r) => {
+    const layout = r.pick(['hall', 'atrium']);
+    const waves = [fillEnemies(layout, floor, r, nl + 1), fillEnemies(layout, floor, r, nl + 2)];
+    return { type: 'trial', layout, waves, enemies: waves[0], mirror: false };
+  };
   const floors = [];
   // 下層
   const p0 = rng.shuffle(COMBAT_POOLS[0]);
@@ -316,6 +369,7 @@ export function buildPlan(meta, seed) {
     combat(p0[0], 0, rng), combat(p0[1], 0, rng),
     { type: 'forge', layout: 'forge' },
     combat(p0[2], 0, rng),
+    { type: 'shrine', layout: 'shrine' },
     { type: 'shop', layout: 'shop' },
   ]);
   // 中層
@@ -325,6 +379,7 @@ export function buildPlan(meta, seed) {
     { type: 'elite', layout: 'arena', knightWedged: hasWedge(meta, 'knight') },
     { type: 'archive', layout: 'archive' },
     combat(p1[1], 1, rng),
+    trial(1, rng),
     { type: 'shop', layout: 'shop' },
   ]);
   // 上層
@@ -332,6 +387,8 @@ export function buildPlan(meta, seed) {
   floors.push([
     combat(p2[0], 2, rng),
     { type: 'study', layout: 'study' },
+    combat(p2[1], 2, rng),
+    { type: 'elite2', layout: 'warden' },
     { type: 'boss', layout: 'belfry' },
   ]);
   // 各部屋の報酬（入る前に扉で見える）

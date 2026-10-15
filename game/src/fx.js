@@ -8,6 +8,7 @@ export class Fx {
     this.rings = [];
     this.impacts = [];
     this.streaks = []; // 跳躍の風切り線
+    this.pillars = []; // 撃破の光の柱
     this.shakeT = 0; this.shakeMag = 0;
     this.flash = 0; this.flashColor = '#fff';
     this.vignette = 0; // 被弾時の赤
@@ -51,6 +52,7 @@ export class Fx {
   }
   step(x, y, dir) { this.parts.push({ x, y: y - 1, vx: dir * (40 + this.rand() * 40), vy: -20 - this.rand() * 20, life: 0.25, t: 0, color: 'rgba(200,190,170,0.5)', size: 2 + this.rand() * 2, g: 0 }); }
   skid(x, y, dir) { if (this.rand() < 0.5) this.parts.push({ x, y: y - 1, vx: dir * (60 + this.rand() * 60), vy: -30 - this.rand() * 40, life: 0.3, t: 0, color: 'rgba(220,210,190,0.7)', size: 3, g: 300 }); }
+  pillar(x, y, color) { this.pillars.push({ x, y, color, t: 0, life: 1.6 }); }
   burst(x, y, color, n = 18) { this.sparks(x, y, color, n, 340); this.ring(x, y, color, 40); }
   impact(x, y, color = '#ffffff', size = 6) { this.impacts.push({ x, y, color, size, t: 0, life: 0.14 }); }
   ring(x, y, color, r = 30, life = 0.3) { this.rings.push({ x, y, color, r, life, t: 0 }); }
@@ -72,6 +74,8 @@ export class Fx {
     this.impacts = this.impacts.filter((im) => im.t < im.life);
     for (const r of this.rings) r.t += dt;
     this.rings = this.rings.filter((r) => r.t < r.life);
+    for (const s of this.pillars) s.t += dt;
+    this.pillars = this.pillars.filter((s) => s.t < s.life);
     for (const s of this.streaks) s.t += dt;
     this.streaks = this.streaks.filter((s) => s.t < s.life);
     if (this.shakeT > 0) this.shakeT -= dt; else this.shakeMag = 0;
@@ -79,5 +83,5 @@ export class Fx {
     this.vignette = Math.max(0, this.vignette - dt * 2);
     if (this.banner) { this.banner.t += dt; if (this.banner.t > this.banner.life) this.banner = null; }
   }
-  clear() { this.parts = []; this.texts = []; this.ghosts = []; this.slashes = []; this.rings = []; this.impacts = []; this.streaks = []; this.shakeT = 0; this.flash = 0; }
+  clear() { this.parts = []; this.texts = []; this.ghosts = []; this.slashes = []; this.rings = []; this.impacts = []; this.streaks = []; this.pillars = []; this.shakeT = 0; this.flash = 0; }
 }

@@ -45,11 +45,11 @@ test('耐久：ランダム入力で複数の夜を回しても壊れない', ()
   let loops = 0;
   const allRooms = new Set(), allScenes = new Set();
   for (const seed of [1, 2, 3, 4, 5, 6]) {
-    const { g, rooms, scenes } = fuzz(seed, 60 * 60 * 4);
+    const { g, rooms, scenes } = fuzz(seed, 60 * 60 * 9); // 1 夜の部屋数が増えたので長めに回す
     loops += g.meta.loop;
     rooms.forEach((x) => allRooms.add(x)); scenes.forEach((x) => allScenes.add(x));
   }
   assert.ok(loops > 6, 'went through several loops');
-  for (const t of ['entry', 'combat', 'forge', 'elite', 'archive', 'study', 'boss']) assert.ok(allRooms.has(t), `reached ${t}`);
+  for (const t of ['entry', 'combat', 'forge', 'elite', 'archive', 'study', 'shrine', 'trial', 'shop', 'elite2', 'boss']) assert.ok(allRooms.has(t), `reached ${t}`);
   assert.ok(allScenes.has('rewind'));
 });

@@ -90,7 +90,7 @@ test('真の結末：条件を満たして第3段階で言葉を伝え、決闘�
   g.meta.slots = 3;
   addWedge(g.meta, { target: 'lira' });
   learn(g.meta, 'lira_message'); learn(g.meta, 'master_reason');
-  g.enterRoom(2, 2);
+  g.enterRoom(2, g.run.plan.floors[2].findIndex((r) => r.type === 'boss'));
   while (g.modal) { d.frame(10); d.frame(1, ['confirm']); }
   const b = g.room.boss;
   b.hp = b.maxHp * 0.2; b.phase = 2; b.checkPhase(g);

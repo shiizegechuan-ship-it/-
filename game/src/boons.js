@@ -66,10 +66,14 @@ export const BOONS = {
   lifesteal: { school: 'rare', name: '吸命の刃', desc: () => '直接攻撃の命中で、与えたダメージの3%だけHPが回復（1回につき最大HPの2%まで）' },
   eternal: { school: 'rare', name: '永劫の連撃', desc: () => 'コンボが時間で途切れなくなり、コンボ加算が2倍（被弾では途切れる）' },
   wave: { school: 'rare', name: '斬撃波', desc: () => '地上の攻撃のたびに、前へ飛ぶ斬撃波が出る（30・貫通）' },
+  // 床を攻める常時の術
+  quakeline: { school: 'arts', max: 5, name: '地走り', desc: (t) => `[常時] 3秒ごとに足元から左右へ衝撃波が床を走る（${Math.round(18 * (1 + 0.4 * (t - 1)))}）` },
+  spikes: { school: 'arts', max: 5, name: '時針の剣山', desc: (t) => `[常時] 4秒ごとに近くの敵${2 + t}体の足元から針が突き出す（${Math.round(30 * (1 + 0.4 * (t - 1)))}）` },
+  emberfloor: { school: 'arts', max: 5, name: '灼熱の床', desc: (t) => `[常時] 5秒ごとに周りの床が2秒燃え、上の敵を焼き続ける（${Math.round(7 * (1 + 0.4 * (t - 1)))}／0.3秒）` },
   lastlight: { school: 'arts', max: 5, name: '残り火', desc: (t) => `[条件] HP30%以下のとき、命中した敵が炎を噴く（${Math.round(12 * (1 + 0.4 * (t - 1)))}）` },
 };
 // 常に発動する術の一覧。種類を多く持つほど、すべての常時の術が強くなる（術の共鳴）
-export const PASSIVE_IDS = ['orbit', 'aura', 'seeker', 'chainlight', 'meteor', 'frostnova', 'swordrain', 'gearsaw', 'stormcloud', 'wake'];
+export const PASSIVE_IDS = ['orbit', 'aura', 'seeker', 'chainlight', 'meteor', 'frostnova', 'swordrain', 'gearsaw', 'stormcloud', 'wake', 'quakeline', 'spikes', 'emberfloor'];
 export const passiveSynergy = (n) => 1 + 0.15 * Math.max(0, n - 1);
 for (const id of PASSIVE_IDS) { const d = BOONS[id].desc; BOONS[id].desc = (t) => d(t) + '（常時の術が多いほど強化）'; }
 export const boonMax = (id) => BOONS[id].max || 2;
