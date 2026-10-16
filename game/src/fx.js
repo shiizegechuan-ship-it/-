@@ -58,7 +58,7 @@ export class Fx {
   ring(x, y, color, r = 30, life = 0.3) { this.rings.push({ x, y, color, r, life, t: 0 }); }
   text(x, y, str, color = '#fff', size = 14) { this.texts.push({ x, y, str, color, size, t: 0, life: 0.7 }); }
   afterimage(e) { this.ghosts.push({ x: e.x, y: e.y, w: e.w, h: e.h, face: e.face, t: 0, life: 0.22 }); }
-  slash(p, name) { this.slashes.push({ owner: p, name, t: 0, life: name === 'heavy' || name === 'parry' ? 0.26 : name === 'down' ? 0.2 : name === 'combo3' || name === 'combo4' ? 0.22 : 0.17, face: p.face }); }
+  slash(p, name) { this.slashes.push({ owner: p, name, t: 0, life: name === 'dropSpin' ? 0.32 : name === 'heavy' || name === 'parry' ? 0.26 : name === 'down' ? 0.2 : name === 'combo3' || name === 'combo4' ? 0.22 : 0.17, face: p.face }); }
   setBanner(text, sub = '', color = '#efe6d2', life = 1.6) { this.banner = { text, sub, color, t: 0, life }; }
 
   update(dt) {

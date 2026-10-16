@@ -492,6 +492,8 @@ export class Game {
     const hb = p.hitbox();
     if (!hb) return;
     const a = p.atk;
+    // 回転斬り：1 回転ごとに当たり直す
+    if (a.def.multi) { const k = Math.floor((a.t - a.def.startup) / a.def.multi); if (k !== a.multiK) { a.multiK = k; a.hitIds.clear(); } }
     for (const e of this.room.enemies) {
       if (!e.alive || a.hitIds.has(e.id)) continue;
       if (!overlap(hb, e)) continue;
@@ -998,7 +1000,9 @@ export class Game {
     this.sfx.play('perfect');
     this.fx.ring(cx(p), cy(p), '#ffffff', 46, 0.35);
     this.fx.text(cx(p), p.y - 20, '刹那', '#ffffff', 16);
-    if (st.perfectResetsDodge) { p.dodgeCd = 0; p.airDodgeUsed = false; }
+    // ジャスト回避に成功したら、クールタイム無しですぐ次の回避ができる（回避の最中からでも）
+    p.dodgeCd = 0; p.airDodgeUsed = false; p.chainDodge = true;
+    if (st.perfectGauge) p.gauge = Math.min(PC.gaugeMax, p.gauge + st.perfectGauge);
     if (st.procs.riposte) PROCS.riposte(this, st.procs.riposte);
     if (st.perfectNextMul > 1) p.empowerNext = st.perfectNextMul;
     if (st.freezeTime) {

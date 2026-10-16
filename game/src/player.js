@@ -186,8 +186,24 @@ export class Player {
     }
   }
 
+  // すり抜け床の上で ↓ を少し倒し続けると、回転斬りしながら降りる（すぐ攻撃を押せば足払い）。
+  // スティックは下へ強く倒したときだけ（斜めの走りで誤って降りないように）
+  tryDropSpin(game, input, dt) {
+    const a = input.padAxis;
+    const downOnly = input.down('down') && (!a || Math.abs(a.y) > Math.abs(a.x) || (Math.abs(a.x) < 0.2 && Math.abs(a.y) < 0.2));
+    if (!downOnly || !this.onGround || !standingOnOneway(this, game.map) || input.down('attack') || input.down('jump')) { this.downHoldT = 0; return false; }
+    this.downHoldT = (this.downHoldT || 0) + dt;
+    if (this.downHoldT < 0.1) return false;
+    this.downHoldT = 0;
+    this.dropT = 0.25; this.coyoteT = 0; this.onGround = false; this.y += 1; this.vy = 80;
+    this.startAttack(game, 0, 'dropSpin');
+    game.fx.ring(this.x + this.w / 2, this.y + this.h / 2, '#cfe8ff', 30, 0.25);
+    return true;
+  }
+
   updateNormal(game, input, dt, dirX) {
     if (dirX !== 0) this.face = dirX;
+    if (this.tryDropSpin(game, input, dt)) return;
     this.horizontal(dirX, dt);
     this.tryJump(game, input);
     if (!input.down('jump') && this.vy < 0) this.vy *= Math.pow(P.jumpCutMul, dt * 60 / 4) ; // 早く離すと低いジャンプ
@@ -201,7 +217,7 @@ export class Player {
     if (!this.onGround && this.airDodgeUsed) return false;
     if (!this.onGround) this.airDodgeUsed = true;
     if (dirX !== 0) this.face = dirX;
-    this.state = 'dodge'; this.stateT = 0;
+    this.state = 'dodge'; this.stateT = 0; this.chainDodge = false;
     this.dodgeCount = (this.dodgeCount || 0) + 1;
     this.dodgeFrom = { x: this.x, y: this.y, w: this.w, h: this.h }; // ジャスト回避の判定に使う
     this.atk = null;
@@ -235,6 +251,8 @@ export class Player {
     this.vx = this.face * speed;
     this.stopAtAbyss(game.map, dt);
     if (Math.floor(this.stateT / (3 * F)) !== Math.floor((this.stateT - dt) / (3 * F))) game.fx.afterimage(this);
+    // ジャスト回避に成功したら、回避の最中でもすぐ次の回避へつなげられる
+    if (this.chainDodge && input.pressed('dodge')) { this.chainDodge = false; const dx = input.down('left') ? -1 : input.down('right') ? 1 : 0; if (this.startDodge(game, dx)) return; }
     // 回避の後半に攻撃を押すとパリィ斬り
     if (this.stateT > P.dodgeTime * 0.45 && input.pressed('attack')) { this.parryT = 0; this.startAttack(game, 0, 'parry'); return; }
     if (this.stateT >= P.dodgeTime) {

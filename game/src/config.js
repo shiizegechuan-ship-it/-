@@ -62,6 +62,8 @@ export const ATTACKS = {
   down: { startup: 3 * F, active: 9 * F, recovery: 8 * F, cancel: 8 * F, dmg: 14, w: 40, h: 40, dir: 'down', knock: 60, stop: 4 * F, lunge: 0, cat: 'air', shake: 3, bounce: 560 },
   // 地上の足払い：低く長い薙ぎ払い
   sweep: { startup: 5 * F, active: 4 * F, recovery: 12 * F, cancel: 11 * F, dmg: 13, w: 54, h: 18, ox: 4, oy: 6, knock: 180, lift: 220, stop: 4 * F, lunge: 90, cat: 'combo', shake: 2 },
+  // すり抜け床から降りながらの回転斬り（↓で降りる）：体ごと 2 回転し、周り全部を斬る
+  dropSpin: { startup: 2 * F, active: 16 * F, recovery: 6 * F, cancel: 6 * F, dmg: 12, w: 64, h: 46, ox: 0, oy: 0, knock: 150, stop: 3 * F, lunge: 0, cat: 'air', shake: 2, spin: true, multi: 0.13 },
   heavy: { startup: 6 * F, active: 5 * F, recovery: 20 * F, cancel: 18 * F, dmg: 40, w: 62, h: 40, ox: 4, oy: -6, knock: 380, stop: 7 * F, lunge: 150, cat: 'heavy', shake: 6, breaks: true },
 };
 

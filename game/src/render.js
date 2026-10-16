@@ -291,6 +291,8 @@ function drawPlayer(b, game, p) {
     ox = at < d.startup ? -f : at < d.startup + d.active ? f * 2 : f;
   }
   if (p.flipT > 0 && p.state !== 'attack' && p.state !== 'dead') rot = (1 - p.flipT / 0.34) * Math.PI * 2 * f;
+  // 降りながらの回転斬り：体ごと 2 回転
+  if (p.state === 'attack' && p.atk && p.atk.name === 'dropSpin') { const d = p.atk.def; rot = clamp((p.atk.t - d.startup) / d.active, 0, 1) * Math.PI * 4 * f; ox = 0; }
   const sq = p.squash || 0;
   if (rot || sq) {
     b.save();
@@ -307,7 +309,7 @@ function drawPlayer(b, game, p) {
     const k = at < d.startup ? 0 : clamp((at - d.startup) / Math.max(0.01, d.active), 0, 1);
     const wind = at < d.startup ? at / Math.max(0.01, d.startup) : 1;
     const ease = 1 - Math.pow(1 - k, 2);
-    const ARC = { combo1: [-110, 35], combo2: [55, -100], combo3: [-170, 45], combo4: [-90, 270], air: [-150, 100], parry: [-130, 50], up: [20, -200], upAir: [20, -200], down: [100, 90], sweep: [175, 5], heavy: [-160, 0] };
+    const ARC = { dropSpin: [-90, 630], combo1: [-110, 35], combo2: [55, -100], combo3: [-170, 45], combo4: [-90, 270], air: [-150, 100], parry: [-130, 50], up: [20, -200], upAir: [20, -200], down: [100, 90], sweep: [175, 5], heavy: [-160, 0] };
     const [a0, a1] = ARC[p.atk.name] || [-100, 30];
     const deg = at < d.startup ? a0 - 15 * wind : a0 + (a1 - a0) * ease;
     const rad = deg * Math.PI / 180;
@@ -358,6 +360,11 @@ function drawSlash(b, s) {
         for (let i = 0; i < 6; i++) pset(b, gx + f * i * 2, gy - 1 - (i % 2), '#ffd08a');
         line(b, gx - 3, gy - 1, gx + 3, gy - 1, '#ffffff');
       }
+      break;
+    }
+    case 'dropSpin': { // 降りながらの回転斬り：二重の円の軌跡
+      sweep(b, x, y, 22, -Math.PI / 2, Math.PI * 1.5, Math.min(1, k * 2), '#cfe8ff', 3, 'rgba(200,230,255,0.3)');
+      if (k > 0.5) sweep(b, x, y, 27, -Math.PI / 2, Math.PI * 1.5, (k - 0.5) * 2, '#ffffff', 2, 'rgba(255,255,255,0.25)');
       break;
     }
     case 'combo4': // 回転斬り：時計の目盛りつき

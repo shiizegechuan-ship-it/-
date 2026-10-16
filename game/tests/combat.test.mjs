@@ -154,3 +154,54 @@ test('早すぎる回避は刹那にならない（無敵で避けるだけ）',
   d.frame(40);
   assert.equal(g.run.perfects, 0);
 });
+
+test('ジャスト回避に成功したら、クールタイム無しで（回避の最中からでも）すぐ次の回避ができる', () => {
+  const { g, d, e } = withEnemy(RustSoldier, 46);
+  e.facePlayer(g.player);
+  e.setState('windup');
+  d.until(() => e.state === 'slash', 60);
+  d.frame(1, ['dodge']);
+  d.frame(2);
+  assert.ok(g.run.perfects >= 1);
+  assert.equal(g.player.state, 'dodge');
+  const n = g.player.dodgeCount;
+  d.frame(1, ['dodge', 'right']);
+  assert.equal(g.player.dodgeCount, n + 1, 'chained a new dodge immediately');
+  // ふつうの回避（ジャストでない）では、すぐには回避できない
+  const { g: g2, d: d2 } = withEnemy(RustSoldier, 300);
+  d2.frame(1, ['dodge']); d2.frame(2);
+  const n2 = g2.player.dodgeCount;
+  d2.frame(1, ['dodge']); d2.frame(1);
+  assert.equal(g2.player.dodgeCount, n2, 'normal dodge still has a cooldown');
+});
+
+test('すり抜け床の上で ↓ を倒すと、回転斬りしながら降りる（周りの敵に 2 回当たる）。すぐ攻撃を押せば足払い', () => {
+  const ROWS = [
+    '################################################',
+    ...Array.from({ length: 8 }, () => '#..............................................#'),
+    '#P.............................................#',
+    '#=========.....................................#',
+    ...Array.from({ length: 3 }, () => '#..............................................#'),
+    '################################################',
+    '################################################',
+  ];
+  const g = sandbox(ROWS); const d = new Driver(g);
+  d.frame(20);
+  const p = g.player;
+  assert.ok(p.onGround, 'standing on the platform');
+  const y0 = p.y;
+  const e = new RustSoldier(p.x + 4, p.y + p.h + 60); e.hp = e.maxHp = 500; e.cool = 99; g.addEnemy(e);
+  e.y = p.y + p.h + 8; e.gravity = false; e.vy = 0;
+  d.frame(8, ['down']);
+  assert.equal(p.atk && p.atk.name, 'dropSpin');
+  d.frame(20);
+  assert.ok(p.y > y0 + 20, 'fell through');
+  assert.ok(e.maxHp - e.hp >= 20, `spin hit twice (${e.maxHp - e.hp})`);
+  // すぐ攻撃を押すと、降りずに足払い
+  const g2 = sandbox(ROWS); const d2 = new Driver(g2); d2.frame(20);
+  const y1 = g2.player.y;
+  d2.frame(1, ['down', 'attack']);
+  assert.equal(g2.player.atk.name, 'sweep');
+  d2.frame(20);
+  assert.ok(Math.abs(g2.player.y - y1) < 2, 'stayed on the platform');
+});
