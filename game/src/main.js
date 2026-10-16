@@ -45,10 +45,11 @@ function fit() {
 window.addEventListener('resize', fit);
 if (window.ResizeObserver) new ResizeObserver(fit).observe(stage);
 
+let touchUI = null;
 if (isTouchDevice()) {
   document.body.classList.add('touch');
   game.touch = true;
-  setupTouch(input, document.body);
+  touchUI = setupTouch(input, document.body);
 }
 fit();
 
@@ -73,6 +74,7 @@ function draw() {
   ctx.save();
   render(ctx, game);
   ctx.restore();
+  if (touchUI) touchUI.radar(game.modal ? [] : game.enemyBearings());
 }
 
 function frame(now) {

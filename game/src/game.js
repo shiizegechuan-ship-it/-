@@ -434,6 +434,17 @@ export class Game {
   }
   spawnProjectile(p) { p.dmg = Math.round(p.dmg * this.enemyDmgMul() * ((this.updatingEnemy && this.updatingEnemy.dmgMul) || 1)); this.room.projectiles.push(p); }
   marker(c) { return this.map.markers.find((m) => m.c === c); }
+  // スティックの外縁に出す、敵のいる方向（ang：右が 0・下が正のラジアン。near：近いほど 1。big：中ボス・刻守）
+  enemyBearings() {
+    if (this.scene !== 'play' || !this.room || !this.player || this.player.state === 'dead') return [];
+    const p = this.player, px = cx(p), py = cy(p), out = [];
+    for (const e of this.room.enemies) {
+      if (!e.alive || (e.boss && e.defeated)) continue;
+      const dx = cx(e) - px, dy = cy(e) - py, d = Math.hypot(dx, dy);
+      out.push({ ang: Math.atan2(dy, dx), near: clamp(1 - d / 700, 0.15, 1), big: !!(e.boss || e.elite) });
+    }
+    return out;
+  }
   // 板（すり抜け床）の上の出現位置。めちゃ簡単は自動の飛び込みで届くので、板の上にも敵が出る
   platformSpots() {
     const map = this.map, out = [];

@@ -6,6 +6,7 @@ const CSS = `
 #touch { --t-bg: rgba(20,16,28,0.55); --t-line: rgba(242,193,78,0.55); --t-ink: #efe6d2; --t-on: rgba(242,193,78,0.45);
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; font-family: 'DotGothic16', 'Hiragino Sans', sans-serif; }
 #touch .t-pad { position: absolute; width: 132px; height: 132px; border-radius: 50%; background: var(--t-bg); border: 1.5px solid var(--t-line); touch-action: none; }
+#touch .t-radar { position: absolute; left: -12px; top: -12px; width: 156px; height: 156px; pointer-events: none; background: transparent !important; }
 #touch .t-knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(239,230,210,0.35); pointer-events: none; }
 #touch .t-btn { position: absolute; border-radius: 50%; background: var(--t-bg); border: 2px solid var(--t-line); color: var(--t-ink);
   display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; touch-action: none; }
@@ -44,6 +45,30 @@ export function setupTouch(input, root) {
   knob.className = 't-knob';
   pad.appendChild(knob);
   wrap.appendChild(pad);
+  // 外縁の円のうち、敵のいる方向だけを赤く灯す（どこに敵がいるかを感覚で分かるように）
+  const radar = document.createElement('canvas');
+  radar.className = 't-radar';
+  const RS = 156, RDPR = Math.min(3, window.devicePixelRatio || 1);
+  radar.width = radar.height = Math.round(RS * RDPR);
+  pad.appendChild(radar);
+  const rctx = radar.getContext('2d');
+  let lastKey = '';
+  wrap.radar = (bearings) => {
+    // 変化が無ければ描き直さない（角度は 3 度刻みで比べる）
+    const key = bearings.map((b) => `${Math.round(b.ang * 60)}:${Math.round(b.near * 10)}:${b.big ? 1 : 0}`).join(',');
+    if (key === lastKey) return;
+    lastKey = key;
+    rctx.setTransform(RDPR, 0, 0, RDPR, 0, 0);
+    rctx.clearRect(0, 0, RS, RS);
+    const c = RS / 2, r = 66 + 1; // 外縁（132px の円の縁）の上に重ねる
+    rctx.lineCap = 'round';
+    for (const b of bearings) {
+      const half = (b.big ? 0.42 : 0.24) + 0.16 * b.near; // 近いほど・大物ほど広く
+      rctx.strokeStyle = `rgba(255,${b.big ? 40 : 70},${b.big ? 40 : 60},${(0.35 + 0.6 * b.near).toFixed(2)})`;
+      rctx.lineWidth = b.big ? 7 : 3 + 3 * b.near;
+      rctx.beginPath(); rctx.arc(c, c, r, b.ang - half, b.ang + half); rctx.stroke();
+    }
+  };
   let padId = null;
   const setDir = (dx, dy) => {
     const dead = 16;

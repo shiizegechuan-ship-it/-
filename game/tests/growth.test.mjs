@@ -1411,3 +1411,22 @@ test('めちゃ簡単：板（すり抜け床）の上にも敵が出る。普�
   assert.ok(ve.spots > 0 && ve.onPlat >= 5, `veryeasy: ${JSON.stringify(ve)}`);
   assert.equal(nm.spots, 0);
 });
+
+test('スティックの外縁の赤：敵のいる方向（右・上・左下）と近さ、中ボスかどうかを返す。倒した敵は出ない', () => {
+  const g = sandbox(FLAT); const d = new Driver(g); d.frame(2);
+  const p = g.player, px = cx(p), py = cy(p);
+  const right = new RustSoldier(px + 200, p.y), up = new PendulumBat(px - 10, py - 250), far = new RustSoldier(px - 600, p.y);
+  for (const e of [right, up, far]) { g.addEnemy(e); e.x = (e === up ? px : e === right ? px + 200 : px - 600) - e.w / 2; e.y = e === up ? py - 250 - e.h / 2 : py - e.h / 2; }
+  let b = g.enemyBearings();
+  assert.equal(b.length, 3);
+  assert.ok(Math.abs(b[0].ang) < 0.05, 'right → 0');
+  assert.ok(Math.abs(b[1].ang + Math.PI / 2) < 0.05, 'up → -π/2');
+  assert.ok(Math.abs(Math.abs(b[2].ang) - Math.PI) < 0.05, 'left → ±π');
+  assert.ok(b[0].near > b[2].near, 'closer is stronger');
+  assert.ok(b.every((x) => !x.big));
+  right.elite = true; far.alive = false;
+  b = g.enemyBearings();
+  assert.equal(b.length, 2); assert.ok(b[0].big);
+  g.scene = 'title';
+  assert.deepEqual(g.enemyBearings(), []);
+});
