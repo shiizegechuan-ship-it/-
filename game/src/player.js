@@ -1,6 +1,6 @@
-import { PLAYER as P, ATTACKS, F } from './config.js';
+import { PLAYER as P, ATTACKS, F, TILE } from './config.js';
 import { approach, sign, cx, cy } from './util.js';
-import { moveBody, standingOnOneway } from './tilemap.js';
+import { moveBody, standingOnOneway, SOLID } from './tilemap.js';
 import { computeStats } from './boons.js';
 import { applyArtifacts } from './artifacts.js';
 import { spawnWave, MELEE } from './arts.js';
@@ -119,7 +119,8 @@ export class Player {
     const wasGround = this.onGround;
     if (!this.onGround) this.fallV = this.vy;
     const vx0 = this.vx;
-    const r = moveBody(this, map, dt, { dropThrough: this.dropT > 0 });
+    // 飛び込み・扉への移動の間は、壁や床と当たらない（すり抜ける）
+    const r = this.state === 'autodash' ? { onGround: false, hitX: false } : moveBody(this, map, dt, { dropThrough: this.dropT > 0 });
     this.onGround = r.onGround;
     if (this.state === 'hurt' && this.kbT > 0 && r.hitX && Math.abs(vx0) > 220) { this.wallSlam = true; this.kbT = 0; this.vx = -sign(vx0) * 60; }
     if (this.onGround) {
@@ -319,30 +320,77 @@ export class Player {
     if (Math.floor(tr.t / 0.06) !== Math.floor((tr.t - dt) / 0.06)) game.fx.afterimage(this);
     if (k >= 1) { this.x = tr.tx; this.y = tr.ty; this.state = 'normal'; this.stateT = 0; this.flipT = 0; this.onGround = true; this.travel = null; game.fx.landPuff(this.x + this.w / 2, this.y + this.h, 0.5); }
   }
+  // めちゃ簡単の飛び込み：壁や床とは当たらない（すり抜ける）。間に壁があれば、弧を描いて回り込むように飛ぶ
+  boxFree(map, x, y) {
+    const l = Math.floor(x / TILE), r = Math.floor((x + this.w - 0.01) / TILE), t = Math.floor(y / TILE), b = Math.floor((y + this.h - 0.01) / TILE);
+    for (let ty = t; ty <= b; ty++) for (let tx = l; tx <= r; tx++) if (map.get(tx, ty) === SOLID) return false;
+    return true;
+  }
+  // 飛び込みの行き先：敵の手前（こちら側）。そこが壁の中なら反対側、どちらも塞がっていれば上へずらす
+  autoDashGoal(map, e, side) {
+    const ty = e.gravity === false ? cy(e) - this.h / 2 : e.y + e.h - this.h;
+    const at = (sd) => cx(e) + sd * (e.w / 2 + this.w / 2 + 14) - this.w / 2;
+    for (const sd of [side, -side]) if (this.boxFree(map, at(sd), ty)) return { x: at(sd), y: ty };
+    for (let up = 8; up <= 64; up += 8) if (this.boxFree(map, at(side), ty - up)) return { x: at(side), y: ty - up };
+    return { x: at(side), y: ty };
+  }
+  // まっすぐ飛ぶと壁を通るなら、上（だめなら下）へ弧を描いて回り込む高さを決める
+  autoDashArc(map, x0, y0, g) {
+    const clear = (h) => {
+      for (let i = 1; i < 32; i++) {
+        const k = i / 32, ease = 1 - Math.pow(1 - k, 2); // 実際の飛び方（updateAutoDash）と同じ道筋で確かめる
+        if (!this.boxFree(map, x0 + (g.x - x0) * ease, y0 + (g.y - y0) * ease - Math.sin(k * Math.PI) * h)) return false;
+      }
+      return true;
+    };
+    if (clear(0)) return 0;
+    for (let h = 24; h <= 360; h += 16) { if (clear(h)) return h; if (clear(-h)) return -h; }
+    return 48; // 回り込めない時は、軽く弧を描いてそのまますり抜ける
+  }
+  startAutoDash(game, tgt) {
+    const side = Math.sign(this.x + this.w / 2 - cx(tgt)) || -this.face;
+    const g = this.autoDashGoal(game.map, tgt, side);
+    const arc = this.autoDashArc(game.map, this.x, this.y, g);
+    const dist = Math.hypot(g.x - this.x, g.y - this.y) + Math.abs(arc) * 1.2;
+    this.state = 'autodash'; this.stateT = 0; this.atk = null;
+    this.autoDash = { e: tgt, t: 0, x0: this.x, y0: this.y, side, arc, dur: Math.min(0.5, 0.14 + dist / 1100) };
+    this.vx = 0; this.vy = 0;
+    this.iframeT = Math.max(this.iframeT, 0.12);
+    this.face = Math.sign(cx(tgt) - (this.x + this.w / 2)) || this.face;
+    game.sfx.play('dodge');
+  }
   updateAutoDash(game, input, dt) {
     const a = this.autoDash, e = a.e;
     a.t += dt;
     this.iframeT = Math.max(this.iframeT, 0.12); // 飛び込みの間は当たらない
     this.flipT = 0.34 - ((a.t * 3.2) % 1) * 0.34; // くるくる回る
-    if (!e.alive || a.t > 0.5 || this.inReach(e)) {
-      this.vx *= 0.2; this.vy = Math.min(this.vy, 0) * 0.2;
+    // 敵が動いても追いかける（行き先は毎コマ決め直す）
+    const g = e.alive ? this.autoDashGoal(game.map, e, a.side) : { x: this.x, y: this.y };
+    const k = Math.min(1, a.t / a.dur), ease = 1 - Math.pow(1 - k, 2);
+    if (e.alive) {
+      const px = a.x0 + (g.x - a.x0) * ease, py = (arc) => a.y0 + (g.y - a.y0) * ease - Math.sin(k * Math.PI) * arc;
+      // 敵が動いて道筋がずれ、壁にかかりそうなら、弧を少し高くして避ける（避けきれなければすり抜ける）
+      if (k < 1 && !this.boxFree(game.map, px, py(a.arc))) {
+        const dir = a.arc < 0 ? -1 : 1;
+        for (let add = 8; add <= 96; add += 8) if (this.boxFree(game.map, px, py(a.arc + dir * add))) { a.arc += dir * add; break; }
+      }
+      this.x = px; this.y = py(a.arc);
+    }
+    this.vx = 0; this.vy = 0;
+    if (Math.floor(a.t / 0.05) !== Math.floor((a.t - dt) / 0.05)) game.fx.afterimage(this);
+    if (!e.alive || k >= 1) {
+      // 着いた所が壁の中なら、上の空いた所へ出す
+      for (let up = 0; up <= 96 && !this.boxFree(game.map, this.x, this.y); up += 4) this.y -= 4;
       this.state = 'normal'; this.stateT = 0; this.flipT = 0;
+      if (!e.alive) return;
       this.face = (cx(e) >= this.x + this.w / 2) ? 1 : -1;
       this.autoDashing = true; this.startAttack(game, 0); this.autoDashing = false;
-      return;
     }
-    const side = Math.sign(this.x + this.w / 2 - cx(e)) || -this.face;
-    const tx = cx(e) + side * (e.w / 2 + this.w / 2 + 14), ty = e.gravity === false ? cy(e) - this.h / 2 : e.y + e.h - this.h;
-    const dx = tx - (this.x + this.w / 2), dy = ty - this.y, d = Math.hypot(dx, dy) || 1;
-    const sp = 900;
-    this.vx = dx / d * sp; this.vy = dy / d * sp;
-    this.face = Math.sign(cx(e) - (this.x + this.w / 2)) || this.face;
-    if (Math.floor(a.t / 0.05) !== Math.floor((a.t - dt) / 0.05)) game.fx.afterimage(this);
   }
   startAttack(game, dirX, forceName) {
     if (!forceName && !this.autoDashing) {
       const tgt = this.autoTarget(game);
-      if (tgt && !this.inReach(tgt)) { this.state = 'autodash'; this.stateT = 0; this.atk = null; this.autoDash = { e: tgt, t: 0 }; this.iframeT = Math.max(this.iframeT, 0.12); game.sfx.play('dodge'); return; }
+      if (tgt && !this.inReach(tgt)) { this.startAutoDash(game, tgt); return; }
       if (tgt) this.face = Math.sign(cx(tgt) - (this.x + this.w / 2)) || this.face, dirX = 0;
     }
     if (dirX !== 0) this.face = dirX;

@@ -1275,3 +1275,33 @@ test('めちゃ簡単：通常攻撃を押すと、離れた敵へ回転しな�
   d.frame(1, ['attack']); d.frame(20);
   assert.equal(e.hp, e.maxHp);
 });
+
+test('めちゃ簡単：飛び込みの間に壁があれば弧を描いて回り込み、塞がれていてもすり抜けて敵に届く', () => {
+  // 低い壁（上が空いている）と、床から天井までの壁
+  const wallRows = (full) => FLAT.map((r, y) => (y >= (full ? 1 : 9) && y <= 14 ? r.slice(0, 12) + '##' + r.slice(14) : r));
+  for (const full of [false, true]) {
+    const g = sandbox(wallRows(full)); const d = new Driver(g);
+    d.frame(2);
+    g.run.diff = { ...g.run.diff, id: 'veryeasy', autoAim: true };
+    const e = new RustSoldier(16 * 30, 450 - 30 * 2);
+    g.addEnemy(e); e.hp = e.maxHp = 1e5; e.cool = 99; g.room.cleared = true;
+    g.player.hp = g.player.maxHp = 1e6;
+    g.player.x = 6 * 30; d.frame(40); // 敵が床に降りるまで待つ
+    const p = g.player;
+    assert.ok(cx(p) < 12 * 30 && cx(e) > 14 * 30, 'wall between');
+    d.frame(1, ['attack']);
+    assert.equal(p.state, 'autodash');
+    let overlapped = false, top = p.y;
+    for (let i = 0; i < 40 && p.state === 'autodash'; i++) {
+      d.frame(1);
+      top = Math.min(top, p.y);
+      if (!p.boxFree(g.map, p.x, p.y)) overlapped = true;
+    }
+    d.until(() => e.hp < e.maxHp, 60);
+    assert.ok(e.hp < e.maxHp, `reaches the enemy (full=${full})`);
+    assert.ok(cx(p) > 14 * 30, 'ended past the wall');
+    assert.ok(p.boxFree(g.map, p.x, p.y), 'never left inside a wall');
+    if (!full) { assert.equal(overlapped, false, 'arcs over a low wall without touching it'); assert.ok(top < 9 * 30 - p.h, 'goes up and over'); }
+    else assert.ok(overlapped, 'passes through a wall that cannot be avoided');
+  }
+});
