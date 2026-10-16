@@ -83,13 +83,15 @@ const ON = 0.15, OFF = 0.1; // スティックの遊び（中心から反応し�
 export function readPads(pads, stickAll) {
   const out = { left: false, right: false, up: false, down: false, confirm: false, back: false };
   for (const k of Object.keys(PAD)) out[k] = false;
-  let any = false;
+  let any = false, best = 0;
+  out.ax = 0; out.ay = 0;
   for (const p of pads) {
     if (!p || (!p.connected && p.connected !== undefined)) continue;
     any = true;
     const stick = (stickAll[p.index ?? 0] ||= {}); // スティックの状態はパッドごとに持つ
     const b = (i) => !!(p.buttons[i] && (p.buttons[i].pressed || p.buttons[i].value > 0.5));
     const ax = p.axes[0] || 0, ay = p.axes[1] || 0;
+    if (Math.hypot(ax, ay) > best) { best = Math.hypot(ax, ay); out.ax = ax; out.ay = ay; } // メニュー用：いちばん倒れているスティック
     // 標準配置の十字キー
     let dl = b(14), dr = b(15), du = b(12), dd = b(13);
     // 非標準配置：十字キーが軸 6/7 に来る機種
@@ -112,6 +114,7 @@ export function pollGamepad(input) {
   input.padStick ||= {};
   const st = readPads(pads, input.padStick);
   if (!st) return false;
-  for (const [a, v] of Object.entries(st)) input.set(a, v, 'pad');
+  input.padAxis = { x: st.ax, y: st.ay };
+  for (const [a, v] of Object.entries(st)) if (a !== 'ax' && a !== 'ay') input.set(a, v, 'pad');
   return true;
 }

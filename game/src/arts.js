@@ -11,6 +11,10 @@ export const ACTIVE_ARTS = {
   rewindblade: { cost: (lv) => 35 - 3 * (lv - 1), color: '#9fe3ff' },
   belltoll: { cost: (lv) => 45 - 3 * (lv - 1), color: '#f2c14e' },
   timequake: { cost: (lv) => 60 - 4 * (lv - 1), color: '#c8b0ff' },
+  thunderstorm: { cost: (lv) => 55 - 4 * (lv - 1), color: '#cfe8ff' },
+  heavenblade: { cost: (lv) => 45 - 3 * (lv - 1), color: '#ffe9a0' },
+  prismbeam: { cost: (lv) => 50 - 3 * (lv - 1), color: '#ff9af0' },
+  novaorb: { cost: (lv) => 45 - 3 * (lv - 1), color: '#9fe3ff' },
 };
 
 export class Spell {
@@ -20,6 +24,22 @@ export class Spell {
     Object.assign(this, opts);
   }
 }
+
+// 線分（手元→剣先）に触れている敵
+function enemiesOnSegment(game, x1, y1, x2, y2, pad = 8) {
+  const out = [];
+  const len = Math.hypot(x2 - x1, y2 - y1), n = Math.max(1, Math.ceil(len / 12));
+  for (const e of game.room.enemies) {
+    if (!e.alive || (e.boss && e.defeated)) continue;
+    for (let i = 0; i <= n; i++) {
+      const x = x1 + (x2 - x1) * i / n, y = y1 + (y2 - y1) * i / n;
+      if (x > e.x - pad && x < e.x + e.w + pad && y > e.y - pad && y < e.y + e.h + pad) { out.push(e); break; }
+    }
+  }
+  return out;
+}
+// 手元の位置（剣を持つ手）
+const handOf = (p) => ({ x: cx(p) + p.face * 6, y: cy(p) - 2 });
 
 function enemiesNear(game, x, y, r) {
   return game.room.enemies.filter((e) => e.alive && !(e.boss && e.defeated) && Math.hypot(cx(e) - x, cy(e) - y) <= r);
@@ -72,6 +92,23 @@ export function castArt(game, art) {
       if (e.alive && !e.boss && !e.elite && e.setState) { e.setState('flinch'); e.stateT = -0.3; }
     }
     game.sfx.play('bossBell'); game.fx.shake(6, 0.3); game.fx.screenFlash('#c8b0ff', 0.25);
+  }
+  if (art.id === 'thunderstorm') {
+    game.room.spells.push(new Spell('storm', px, py, { life: 1.5, every: 1.5 / (26 + 2 * lv), dmg: 15 * m, acc: 0 }));
+    game.sfx.play('guardBreak'); game.fx.screenFlash('#e8f0ff', 0.35); game.fx.shake(5, 0.3);
+  }
+  if (art.id === 'heavenblade') {
+    // 背中の上（-100°）から前の下（+60°）まで、手元を軸に大きく回す
+    game.room.spells.push(new Spell('longblade', px, py, { owner: p, life: 0.5, len: 380 + 20 * lv, a0: -Math.PI * 0.55, a1: Math.PI * 0.35, dmg: 50 * m, face: f, trail: [] }));
+    game.sfx.play('heavySwing'); game.fx.shake(4, 0.2);
+  }
+  if (art.id === 'prismbeam') {
+    game.room.spells.push(new Spell('beam', px, py, { owner: p, life: 1.0, face: f, dmg: 9 * m, tick: 0, len: 0 }));
+    game.sfx.play('shoot'); game.fx.screenFlash('#ffd0f8', 0.15);
+  }
+  if (art.id === 'novaorb') {
+    game.room.spells.push(new Spell('orb', px + f * 30, py - 4, { vx: f * 210, life: 2.2, r: 30, dmg: 8 * m, boom: 50 * m, tick: 0 }));
+    game.sfx.play('charged');
   }
   game.emit('art', { id: art.id });
 }
@@ -212,6 +249,75 @@ export function updateSpells(game, dt) {
         }
         sp.x += sp.vx * dt; sp.y += sp.vy * dt;
         if (sp.t > sp.life) sp.alive = false;
+        break;
+      }
+      case 'storm': {
+        // 画面じゅうに雷：半分は敵の真上へ、残りは画面のどこかへ
+        sp.acc += dt;
+        while (sp.acc >= sp.every && sp.t < sp.life) {
+          sp.acc -= sp.every;
+          const foes = room.enemies.filter((e) => e.alive && !(e.boss && e.defeated));
+          const pick = foes.length && Math.random() < 0.6 ? foes[Math.floor(Math.random() * foes.length)] : null;
+          const bx = pick ? cx(pick) + (Math.random() - 0.5) * 16 : game.cam.x + Math.random() * 640;
+          const gy = Math.min(game.map.groundBelow(bx, game.cam.y + 10), game.map.pxH);
+          room.spells.push(new Spell('bolt', bx, gy, { life: 0.3, top: game.cam.y - 20, seed: Math.random() * 99 }));
+          for (const e of room.enemies) if (e.alive && !(e.boss && e.defeated) && Math.abs(cx(e) - bx) < e.w / 2 + 16) strike(game, sp, e, sp.dmg, { knock: 50 });
+          game.fx.sparks(bx, gy - 4, '#cfe8ff', 5, 200);
+          if (Math.random() < 0.35) game.fx.shake(2.5, 0.06);
+        }
+        if (sp.t > sp.life) sp.alive = false;
+        break;
+      }
+      case 'bolt': if (sp.t > sp.life) sp.alive = false; break;
+      case 'longblade': case 'spinsweep': {
+        // 手元を軸に回る長い剣（剣先までの線が回転する）
+        const p2 = sp.owner || p, h = handOf(p2);
+        const k = Math.min(1, sp.t / sp.life), ease = 1 - Math.pow(1 - k, 2);
+        const ang = sp.a0 + (sp.a1 - sp.a0) * ease;
+        const dirA = sp.face > 0 ? ang : Math.PI - ang;
+        sp.x = h.x; sp.y = h.y; sp.ang = dirA;
+        sp.tx = h.x + Math.cos(dirA) * sp.len; sp.ty = h.y + Math.sin(dirA) * sp.len;
+        (sp.trail ||= []).push(dirA); if (sp.trail.length > 7) sp.trail.shift();
+        const rev = Math.floor((ang - sp.a0) / (Math.PI * 2)); if (rev !== (sp.rev || 0)) { sp.rev = rev; sp.hit.clear(); } // 一周ごとに当たり直す
+        for (const e of enemiesOnSegment(game, h.x, h.y, sp.tx, sp.ty)) if (!sp.hit.has(e.id)) { sp.hit.add(e.id); strike(game, sp, e, sp.dmg, { knock: 160, dir: sign(cx(e) - h.x) || 1 }); game.fx.sparks(cx(e), cy(e), '#fff2c0', 8, 260); }
+        if (sp.t > sp.life + 0.12) sp.alive = false;
+        break;
+      }
+      case 'beam': {
+        const p2 = sp.owner || p, h = handOf(p2);
+        sp.x = h.x; sp.y = h.y; sp.face = p2.face;
+        let len = 0; while (len < 640 && !game.map.solidAt(h.x + sp.face * (len + 12), h.y)) len += 12;
+        sp.len = len;
+        sp.tick -= dt;
+        if (sp.tick <= 0) {
+          sp.tick = 0.09;
+          const x0 = sp.face > 0 ? h.x : h.x - len;
+          for (const e of room.enemies) if (e.alive && !(e.boss && e.defeated) && e.x < x0 + len && e.x + e.w > x0 && e.y < h.y + 15 && e.y + e.h > h.y - 15) { strike(game, sp, e, sp.dmg, { knock: 30, dir: sp.face }); if (Math.random() < 0.5) game.fx.sparks(cx(e), h.y, ['#ff9af0', '#9fe3ff', '#ffe14a'][Math.floor(Math.random() * 3)], 3, 220); }
+          game.fx.shake(1.2, 0.05);
+        }
+        if (sp.t > sp.life) sp.alive = false;
+        break;
+      }
+      case 'orb': {
+        sp.x += sp.vx * dt; sp.y += Math.sin(sp.t * 5) * 20 * dt;
+        sp.tick -= dt;
+        if (sp.tick <= 0) { sp.tick = 0.15; for (const e of enemiesNear(game, sp.x, sp.y, sp.r + 10)) strike(game, sp, e, sp.dmg, { knock: 40 }); }
+        if (Math.random() < 0.7) game.fx.sparks(sp.x + (Math.random() - 0.5) * sp.r * 2, sp.y + (Math.random() - 0.5) * sp.r * 2, Math.random() < 0.5 ? '#9fe3ff' : '#ffffff', 1, 80);
+        if (sp.t > sp.life || game.map.solidAt(sp.x + Math.sign(sp.vx) * sp.r, sp.y)) {
+          sp.alive = false;
+          for (const e of enemiesNear(game, sp.x, sp.y, 110)) strike(game, sp, e, sp.boom, { knock: 260 });
+          game.fx.burst(sp.x, sp.y, '#9fe3ff', 40); game.fx.ring(sp.x, sp.y, '#ffffff', 220, 0.45); game.fx.ring(sp.x, sp.y, '#9fe3ff', 150, 0.35);
+          game.fx.screenFlash('#cfefff', 0.35); game.fx.shake(9, 0.35); game.sfx.play('heavyHit');
+        }
+        break;
+      }
+      case 'tornado': {
+        sp.x += (sp.vx || 0) * dt;
+        sp.tick = (sp.tick || 0) - dt;
+        for (const e of room.enemies) if (e.alive && !e.boss && !e.elite && Math.abs(cx(e) - sp.x) < 110 && Math.abs(cy(e) - sp.y) < 80) e.vx += sign(sp.x - cx(e)) * 900 * dt; // 吸い込む
+        if (sp.tick <= 0) { sp.tick = 0.3; for (const e of room.enemies) if (e.alive && !(e.boss && e.defeated) && Math.abs(cx(e) - sp.x) < sp.w && Math.abs(cy(e) - sp.y) < 70) strike(game, sp, e, sp.dmg, { knock: 0 }); }
+        if (Math.random() < 0.6) game.fx.sparks(sp.x + (Math.random() - 0.5) * 30, sp.y + 30 - Math.random() * 70, sp.color || '#cfe8ff', 1, 120);
+        if (sp.t > sp.life || game.map.solidAt(sp.x + sign(sp.vx || 1) * 20, sp.y)) sp.alive = false;
         break;
       }
       case 'cross': {
@@ -433,6 +539,43 @@ export function updatePassives(game, dt) {
     });
     game.sfx.play('bossBell'); game.fx.shake(2.5, 0.12); game.fx.screenFlash('#ffe9a0', 0.1);
   }
+  // ───── 派手な常時の術 ─────
+  const satN = pv.galaxy ? 5 + pv.galaxy : pv.satellites ? 2 + pv.satellites : 0;
+  if (satN) {
+    T.sat = (T.sat || 0) + dt;
+    const R = pv.galaxy ? 84 : 70, base = pv.galaxy ? dmg(22, 'galaxy') : dmg(12, 'satellites');
+    p.satellites = [];
+    for (let i = 0; i < satN; i++) {
+      // 銀河：内と外の二重の輪が逆向きに回る
+      const inner = pv.galaxy && i % 2 === 1, r = inner ? 46 : R;
+      const a = (inner ? -T.sat * 3.2 : T.sat * 2.6) + i / satN * Math.PI * 2;
+      const sx = px + Math.cos(a) * r, sy = py + Math.sin(a) * r * 0.7;
+      p.satellites.push({ x: sx, y: sy, a, big: !!pv.galaxy });
+      for (const e of game.room.enemies) {
+        if (!e.alive || (e.boss && e.defeated)) continue;
+        if (sx < e.x - 10 || sx > e.x + e.w + 10 || sy < e.y - 10 || sy > e.y + e.h + 10) continue;
+        if ((T.orbitHit['s' + e.id] || 0) > T.sat) continue;
+        T.orbitHit['s' + e.id] = T.sat + 0.4;
+        game.dealDamage(e, { base, cat: 'skill', knock: pv.galaxy ? 0 : 60, dir: sign(cx(e) - px) || 1, spell: true, passive: true });
+        game.fx.sparks(sx, sy, pv.galaxy ? '#ffe9a0' : '#9fe3ff', 5, 180);
+      }
+    }
+  } else p.satellites = null;
+  if (pv.galaxy && anyFoe() && tick('galaxyV', 4)) game.room.spells.push(new Spell('tornado', px, py, { passive: true, vx: 0, life: 2, w: 60, dmg: dmg(12, 'galaxy'), color: '#ffe9a0', nebula: true }));
+  if (pv.tornado && anyFoe() && tick('tornado', 5)) game.room.spells.push(new Spell('tornado', px + p.face * 30, py, { passive: true, vx: p.face * 70, life: 3.5, w: 40, dmg: dmg(14, 'tornado') }));
+  if (pv.spinblade && anyFoe() && tick('spinblade', 3)) game.room.spells.push(new Spell('spinsweep', px, py, { passive: true, owner: p, life: 0.8, len: 150, a0: -Math.PI / 2, a1: Math.PI * 3.5, dmg: dmg(26, 'spinblade'), face: p.face, trail: [] }));
+  if (pv.clockhand) {
+    // 絶えず回る長針
+    T.ch = (T.ch || 0) + dt;
+    const h = handOf(p), a = T.ch * 7.5, len = 220;
+    p.clockhand = { x: h.x, y: h.y, a, len };
+    for (const e of enemiesOnSegment(game, h.x, h.y, h.x + Math.cos(a) * len, h.y + Math.sin(a) * len)) {
+      if ((T.orbitHit['c' + e.id] || 0) > T.ch) continue;
+      T.orbitHit['c' + e.id] = T.ch + 0.3;
+      game.dealDamage(e, { base: dmg(26, 'clockhand'), cat: 'skill', knock: 90, dir: sign(cx(e) - px) || 1, spell: true, passive: true });
+      game.fx.sparks(cx(e), cy(e), '#fff2c0', 4, 200);
+    }
+  } else p.clockhand = null;
   // ───── 合成した常時の術 ─────
   if (pv.gearwaltz) {
     T.gw = (T.gw || 0) + dt;

@@ -146,6 +146,9 @@ export function drawHud(ctx, game) {
   const res = Object.entries(counts).filter(([s, n]) => RESONANCE[s] && n >= 2).map(([s]) => SCHOOLS[s].name);
   if (res.length) text(ctx, `共鳴：${res.join('・')}`, 18, VIEW_H - 22 - (Math.ceil(p.boons.length / 8)) * 20, { size: 10, color: '#f2c14e' });
 
+  // 夜の様相の一言（夜のはじめに数秒）
+  const nn = game.nightNote;
+  if (nn && nn.t > 2.4 && nn.t < 8) { ctx.globalAlpha = clamp(Math.min(nn.t - 2.4, 8 - nn.t) / 0.6, 0, 1); text(ctx, nn.text, VIEW_W / 2, 150, { size: 15, align: 'center', color: '#e8c8b0' }); ctx.globalAlpha = 1; }
   // 時の欠片
   text(ctx, `◆ 欠片 ${meta.shards + (run.shards || 0)}`, 22, 98, { size: 12, color: '#9fd0ff' });
   if (run.killStacks > 0) text(ctx, `血の秒針 +${Math.round(run.killStacks * 100)}%`, 120, 98, { size: 11, color: '#ff9a3c' });

@@ -16,13 +16,18 @@ export function botInputs(g, frame, skill = 'mid') {
   // 光線：照準線が固定されたら跳ぶ（人も線を見て跳ぶ）
   const beam = enemies.some((e) => e.kind === 'beamer' && e.state === 'aim' && e.tell > 0.7 && Math.abs(e.aimY - cy(p)) < 20);
   if (beam && p.onGround && skill !== 'bad') { held.push('jump'); return held; }
+  // 床の揺れ：赤く光ったら揺れの直前に跳ぶ
+  const q = g.room.quake;
+  if (q && q.tell > 0.75 && skill !== 'bad') { if (p.onGround) held.push('jump'); else held.push('jump'); return held; }
   if (danger && p.dodgeCd <= 0 && frame % 2 === 0) { held.push('dodge'); held.push(dx > 0 ? 'left' : 'right'); return held; }
   const reach = 34;
   if (Math.abs(dx) > reach) held.push(dx > 0 ? 'right' : 'left');
   else if ((dx > 0) !== (p.face > 0)) held.push(dx > 0 ? 'right' : 'left');
   if (dy < -50 && p.onGround && frame % 20 === 0) held.push('jump');
   if (dy < -50 && !p.onGround) held.push('jump');
-  if (Math.abs(dx) < reach + 20 && Math.abs(dy) < 60 && frame % 7 === 0) held.push('attack');
+  // 構えている敵には正面から斬らない（構えが解けるのを待つ）
+  const guarded = tgt.guardT > 0 && skill !== 'bad';
+  if (!guarded && Math.abs(dx) < reach + 20 && Math.abs(dy) < 60 && frame % 7 === 0) held.push('attack');
   if (p.gauge >= 50 && frame % 30 === 0 && Math.abs(dx) < 150) held.push('skill');
   return held;
 }

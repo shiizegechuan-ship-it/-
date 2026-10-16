@@ -53,6 +53,17 @@ export const BOONS = {
   swordsaint: { school: 'power', max: 5, fusion: true, melee: true, name: '剣聖', desc: (t) => `[合成・剣] 与ダメージ +${70 + 15 * (t - 1)}%、会心率 +${30 + 5 * (t - 1)}%。会心の一撃で斬撃が飛ぶ` },
   judgement: { school: 'power', max: 5, fusion: true, melee: true, name: '断罪', desc: (t) => `[合成・剣] 重撃 ×${(2.5 + 0.5 * (t - 1)).toFixed(1)}。HP25%以下の雑魚は重撃で即断ち、中ボス以上には +100%` },
   thousand: { school: 'power', max: 5, fusion: true, melee: true, name: '千刃', desc: (t) => `[合成・剣] コンボ1ごとの加算 +${2 + t}%。連撃のたびに剣気が 3 本飛ぶ（各${Math.round(16 * (1 + 0.4 * (t - 1)))}）` },
+  // 派手な術（V で放つ）
+  thunderstorm: { school: 'arts', max: 5, active: true, name: '雷霆', desc: (t) => `[術・全体] 画面じゅうに雷が降り注ぐ（1 本${Math.round(20 * (1 + 0.4 * (t - 1)))}、約${18 + 2 * t}本）ゲージ${55 - 4 * (t - 1)}` },
+  heavenblade: { school: 'arts', max: 5, active: true, name: '天剣', desc: (t) => `[術] 手元から伸びる長大な剣が、背中から前へ大きく回って薙ぎ払う（${Math.round(50 * (1 + 0.4 * (t - 1)))}・届く長さ${380 + 20 * t}）ゲージ${45 - 3 * (t - 1)}` },
+  prismbeam: { school: 'arts', max: 5, active: true, name: '光芒', desc: (t) => `[術] 前方へ七色の光線を放ち続け、触れた敵を焼き続ける（${Math.round(9 * (1 + 0.4 * (t - 1)))}／0.09秒・約1秒）ゲージ${50 - 3 * (t - 1)}` },
+  novaorb: { school: 'arts', max: 5, active: true, name: '星核', desc: (t) => `[術] 大きな光の球をゆっくり放つ。触れた敵を削り、最後に大爆発（${Math.round(8 * (1 + 0.4 * (t - 1)))}／0.15秒＋爆発${Math.round(50 * (1 + 0.4 * (t - 1)))}）ゲージ${45 - 3 * (t - 1)}` },
+  // 派手な常時の術
+  satellites: { school: 'arts', max: 5, name: '衛星', desc: (t) => `[常時] 光の球が${2 + t}つ、尾を引いて体のまわりを大きく回る（各${Math.round(12 * (1 + 0.4 * (t - 1)))}）` },
+  tornado: { school: 'arts', max: 5, name: '時の竜巻', desc: (t) => `[常時] 6 秒ごとに竜巻が前へ進み、敵を巻き込んで削る（${Math.round(6 * (1 + 0.4 * (t - 1)))}／0.3秒）` },
+  spinblade: { school: 'arts', max: 5, name: '旋剣', desc: (t) => `[常時] 4 秒ごとに、長い光の剣が手元を軸に一回転する（${Math.round(22 * (1 + 0.4 * (t - 1)))}・長さ150）` },
+  galaxy: { school: 'arts', max: 5, fusion: true, name: '銀河の渦', desc: (t) => `[合成・常時] 大きな星が${5 + t}つ回り（各${Math.round(22 * (1 + 0.4 * (t - 1)))}）、4 秒ごとに足元へ星雲の渦が生まれて敵を吸い込む` },
+  clockhand: { school: 'arts', max: 5, fusion: true, name: '時計の長針', desc: (t) => `[合成・常時] 長さ 220 の光の長針が、手元を軸に絶えず回り続ける（${Math.round(26 * (1 + 0.4 * (t - 1)))}）` },
   // 部屋全体を攻める術（威力は低め。合成で強くなる）
   timequake: { school: 'arts', max: 5, active: true, name: '刻震', desc: (t) => `[術・全体] 部屋じゅうの敵を時の震えが打つ（${Math.round(16 * (1 + 0.4 * (t - 1)))}）。雑魚は一瞬怯む ゲージ${60 - 4 * (t - 1)}` },
   tolling: { school: 'arts', max: 5, name: '遠鐘', desc: (t) => `[常時・全体] 6 秒ごとに鐘が遠く鳴り、部屋じゅうの敵に響く（${Math.round(6 * (1 + 0.4 * (t - 1)))}）` },
@@ -95,8 +106,8 @@ export const BOONS = {
   lastlight: { school: 'arts', max: 5, name: '残り火', desc: (t) => `[条件] HP30%以下のとき、命中した敵が炎を噴く（${Math.round(12 * (1 + 0.4 * (t - 1)))}）` },
 };
 // 常に発動する術の一覧。種類を多く持つほど、すべての常時の術が強くなる（術の共鳴）
-export const FUSED_PASSIVES = ['gearwaltz', 'starblade', 'thundergod', 'inferno', 'icejail', 'earthpulse', 'celestial'];
-export const PASSIVE_IDS = ['orbit', 'aura', 'seeker', 'chainlight', 'meteor', 'frostnova', 'swordrain', 'gearsaw', 'stormcloud', 'wake', 'quakeline', 'spikes', 'emberfloor', 'tolling', 'starfield', ...FUSED_PASSIVES];
+export const FUSED_PASSIVES = ['gearwaltz', 'starblade', 'thundergod', 'inferno', 'icejail', 'earthpulse', 'celestial', 'galaxy', 'clockhand'];
+export const PASSIVE_IDS = ['orbit', 'aura', 'seeker', 'chainlight', 'meteor', 'frostnova', 'swordrain', 'gearsaw', 'stormcloud', 'wake', 'quakeline', 'spikes', 'emberfloor', 'tolling', 'starfield', 'satellites', 'tornado', 'spinblade', ...FUSED_PASSIVES];
 // 合成のレシピ：素材 a と b を両方 Lv2 以上で持つと、上位の強化に合成できる
 export const FUSIONS = [
   { a: 'orbit', b: 'gearsaw', to: 'gearwaltz' },
@@ -109,6 +120,8 @@ export const FUSIONS = [
   { a: 'heavyart', b: 'execute', to: 'judgement' },
   { a: 'comboheat', b: 'swordqi', to: 'thousand' },
   { a: 'tolling', b: 'starfield', to: 'celestial' },
+  { a: 'satellites', b: 'tornado', to: 'galaxy' },
+  { a: 'spinblade', b: 'orbit', to: 'clockhand' },
 ];
 // 脅威の数え方：常時の術と剣の道の Lv の合計。合成したものは Lv +3（素材 2 つぶん）として数える
 export const passiveWeight = (b) => (b.tier || 1) + (BOONS[b.id].fusion ? 3 : 0);

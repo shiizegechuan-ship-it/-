@@ -34,7 +34,8 @@ test('揺らぎと因果：夜が変わると戦闘部屋は揺らぐが、因�
 
 test('楔：枠の上限・重複不可・抜くと戻る', () => {
   const m = newMeta(1);
-  assert.equal(m.slots, 1);
+  assert.equal(m.slots, 2);
+  m.slots = 1;
   assert.ok(addWedge(m, { target: 'lira' }));
   assert.ok(!addWedge(m, { target: 'glen' }), 'no free slot');
   m.slots = 2;
@@ -96,9 +97,9 @@ test('刻守の記憶：前の夜の戦い方を分析し、最も多い手段�
 test('偽りの勝利（鐘）：初回だけ楔の枠+1', () => {
   const m = newMeta(1);
   endLoop(m, { cause: 'bell', floor: 3, boons: [] });
-  assert.equal(m.slots, 2);
+  assert.equal(m.slots, 3);
   endLoop(m, { cause: 'bell', floor: 3, boons: [] });
-  assert.equal(m.slots, 2);
+  assert.equal(m.slots, 3);
   assert.ok(m.slots <= MAX_SLOTS);
 });
 

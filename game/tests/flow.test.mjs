@@ -56,7 +56,7 @@ test('1周を最後まで通せる：全部屋→刻守撃破→鐘→巻き戻�
   d.until(() => g.scene === 'rewind', 400);
   assert.equal(g.scene, 'rewind');
   assert.equal(g.rewind.report.cause, 'bell');
-  assert.equal(g.meta.slots, 2, 'first false victory grants a slot');
+  assert.equal(g.meta.slots, 3, 'first false victory grants a slot');
   // 巻き戻り画面 → 次の夜
   d.frame(220);
   d.frame(1, ['confirm']);

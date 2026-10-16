@@ -8,6 +8,8 @@ import { makeRng } from '../src/util.js';
 import { ARTIFACTS } from '../src/artifacts.js';
 import { Spell } from '../src/arts.js';
 import { Game } from '../src/game.js';
+import { Input } from '../src/input.js';
+import { nightLook } from '../src/nightlook.js';
 
 function arena(E, dx = 120, tier = 1) {
   const g = sandbox(FLAT); const d = new Driver(g);
@@ -745,6 +747,7 @@ test('難易度はタイトルで切り替えられ、新しく始めた記録�
   const g = new Game({ deterministicFx: true });
   assert.equal(g.difficulty().id, 'normal');
   g.cycleDifficulty(); assert.equal(g.difficulty().id, 'hard');
+  g.cycleDifficulty(); assert.equal(g.difficulty().id, 'nightmare');
   g.cycleDifficulty(); assert.equal(g.difficulty().id, 'easy');
   g.newGame(5); g.modal = null;
   assert.equal(g.meta.difficulty, 'easy'); assert.equal(g.run.diff.id, 'easy');
@@ -765,4 +768,94 @@ test('刻守の護衛：鐘楼の衛士が現れ（数は難易度しだい）�
     assert.ok(b.defeated);
     assert.equal(guards().length, 0);
   }
+});
+
+test('派手な術：雷霆は画面じゅうに雷を降らせ、天剣は遠くの敵まで届き、光芒は焼き続け、星核は最後に爆発する', () => {
+  const setup = (id, dx) => {
+    const g = newGame(71); g.enterRoom(0, 1); g.modal = null;
+    const p = g.player; p.face = 1;
+    g.room.enemies = g.room.enemies.filter((e) => e.gravity !== false); // 飛ぶ敵は軌道から外れるので除く
+    g.room.enemies.forEach((e, i) => { e.hp = e.maxHp = 1e6; e.cool = 99; e.x = p.x + (dx || 100) + i * 40; e.y = p.y + p.h - e.h; });
+    p.setBoons([{ id, tier: 1 }]); p.gauge = 100; g.useSkill();
+    return { g, d: new Driver(g) };
+  };
+  let { g, d } = setup('thunderstorm', 120);
+  d.frame(100);
+  assert.ok(g.room.enemies.every((e) => e.hp < e.maxHp), 'storm hits everyone');
+  ({ g, d } = setup('heavenblade', 300));
+  d.frame(40);
+  assert.ok(g.room.enemies[0].hp < g.room.enemies[0].maxHp, 'long blade reaches far');
+  ({ g, d } = setup('prismbeam', 160));
+  const e0 = g.room.enemies[0]; d.frame(30); const after30 = e0.hp; d.frame(30);
+  assert.ok(e0.hp < after30, 'beam keeps burning');
+  ({ g, d } = setup('novaorb', 200));
+  d.until(() => !g.room.spells.some((s) => s.kind === 'orb'), 200);
+  assert.ok(g.room.enemies[0].hp < g.room.enemies[0].maxHp);
+});
+
+test('派手な常時の術：衛星・時の竜巻・旋剣が当たり、合成した銀河の渦・時計の長針は素材より強い', () => {
+  const dealt = (boons) => {
+    const { g, d, e } = arena(RustSoldier, 60);
+    e.hp = e.maxHp = 1e7; e.cool = 99;
+    g.player.setBoons(boons); g.run.fusionDeclined = ['galaxy', 'clockhand', 'gearwaltz'];
+    d.frame(60 * 10); g.modal = null;
+    return e.maxHp - e.hp;
+  };
+  for (const id of ['satellites', 'tornado', 'spinblade']) assert.ok(dealt([{ id, tier: 1 }]) > 0, id);
+  assert.ok(dealt([{ id: 'galaxy', tier: 1 }]) > dealt([{ id: 'satellites', tier: 2 }, { id: 'tornado', tier: 2 }]));
+  assert.ok(dealt([{ id: 'clockhand', tier: 1 }]) > dealt([{ id: 'spinblade', tier: 2 }, { id: 'orbit', tier: 2 }]));
+});
+
+test('激ムズ：構えた雑魚は正面の攻撃をパリィして跳ね返し、重撃なら崩せる。床が赤く光ったあとの揺れは跳べば当たらない', () => {
+  const g = newGame(72); g.meta.difficulty = 'nightmare'; g.startLoop(); g.modal = null;
+  assert.equal(g.run.diff.id, 'nightmare');
+  g.enterRoom(0, 1); g.modal = null;
+  const p = g.player; p.hp = p.maxHp = 1000;
+  const e = g.room.enemies.find((x) => x.gravity !== false) || g.room.enemies[0];
+  e.hp = e.maxHp = 1e5; e.face = -1; e.guardT = 0.8;
+  g.dealDamage(e, { base: 20, cat: 'combo', knock: 0, dir: 1 });
+  assert.equal(e.hp, e.maxHp, 'parried');
+  assert.ok(p.hp < p.maxHp, 'reflected damage');
+  e.guardT = 0.8; p.iframeT = 5;
+  g.dealDamage(e, { base: 20, cat: 'heavy', knock: 0, dir: 1, heavy: true, breaks: true });
+  assert.equal(e.guardT, 0, 'heavy breaks the guard');
+  // 床の揺れ
+  const d = new Driver(g);
+  d.frame(20); // パリィのヒットストップが明けるのを待つ
+  p.iframeT = 0; g.room.quake = { t: 0, next: 0.01, tell: 0 };
+  d.frame(2);
+  assert.ok(g.room.quake.tell > 0, 'tell starts');
+  p.y -= 200; p.vy = -50; p.onGround = false; // 空中にいる
+  const hp1 = p.hp;
+  for (let i = 0; i < 80; i++) { g.player.vy = Math.min(g.player.vy, -10); d.frame(1); if (!g.room.quake.tell) break; }
+  assert.equal(p.hp, hp1, 'airborne: no damage');
+});
+
+test('楔の枠：はじめは 2 つ、3 夜ごとに 1 つ増える（最大 6）', () => {
+  const m = newMeta(9);
+  assert.equal(m.slots, 2);
+  for (let i = 0; i < 3; i++) endLoop(m, { cause: 'death', floor: 1, boons: [] });
+  assert.equal(m.slots, 3);
+  for (let i = 0; i < 30; i++) endLoop(m, { cause: 'death', floor: 1, boons: [] });
+  assert.equal(m.slots, 6);
+});
+
+test('番号の入力：スティックを斜めに倒しても、強く倒した軸の向きだけが効く', () => {
+  const g = newGame(73); g.enterRoom(0, 1); g.modal = null;
+  g.openCode(); g.modal.t = 1;
+  const inp = new Input();
+  inp.padAxis = { x: 0.3, y: -0.9 }; // ほぼ上、少し右
+  inp.set('up', true, 'pad'); inp.set('right', true, 'pad'); inp.step();
+  g.updateModal(inp);
+  assert.equal(g.modal.pos, 0, 'did not move sideways');
+  assert.equal(g.modal.digits[0], 2, 'digit went up');
+});
+
+test('夜ごとの様相：夜が進むと天気・色・ひびが変わり、夜のはじめに一言が出る', () => {
+  const looks = [1, 2, 4, 6].map((loop) => nightLook({ loop, flags: {} }));
+  assert.equal(looks[0].weather, null);
+  assert.deepEqual(looks.slice(1).map((l) => l.weather), ['rain', 'ash', 'shards']);
+  assert.ok(looks[3].cracks > looks[1].cracks);
+  const g = newGame(74); g.meta.loop = 4; g.startLoop();
+  assert.ok(g.nightNote && g.nightNote.text.length > 0);
 });

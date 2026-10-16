@@ -60,7 +60,17 @@ export class Enemy {
     game.fx.text(ex, this.y - 14, 'かわす', '#9fd0ff', 10);
     game.fx.dust(ex, ey, 4);
   }
+  // 激ムズ：近づくと盾を構える（青く光る）。構えの間、正面からの攻撃をパリィして跳ね返す
+  tryGuard(game, dt) {
+    if (this.guardT > 0) { this.guardT -= dt; this.facePlayer(game.player); this.vx *= 0.8; return; }
+    this.guardCd = (this.guardCd ?? 1.5) - dt;
+    const calm = ['idle', 'chase', 'patrol', 'run', 'walk', 'approach'].includes(this.state);
+    if (this.guardCd <= 0 && calm && this.onGround && Math.abs(this.dx(game.player)) < 110 && Math.abs(this.dy(game.player)) < 50 && Math.random() < dt * 1.2) {
+      this.guardT = 0.9; this.guardCd = 4;
+    }
+  }
   update(game, dt) {
+    if (game.run && game.run.diff && game.run.diff.parry && !this.boss && !this.elite && this.gravity) this.tryGuard(game, dt);
     if (this.aoeDodge) this.tryDodgeAoe(game, dt);
     // 散開の陣形：仲間と固まらないように離れる
     if (this.spread && game.room) for (const o of game.room.enemies) if (o !== this && o.alive && Math.abs(cx(o) - cx(this)) < 44 && Math.abs(cy(o) - cy(this)) < 40) this.vx += sign(cx(this) - cx(o)) * 300 * dt;

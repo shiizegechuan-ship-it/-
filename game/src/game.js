@@ -3,7 +3,7 @@ import { DT, TILE, VIEW_W, VIEW_H, ZOOM, PLAYER as PC, DIFFICULTY } from './conf
 import { overlap, cx, cy, clamp, lerp, makeRng, sign } from './util.js';
 import { TileMap } from './tilemap.js';
 import { Player } from './player.js';
-import { makeEnemy, RustSoldier, GearKnight, Warden, BellGuard } from './enemies.js';
+import { makeEnemy, RustSoldier, GearKnight, Warden, BellGuard, Projectile } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
 import { castArt, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell, MELEE } from './arts.js';
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
@@ -12,6 +12,7 @@ import { NullSfx } from './audio.js';
 import { BOONS, rollOffer, rollRare, boonMax, PASSIVE_IDS, passiveWeight, readyFusions, countsForThreat } from './boons.js';
 import { expToNext, expFor, levelBonus, LEVEL } from './level.js';
 import { rewindGrid, lbRowAt } from './layout.js';
+import { nightLook } from './nightlook.js';
 import { LAYOUTS, FLOOR_NAMES, buildPlan, layoutRows, extraEnemyTypes } from './world.js';
 import {
   newMeta, serialize, deserialize, endLoop, learn, knows, hasWedge, addWedge, removeWedge, freeSlots,
@@ -132,6 +133,9 @@ export class Game {
     this.timeStopT = 0; this.slowT = 0; this.hitstop = 0;
     this.enterRoom(0, 0);
     const pr = dawnProgress(meta);
+    // 夜ごとの様相の一言（天気や塔の変化）
+    const note = nightLook(meta).note;
+    this.nightNote = note ? { text: note, t: 0 } : null;
     this.fx.setBanner(`第 ${meta.loop} 夜`, pr.next ? `夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}` : `終わらない夜　深さLv${this.run.scale.level}`, '#f2c14e', 2.6);
     if (meta.loop === 1 && !meta.flags.ending) this.openDialog([
       { who: '', text: 'あなたは時計塔の主「刻守」の弟子。この町は、同じ夜を繰り返している。' },
@@ -456,6 +460,8 @@ export class Game {
     this.updateEchoes(dt);
     this.handleDeaths();
     this.updatePickups(dt);
+    this.updateQuake(dt);
+    if (this.nightNote) this.nightNote.t += DT;
     if (this.hudPop) { this.hudPop.gold = Math.max(0, this.hudPop.gold - dt * 4); this.hudPop.exp = Math.max(0, this.hudPop.exp - dt * 4); }
     room.projectiles = room.projectiles.filter((x) => x.alive);
     this.updateItems(dt);
@@ -526,6 +532,24 @@ export class Game {
     if (e.hp <= e.maxHp * 0.35) dmg *= st.executeMul;
     let crit = false;
     let cat = info.cat;
+    // 激ムズ：構えた雑魚は正面からの攻撃をパリィして跳ね返す（重撃なら構えを崩せる。背後からは通る）
+    if (e.guardT > 0 && !info.echo && !info.spell && sign(info.dir) === -e.face) {
+      if (info.heavy || info.breaks) {
+        e.guardT = 0; if (e.setState) { e.setState('flinch'); e.stateT = -0.8; }
+        this.fx.text(cx(e), e.y - 30, '構えを崩した', '#5aa9e6', 14); this.sfx.play('guardBreak'); this.fx.shake(4, 0.15);
+      } else {
+        e.guardT = 0; e.guardCd = 3.5;
+        this.fx.text(cx(e), e.y - 30, 'パリィ！', '#5aa9e6', 15); this.fx.sparks(cx(e) - e.face * 10, cy(e), '#9fd0ff', 14, 300);
+        this.sfx.play('block'); this.hitstop = Math.max(this.hitstop, 6 / 60);
+        if (info.proj) { // 飛ぶ斬撃は跳ね返ってくる
+          const pr = new Projectile('bolt', cx(e) - 5, cy(e) - 5, -sign(info.dir) * 360, 0, 10); this.spawnProjectile(pr);
+        } else if (!p.invulnerable) { // 近接は弾かれて反撃を受ける
+          p.vx = -sign(info.dir) * 300;
+          this.damagePlayer(Math.round(8 * this.enemyDmgMul()), { fromX: cx(e) });
+        }
+        return { silent: true };
+      }
+    }
     // 範囲攻撃を躱している最中は術が当たらない
     if (info.spell && e.dodgeI > 0) { if (!e.missT || this.run.clock - e.missT > 0.4) { e.missT = this.run.clock; this.fx.text(cx(e), e.y - 22, 'MISS', '#9fd0ff', 11); } return { silent: true }; }
     const direct = !info.echo && !info.spell && !info.proj;
@@ -645,6 +669,26 @@ export class Game {
     if (c.n % 10 === 0 && this.player.stats.procs.secondhand) PROCS.secondhand(this, this.player.stats.procs.secondhand);
     if (c.n % 25 === 0) { this.fx.setBanner(`${c.n} HIT`, `与ダメージ +${Math.round(c.n * this.player.stats.comboPer * 100)}%`, '#ff9a3c', 0.9); this.sfx.play('charged'); }
   }
+  // ───────── 激ムズ：床全体が震える（赤く光ったら跳べ） ─────────
+  updateQuake(dt) {
+    const diff = this.run.diff, room = this.room, p = this.player;
+    if (!diff || !diff.quake || p.state === 'dead') return;
+    if (!room.enemies.some((e) => e.alive && !(e.boss && e.defeated))) { room.quake = null; return; }
+    const q = (room.quake ||= { t: 0, next: 7 + this.fx.rand() * 4, tell: 0 });
+    q.t += dt;
+    if (!q.tell && q.t >= q.next) { q.tell = 0.001; this.sfx.play('tellBig'); this.fx.shake(2, 1.0); }
+    if (q.tell) {
+      q.tell += dt;
+      if (q.tell >= 1.15) {
+        // 揺れの瞬間：床に立っていれば当たる（跳んでいれば、または回避の無敵なら当たらない）
+        this.fx.shake(10, 0.35); this.sfx.play('heavyHit'); this.fx.screenFlash('#ff4a4a', 0.2);
+        for (let i = 0; i < 12; i++) this.fx.dust(this.cam.x + this.fx.rand() * 640, Math.min(this.map.groundBelow(this.cam.x + 320, this.cam.y + 200), this.map.pxH), 2);
+        if (p.onGround && !p.invulnerable) { this.damagePlayer(Math.round(14 * this.enemyDmgMul()), { fromX: cx(p) - p.face }); p.vy = -280; }
+        q.tell = 0; q.t = 0; q.next = 10 + this.fx.rand() * 5;
+      }
+    }
+  }
+
   // ───────── 拾い物：経験値の粒（自動で主人公へ集まる）と金貨（触れて拾う） ─────────
   dropExp(n, x, y) {
     if (n <= 0) return;
@@ -1584,10 +1628,10 @@ export class Game {
       r.sel = clamp(r.sel, 0, opts.length - 1);
       // 2 列のボタン：↑↓ は行、←→ は列
       const mv = (d) => { const n = r.sel + d; if (n >= 0 && n < opts.length) { r.sel = n; this.sfx.play('select'); } };
-      if (input.pressed('up')) mv(-2);
-      if (input.pressed('down')) mv(2);
-      if (input.pressed('left') && r.sel % 2 === 1) mv(-1);
-      if (input.pressed('right') && r.sel % 2 === 0) mv(1);
+      if (this.menuPress(input, 'up')) mv(-2);
+      else if (this.menuPress(input, 'down')) mv(2);
+      else if (this.menuPress(input, 'left') && r.sel % 2 === 1) mv(-1);
+      else if (this.menuPress(input, 'right') && r.sel % 2 === 0) mv(1);
       if (input.pressed('confirm') || input.pressed('jump')) {
         const o = opts[r.sel];
         this.sfx.play('confirm');
@@ -1669,10 +1713,19 @@ export class Game {
     o.push({ id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}` });
     return o;
   }
+  // メニューの方向入力：スティックで斜めに倒れたときは、強く倒れている軸の向きだけを受け付ける
+  menuPress(input, dir) {
+    if (!input.pressed(dir)) return false;
+    const a = input.padAxis;
+    if (!a) return true;
+    const mx = Math.abs(a.x), my = Math.abs(a.y);
+    if (mx < 0.2 && my < 0.2) return true; // 十字キー・キーボード
+    return dir === 'left' || dir === 'right' ? mx >= my : my > mx;
+  }
   difficulty() { return DIFFICULTY[(this.meta && this.meta.difficulty) || this.settings.difficulty || 'normal'] || DIFFICULTY.normal; }
   // 難易度を切り替える（簡単→普通→難しい。セーブがあれば次の夜から反映）
   cycleDifficulty() {
-    const order = ['easy', 'normal', 'hard'];
+    const order = ['easy', 'normal', 'hard', 'nightmare'];
     const next = order[(order.indexOf(this.difficulty().id) + 1) % order.length];
     this.settings.difficulty = next;
     if (this.meta) { this.meta.difficulty = next; this.save(); }
@@ -1927,10 +1980,11 @@ export class Game {
         break;
       }
       case 'code': {
-        if (input.pressed('left')) { m.pos = (m.pos + 2) % 3; this.sfx.play('select'); }
-        if (input.pressed('right')) { m.pos = (m.pos + 1) % 3; this.sfx.play('select'); }
-        if (input.pressed('up')) { m.digits[m.pos] = m.digits[m.pos] % 9 + 1; this.sfx.play('tick'); }
-        if (input.pressed('down')) { m.digits[m.pos] = (m.digits[m.pos] + 7) % 9 + 1; this.sfx.play('tick'); }
+        // スティックは強く倒した向きだけを受け付ける（上下の操作が左右にずれないように）
+        if (this.menuPress(input, 'left')) { m.pos = (m.pos + 2) % 3; this.sfx.play('select'); }
+        else if (this.menuPress(input, 'right')) { m.pos = (m.pos + 1) % 3; this.sfx.play('select'); }
+        else if (this.menuPress(input, 'up')) { m.digits[m.pos] = m.digits[m.pos] % 9 + 1; this.sfx.play('tick'); }
+        else if (this.menuPress(input, 'down')) { m.digits[m.pos] = (m.digits[m.pos] + 7) % 9 + 1; this.sfx.play('tick'); }
         if (back) { this.modal = null; return; }
         if ((input.pressed('confirm') || input.pressed('jump')) && m.t > 0.15) {
           if (m.digits.join('') === this.meta.code.join('')) {

@@ -4,7 +4,7 @@ import { BOONS } from './boons.js';
 import { ARTIFACTS } from './artifacts.js';
 
 export const SAVE_VERSION = 1;
-export const MAX_SLOTS = 3;
+export const MAX_SLOTS = 6; // 楔の枠の上限（強化を持ち越せる数もこの枠で増える）
 export const GLEN_DEADLINE = 80; // 鍛冶屋が襲われる時刻（夜の経過秒）
 
 export const WEDGE_TARGETS = {
@@ -72,7 +72,7 @@ export function newMeta(seed = (Date.now() & 0x7fffffff)) {
     v: SAVE_VERSION,
     seed,
     loop: 1,
-    slots: 1,
+    slots: 2,
     wedges: [],
     knowledge: {}, // key -> 知った周回
     code: [r.int(1, 9), r.int(1, 9), r.int(1, 9)], // セーブ固定（周回では変わらない）
@@ -235,6 +235,8 @@ export function endLoop(m, run) {
   else if (!nextCounter && prevCounter) report.changed.push({ text: '刻守の対策が消えた', tone: 'blue' });
   m.loop++;
   m.flags.seenRewind = true;
+  // 夜を 3 つ越えるごとに楔の枠 +1
+  if ((m.loop - 1) % 3 === 0 && m.slots < MAX_SLOTS) { m.slots++; report.changed.push({ text: `楔の枠が1つ増えた（${m.loop - 1} 夜を越えた）`, tone: 'gold' }); }
   report.story = nightStory(m);
   const sc = enemyScale(m);
   report.changed.push({ text: `夜の深さ Lv${sc.level}：敵のHP ×${sc.hp.toFixed(2)}・攻撃 ×${sc.dmg.toFixed(2)}`, tone: 'risk' });

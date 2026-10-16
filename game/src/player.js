@@ -82,6 +82,7 @@ export class Player {
     if (this.frenzyT > 0) { this.frenzyT -= dt; if (this.frenzyT <= 0) this.frenzyN = 0; }
     if (this.saintT > 0) this.saintT -= dt;
     this.squash = approach(this.squash, 0, dt * 5);
+    if (this.flipT > 0) this.flipT -= dt; // 前転
     this.landedThisFrame = false;
 
     if (input.down('attack')) this.holdT += dt; else if (this.state !== 'charge') this.holdT = 0;
@@ -154,7 +155,7 @@ export class Player {
       }
       this.vy = -P.jumpVel;
       this.bufferT = 0; this.coyoteT = 0; this.onGround = false;
-      this.squash = 0.35;
+      this.squash = 0.35; this.flipT = 0.34;
       game.fx.jumpPuff(this.x + this.w / 2, this.y + this.h);
       game.sfx.play('jump');
       return true;
@@ -164,7 +165,7 @@ export class Player {
       this.airJumpsLeft--;
       this.vy = -P.airJumpVel;
       this.bufferT = 0;
-      this.squash = 0.3;
+      this.squash = 0.3; this.flipT = 0.34;
       game.fx.airJump(this.x + this.w / 2, this.y + this.h, this);
       game.sfx.play('airJump');
       return true;
