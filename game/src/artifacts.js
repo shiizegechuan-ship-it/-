@@ -30,14 +30,14 @@ export function applyArtifacts(s, arts) {
   const has = (id) => arts.includes(id);
   s.artifacts = arts.slice();
   s.dmgTaken = has('guardgear') ? 0.85 : 1;
-  s.goldMul = has('purse') ? 1.5 : 1;
+  s.goldMul = (s.goldMul || 1) * (has('purse') ? 1.5 : 1);
   s.healMul = has('vial') ? 1.4 : 1;
   s.extraAirJumps = has('springboots') ? 1 : 0;
   s.bellshard = has('bellshard');
   s.hpAdd = has('timeheart') ? 40 : 0;
   s.regen = has('timeheart') ? 0.005 : 0;
   s.twinfang = has('twinfang') ? 0.3 : 0;
-  s.passiveMul = has('starmap') ? 1.5 : 1;
+  s.passiveMul = (s.passiveMul || 1) * (has('starmap') ? 1.5 : 1);
   s.aegis = has('aegis');
   s.stormcrown = has('stormcrown');
   if (has('whetstone')) s.dmgMul *= 1.15;

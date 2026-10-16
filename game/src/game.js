@@ -9,7 +9,7 @@ import { castArt, castWarpSlash, updateSpells, updatePassives, PROCS, ACTIVE_ART
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
 import { Fx } from './fx.js';
 import { NullSfx } from './audio.js';
-import { BOONS, rollOffer, rollRare, boonMax, canForge, PASSIVE_IDS, passiveWeight, readyFusions, countsForThreat } from './boons.js';
+import { BOONS, LEGEND_IDS, rollOffer, rollRare, boonMax, canForge, PASSIVE_IDS, passiveWeight, readyFusions, countsForThreat } from './boons.js';
 import { expToNext, expFor, levelBonus, LEVEL } from './level.js';
 import { rewindGrid, lbRowAt } from './layout.js';
 import { nightLook } from './nightlook.js';
@@ -772,6 +772,9 @@ export class Game {
     if (n <= 0) return;
     this.run.gold += n;
     if (x != null) this.fx.text(x, y, `+${n}G`, '#ffd84a', 11);
+    // 黄金律：金貨を拾うたびにゲージと HP が少し戻る
+    const p = this.player;
+    if (p && p.stats.midas && p.state !== 'dead') { p.gauge = Math.min(PC.gaugeMax, p.gauge + 2); p.hp = Math.min(p.maxHp, p.hp + 1); }
     this.emit('gold', { n });
   }
   setupShrine() {
@@ -811,7 +814,11 @@ export class Game {
     const k = 1 + 0.25 * run.scale.level, f = run.fi;
     const price = (n) => Math.round(n * k);
     const stock = [];
-    for (const id of rollOffer(rng, this.player.boons, this.meta.unlocked, 2)) stock.push({ kind: 'boon', id, price: price(60 + 20 * f) });
+    // 稀少（ときどき）と伝説（ごくまれ）。上の階ほど出やすい
+    const owned = this.player.boons;
+    if (rng.next() < 0.05 + 0.04 * f) { const id = rng.shuffle(LEGEND_IDS.filter((x) => !owned.some((b) => b.id === x)))[0]; if (id) stock.push({ kind: 'boon', id, price: price(360 + 60 * f), tier: 'legend' }); }
+    if (rng.next() < 0.3 + 0.1 * f) { const id = rollRare(rng, owned, 1)[0]; if (id) stock.push({ kind: 'boon', id, price: price(180 + 40 * f), tier: 'rare' }); }
+    for (const id of rollOffer(rng, owned, this.meta.unlocked, 3)) stock.push({ kind: 'boon', id, price: price(60 + 20 * f) });
     stock.push({ kind: 'potion', size: 0.3, price: price(25) });
     stock.push({ kind: 'potion', size: 0.7, price: price(50) });
     const art = rng.next() < 0.35 ? rollArtifacts(rng, this.player.artifacts, 'normal', 1)[0] : null; // 店に並ぶのは 3 回に 1 回ほど
@@ -821,7 +828,7 @@ export class Game {
     return stock;
   }
   shopLabel(s) {
-    if (s.kind === 'boon') { const d = BOONS[s.id], own = this.player.boons.find((b) => b.id === s.id); return { name: `強化：${d.name}` + (own && d.max ? ` Lv${own.tier}→${own.tier + 1}` : ''), desc: d.desc(own ? own.tier + 1 : 1) }; }
+    if (s.kind === 'boon') { const d = BOONS[s.id], own = this.player.boons.find((b) => b.id === s.id); return { name: `${d.school === 'legend' ? '★伝説' : d.school === 'rare' ? '◆稀少' : '強化'}：${d.name}` + (own && d.max ? ` Lv${own.tier}→${own.tier + 1}` : ''), desc: d.desc(own ? own.tier + 1 : 1) }; }
     if (s.kind === 'potion') return { name: s.size > 0.5 ? '大きな回復薬' : '小さな回復薬', desc: `HP を最大HPの ${Math.round(s.size * 100)}% 回復する` };
     if (s.kind === 'artifact') return { name: `遺物：${ARTIFACTS[s.id].name}`, desc: 'アーティファクト：' + ARTIFACTS[s.id].desc };
     return { name: '黄金の鍵', desc: '次の扉の選択に「黄金の部屋」が加わる。強いアーティファクトを 1 つ選べる' };
@@ -838,7 +845,12 @@ export class Game {
     if (s.kind === 'artifact' && p.artifacts.includes(s.id)) { this.sfx.play('deny'); return; }
     run.gold -= s.price;
     s.sold = true;
-    if (s.kind === 'boon') this.grantBoon(s.id);
+    if (s.kind === 'boon') {
+      this.grantBoon(s.id);
+      const sc = BOONS[s.id].school;
+      if (sc === 'legend') { this.fx.setBanner(`伝説：${BOONS[s.id].name}`, BOONS[s.id].desc(1), '#ff7ae0', 2.4); this.fx.screenFlash('#ff7ae0', 0.4); this.fx.shake(6, 0.3); this.sfx.play('perfect'); this.fx.burst(cx(p), cy(p), '#ff7ae0', 40); }
+      else if (sc === 'rare') { this.fx.screenFlash('#ffd84a', 0.25); this.fx.burst(cx(p), cy(p), '#ffd84a', 24); }
+    }
     else if (s.kind === 'potion') { const amt = Math.round(p.maxHp * s.size * p.stats.healMul); p.hp = Math.min(p.maxHp, p.hp + amt); this.fx.text(cx(p), p.y - 20, `+${amt}`, '#5fd18b', 16); this.fx.ring(cx(p), cy(p), '#5fd18b', 40); }
     else if (s.kind === 'artifact') { p.addArtifact(s.id); this.fx.setBanner(ARTIFACTS[s.id].name, ARTIFACTS[s.id].desc, '#7fe0d0', 1.4); }
     else if (s.kind === 'key') { run.keys++; this.fx.setBanner('黄金の鍵', '次の扉の選択に「黄金の部屋」が加わる', '#ffd84a', 1.4); }
@@ -1105,6 +1117,12 @@ export class Game {
       if (e.boss) continue;
       this.run.kills++;
       this.run.killStacks += p.stats.killStack;
+      // 星喰らい：倒した敵の近くの敵 3 体へ流星
+      if (p.stats.stareater) {
+        const near = room.enemies.filter((o) => o.alive && o !== e && !(o.boss && o.defeated)).sort((a, b) => Math.hypot(cx(a) - cx(e), cy(a) - cy(e)) - Math.hypot(cx(b) - cx(e), cy(b) - cy(e))).slice(0, 3);
+        near.forEach((o, i) => room.spells.push(new Spell('star', cx(o), cy(o), { delay: 0.08 + i * 0.07, fall: 0.25, dmg: 70, track: o, from: { x: cx(e), y: e.y - 160 } })));
+        if (near.length) this.fx.ring(cx(e), cy(e), '#ff7ae0', 36, 0.3);
+      }
       this.addShards((e.elite ? 12 : 2) + Math.floor(this.run.scale.level / 2), cx(e), e.y - 20);
       this.dropExp(expFor(e, this.run.scale), cx(e), cy(e));
       this.dropGold(Math.round((GOLD[e.kind] || 5) * (1 + 0.25 * this.run.scale.level) * p.stats.goldMul), cx(e), cy(e));
@@ -2076,7 +2094,7 @@ export class Game {
   }
 }
 
-export const BOON_COLORS = { haste: '#5fd18b', stasis: '#5aa9e6', echo: '#b67cf0', risk: '#e35d5d', power: '#ff9a3c', arts: '#ff6ad5', rare: '#ffd84a' };
+export const BOON_COLORS = { haste: '#5fd18b', stasis: '#5aa9e6', echo: '#b67cf0', risk: '#e35d5d', power: '#ff9a3c', arts: '#ff6ad5', rare: '#ffd84a', legend: '#ff7ae0' };
 // 大きな数字を読みやすく（1,234 / 12.3万）
 export function fmtNum(n) {
   n = Math.round(n);

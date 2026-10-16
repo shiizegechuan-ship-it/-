@@ -948,3 +948,57 @@ test('時歪「刻閃」：後ろへ身をかわし、敵の数と同じ本数�
   assert.ok(foes.every((e, i) => e.hp < afterLines[i]), 'shatter cuts again');
   assert.ok(foes.every((e) => !e.alive || e.warp > 0 || Math.hypot(cx(e) - cx(p), cy(e) - cy(p)) >= 280), 'still slows time nearby');
 });
+
+test('店：強化が 3 つ並び、ときどき稀少、ごくまれに伝説の強化が並ぶ（上の階ほど出やすい）', () => {
+  let rare = 0, legend = 0, n = 0;
+  for (let s = 1; s <= 120; s++) {
+    const g = newGame(s * 17);
+    for (const fi of [0, 1]) {
+      g.run.fi = fi; const st = g.shopStock(); n++;
+      const tiers = st.filter((x) => x.kind === 'boon').map((x) => BOONS[x.id].school);
+      assert.ok(st.filter((x) => x.kind === 'boon' && !x.tier).length === 3);
+      assert.ok(tiers.filter((x) => x === 'rare').length <= 1 && tiers.filter((x) => x === 'legend').length <= 1);
+      if (tiers.includes('rare')) rare++;
+      if (tiers.includes('legend')) legend++;
+      const lg = st.find((x) => x.tier === 'legend'), rr = st.find((x) => x.tier === 'rare'), nb = st.find((x) => x.kind === 'boon' && !x.tier);
+      if (lg && rr) assert.ok(lg.price > rr.price && rr.price > nb.price);
+    }
+  }
+  assert.ok(rare / n > 0.2 && rare / n < 0.6, `rare ${rare}/${n}`);
+  assert.ok(legend > 0 && legend / n < 0.15, `legend ${legend}/${n}`);
+});
+
+test('伝説の強化：神速・時計塔の加護・黄金律・星喰らい・刻の支配者', () => {
+  const base = computeStats([]);
+  const gs = computeStats([{ id: 'godspeed', tier: 1 }]);
+  assert.ok(gs.comboSpeed >= base.comboSpeed * 1.39 && gs.moveMul >= 1.25 && gs.dodgeCdMul === 0);
+  const g = newGame(41); g.enterRoom(0, 1); g.modal = null;
+  const p = g.player; p.hp = p.maxHp = 1e6;
+  p.addArtifact('starmap'); p.setBoons([{ id: 'towerblessing', tier: 1 }]);
+  assert.equal(p.stats.passiveMul, 3, 'tower blessing stacks with the star map');
+  p.setBoons([{ id: 'midas', tier: 1 }]); p.gauge = 0; const hp = (p.hp = 100);
+  g.addGold(5);
+  assert.equal(p.stats.goldMul, 2); assert.equal(p.gauge, 2); assert.equal(p.hp, hp + 1);
+  // 星喰らい
+  p.setBoons([{ id: 'stareater', tier: 1 }]);
+  const foes = g.room.enemies.filter((e) => e.alive);
+  for (const e of foes.slice(1)) { e.hp = e.maxHp = 1e6; e.cool = 99; }
+  foes[0].hp = 0; foes[0].alive = false;
+  const d = new Driver(g); d.frame(40);
+  assert.ok(foes.slice(1).some((e) => e.hp < e.maxHp), 'meteors fall on nearby enemies');
+  // 刻の支配者
+  p.setBoons([{ id: 'chronarch', tier: 1 }]); p.gauge = 0;
+  d.until(() => g.room.spells.some((s) => s.kind === 'warpslash'), 60 * 12);
+  assert.ok(g.room.spells.some((s) => s.kind === 'warpslash'), 'kokusen fires by itself');
+  assert.equal(p.gauge >= 0, true);
+});
+
+test('店で伝説を買うと手に入り、鍛冶には並ばない', () => {
+  const g = newGame(42); g.enterRoom(0, 1); g.modal = null;
+  g.run.gold = 9999;
+  const m = { stock: [{ kind: 'boon', id: 'godspeed', price: 500, tier: 'legend' }], sel: 0 };
+  g.buyShop(m);
+  assert.ok(g.player.boons.some((b) => b.id === 'godspeed'));
+  assert.equal(g.run.gold, 9499);
+  assert.equal(canForge({ id: 'godspeed', tier: 1 }), false);
+});

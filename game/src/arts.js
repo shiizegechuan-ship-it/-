@@ -260,6 +260,7 @@ export function updateSpells(game, dt) {
         break;
       }
       case 'star': {
+        if (sp.track && sp.track.alive && !sp.boomed) { sp.x = cx(sp.track); sp.y = cy(sp.track); } // 星喰らいの流星は狙った敵を追う
         if (sp.t < sp.delay) break;
         const k = (sp.t - sp.delay) / sp.fall;
         if (k >= 1 && !sp.boomed) {
@@ -475,6 +476,11 @@ export function updatePassives(game, dt) {
   const p = game.player, pv = p.stats.passives;
   if (!pv || p.state === 'dead') return;
   const T = (p.passiveT ||= { orbitHit: {} });
+  // 刻の支配者（伝説）：10 秒ごとに刻閃が自動で走る
+  if (p.stats.chronarch && game.room.enemies.some((e) => e.alive && !(e.boss && e.defeated)) && !game.room.spells.some((s) => s.kind === 'warpslash')) {
+    T.chronarch = (T.chronarch || 0) + dt;
+    if (T.chronarch >= 10) { T.chronarch = 0; castWarpSlash(game); game.fx.text(cx(p), p.y - 26, '刻閃', '#ff7ae0', 16); game.sfx.play('skill'); }
+  }
   dt *= p.stats.passiveSpeed || 1; // 星の心臓：常時の術が速く回る
   const px = cx(p), py = cy(p);
   const owned = PASSIVE_IDS.filter((id) => pv[id]).length + FUSED_PASSIVES.filter((id) => pv[id]).length; // 合成した術は 2 種ぶん

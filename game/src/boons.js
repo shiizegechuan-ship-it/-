@@ -7,6 +7,7 @@ export const SCHOOLS = {
   power: { name: '火力', color: '#ff9a3c' },
   arts: { name: '術', color: '#ff6ad5' },
   rare: { name: '稀少', color: '#ffd84a' },
+  legend: { name: '伝説', color: '#ff7ae0' },
 };
 const pc = (n) => `${Math.round(n)}%`;
 
@@ -98,6 +99,12 @@ export const BOONS = {
   stormstep: { school: 'rare', name: '雷の歩法', desc: () => '回避するたび、近くの敵に雷が落ちる（60）' },
   lifesteal: { school: 'rare', name: '吸命の刃', desc: () => '直接攻撃の命中で、与えたダメージの3%だけHPが回復（1回につき最大HPの2%まで）' },
   eternal: { school: 'rare', name: '永劫の連撃', desc: () => 'コンボが時間で途切れなくなり、コンボ加算が2倍（被弾では途切れる）' },
+  // 伝説：行商人の店にごくまれに並ぶ。どれも戦い方が変わるほど強い
+  chronarch: { school: 'legend', name: '刻の支配者', desc: () => '10 秒ごとに、ゲージを使わず時歪・刻閃が自動で発動する（敵のいる部屋で）' },
+  godspeed: { school: 'legend', name: '神速', desc: () => '攻撃の速さ ×1.4、移動の速さ ×1.25、回避のクールタイムなし' },
+  stareater: { school: 'legend', name: '星喰らい', desc: () => '敵を倒すたび、近くの敵 3 体へ流星が降る（各70）' },
+  towerblessing: { school: 'legend', name: '時計塔の加護', desc: () => '常時の術のダメージ ×2、発動の速さ ×1.5' },
+  midas: { school: 'legend', name: '黄金律', desc: () => '敵から得る金貨 ×2。金貨を拾うたびに秒針ゲージ +2、HP +1' },
   wave: { school: 'rare', name: '斬撃波', desc: () => '地上の攻撃のたびに、前へ飛ぶ斬撃波が出る（30・貫通）' },
   // 床を攻める常時の術
   quakeline: { school: 'arts', max: 5, name: '地走り', desc: (t) => `[常時] 3秒ごとに足元から左右へ衝撃波が床を走る（${Math.round(18 * (1 + 0.4 * (t - 1)))}）` },
@@ -132,7 +139,7 @@ export function readyFusions(boons) {
 }
 export const passiveSynergy = (n) => 1 + 0.15 * Math.max(0, n - 1);
 for (const id of PASSIVE_IDS) { const d = BOONS[id].desc; BOONS[id].desc = (t) => d(t) + '（常時の術が多いほど強化）'; }
-export const boonMax = (id) => BOONS[id].max || (BOONS[id].school === 'rare' || BOONS[id].school === 'risk' ? 1 : 2);
+export const boonMax = (id) => BOONS[id].max || (BOONS[id].school === 'rare' || BOONS[id].school === 'risk' || BOONS[id].school === 'legend' ? 1 : 2);
 // 鍛冶で鍛えられるか：上限に達しておらず、鍛えると効果が実際に変わるものだけ
 export const canForge = (b) => (b.tier || 1) < boonMax(b.id) && BOONS[b.id].desc(b.tier || 1) !== BOONS[b.id].desc((b.tier || 1) + 1);
 // 鍛える前後の違いを「35%→50%」のように数字だけ並べて示す（文の形が違うときは前後の全文）
@@ -163,7 +170,7 @@ export const CROSS = [
 ];
 
 export function schoolCounts(boons) {
-  const c = { haste: 0, stasis: 0, echo: 0, risk: 0, power: 0, arts: 0, rare: 0 };
+  const c = { haste: 0, stasis: 0, echo: 0, risk: 0, power: 0, arts: 0, rare: 0, legend: 0 };
   for (const b of boons) c[BOONS[b.id].school]++;
   return c;
 }
@@ -182,7 +189,7 @@ export function computeStats(boons) {
     afterimageTime: t('afterimage') ? (t('afterimage') > 1 ? 0.8 : 0.6) : 0,
     afterimageMul: t('afterimage') ? (t('afterimage') > 1 ? 2.0 : 1.6) : 1,
     dodgeDistMul: t('gale') ? (t('gale') > 1 ? 1.5 : 1.35) : 1,
-    dodgeCdMul: t('gale') ? (t('gale') > 1 ? 0.55 : 0.7) : 1,
+    dodgeCdMul: t('godspeed') ? 0 : t('gale') ? (t('gale') > 1 ? 0.55 : 0.7) : 1,
     fourth: t('fourth'),
     fourthDmg: t('fourth') > 1 ? 38 : 26,
     perfectBonus: (t('keeneye') ? (t('keeneye') > 1 ? 8 : 5) : 0) + (t('inverted') ? 6 : 0),
@@ -199,8 +206,8 @@ export function computeStats(boons) {
     reverbDmg: t('reverb') ? (t('reverb') > 1 ? 40 : 25) : 0,
     resonateGauge: t('resonate') ? (t('resonate') > 1 ? 10 : 6) : 0,
     resonateHeal: t('resonate') ? (t('resonate') > 1 ? 2 : 1) : 0,
-    moveMul: counts.haste >= 2 ? 1.1 : 1,
-    comboSpeed: counts.haste >= 2 ? 1.15 : 1,
+    moveMul: (counts.haste >= 2 ? 1.1 : 1) * (t('godspeed') ? 1.25 : 1),
+    comboSpeed: (counts.haste >= 2 ? 1.15 : 1) * (t('godspeed') ? 1.4 : 1),
     // 剣の道
     swordqi: t('swordqi'), frenzy: t('frenzy'), zanshin: t('zanshin'), rangeMul: 1 + 0.15 * t('greatsword'), crusher: t('crusher'), chargeMul: 1 - 0.08 * t('crusher'), skyrend: t('skyrend'),
     swordsaint: t('swordsaint'), judgement: t('judgement'), thousand: t('thousand'),
@@ -210,7 +217,7 @@ export function computeStats(boons) {
     edgeMul: 1 + 0.2 * t('edge'),
     comboPer: (0.01 * (1 + t('comboheat')) + (t('thousand') ? 0.01 * (2 + t('thousand')) : 0)) * (t('eternal') ? 2 : 1),
     // 稀少
-    phoenix: !!t('phoenix'), passiveSpeed: t('starheart') ? 1.7 : 1, stormstep: !!t('stormstep'), lifesteal: t('lifesteal') ? 0.03 : 0, eternal: !!t('eternal'), wave: !!t('wave'),
+    phoenix: !!t('phoenix'), passiveSpeed: (t('starheart') ? 1.7 : 1) * (t('towerblessing') ? 1.5 : 1), passiveMul: t('towerblessing') ? 2 : 1, goldMul: t('midas') ? 2 : 1, midas: !!t('midas'), chronarch: !!t('chronarch'), stareater: !!t('stareater'), stormstep: !!t('stormstep'), lifesteal: t('lifesteal') ? 0.03 : 0, eternal: !!t('eternal'), wave: !!t('wave'),
     heavyMul: (1 + 0.4 * t('heavyart')) * (t('judgement') ? 2.5 + 0.5 * (t('judgement') - 1) : 1),
     critChance: 0.1 * t('crit') + (counts.power >= 2 ? 0.05 : 0) + (t('goldeye') ? 0.25 : 0) + (t('swordsaint') ? 0.3 + 0.05 * (t('swordsaint') - 1) : 0),
     critMul: 2 + 0.5 * t('critdmg') + (t('goldeye') ? 1 : 0),
@@ -260,6 +267,7 @@ export function rollOffer(rng, owned, unlockedSchools, n = 3) {
 
 // 稀少の候補（まだ持っていないものから 3 つ）
 export const RARE_IDS = Object.keys(BOONS).filter((id) => BOONS[id].school === 'rare');
+export const LEGEND_IDS = Object.keys(BOONS).filter((id) => BOONS[id].school === 'legend');
 export function rollRare(rng, owned, n = 3) {
   return rng.shuffle(RARE_IDS.filter((id) => !owned.some((b) => b.id === id))).slice(0, n);
 }

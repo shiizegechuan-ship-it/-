@@ -287,7 +287,7 @@ function drawBoonPick(ctx, game, m) {
 }
 
 function drawShop(ctx, game, m) {
-  const items = m.stock.map((s) => { const l = game.shopLabel(s); const can = !s.sold && game.run.gold >= s.price; return { label: l.name, color: s.sold ? '#5a5260' : s.kind === 'key' ? '#ffd84a' : s.kind === 'artifact' ? '#7fe0d0' : '#d8d0c4', right: s.sold ? '売り切れ' : `${s.price} G`, rightColor: s.sold ? '#5a5260' : can ? '#ffd84a' : '#8a6a7a', desc: l.desc }; });
+  const items = m.stock.map((s) => { const l = game.shopLabel(s); const can = !s.sold && game.run.gold >= s.price; return { label: l.name, color: s.sold ? '#5a5260' : s.tier === 'legend' ? '#ff7ae0' : s.tier === 'rare' ? '#ffd84a' : s.kind === 'key' ? '#ffd84a' : s.kind === 'artifact' ? '#7fe0d0' : '#d8d0c4', right: s.sold ? '売り切れ' : `${s.price} G`, rightColor: s.sold ? '#5a5260' : can ? '#ffd84a' : '#8a6a7a', desc: l.desc }; });
   drawLightbox(ctx, game, { title: '行商人の店', right: `● 金貨 ${game.run.gold}`, items, sel: m.sel, color: '#ffd84a', st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: game.touch ? 'タップで選択、もう一度タップで買う／枠の外で閉じる' : '↑↓ 選ぶ　Z 買う　C 閉じる' });
 }
 
