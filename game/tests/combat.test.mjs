@@ -112,7 +112,7 @@ test('強化「遅延の刃」＋「粉砕」：遅い敵への重撃が2倍', (
   assert.equal(before - e.hp, Math.round(40 * 2 * (1 + combo * 0.01)), 'heavy x2 on slowed (+combo bonus)');
 });
 
-test('時歪：ゲージを消費して周囲の敵を遅くする。不足時は不発', () => {
+test('時歪：ゲージを 75 消費して刻閃を放ち、周囲の敵を遅くする。不足時は不発', () => {
   const { g, d, e } = withEnemy(PendulumBat, 80);
   d.frame(1, ['skill']);
   assert.equal(e.warp, 0, 'no gauge -> no warp');
@@ -120,7 +120,7 @@ test('時歪：ゲージを消費して周囲の敵を遅くする。不足時�
   d.frame(1);
   d.frame(1, ['skill']);
   assert.ok(e.warp > 1.5);
-  assert.equal(g.player.gauge, 50);
+  assert.equal(g.player.gauge, 25);
 });
 
 test('砲台の弾は斬り落とせる', () => {

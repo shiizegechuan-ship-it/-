@@ -51,6 +51,9 @@ export class Player {
     const ratio = this.hp / this.maxHp;
     this.boons = boons;
     this.stats = applyArtifacts(computeStats(boons), this.artifacts || []);
+    // お供からの手助け（追い風・猫の目）
+    const cm = this.compMods;
+    if (cm) { this.stats.moveMul *= cm.moveMul; this.stats.dodgeCdMul *= cm.dodgeCdMul; this.stats.critChance += cm.critAdd; }
     this.maxHp = Math.round((this.baseMaxHp + this.stats.hpAdd) * this.stats.maxHpMul);
     this.hp = Math.max(1, Math.min(this.maxHp, Math.round(this.maxHp * ratio)));
   }

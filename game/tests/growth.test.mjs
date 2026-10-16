@@ -1022,9 +1022,94 @@ test('中ボスの護衛：歯車騎士と振り子の番人には小さな従�
     for (let i = 0; i < 60 * 8; i++) { d.frame(1); p.iframeT = 0; if (sq.some((e) => e.tell > 0.5)) told = true; }
     assert.ok(told && p.hp < p.maxHp, 'squires tell, then hit');
     lead.hp = 0; lead.alive = false;
-    d.frame(3);
+    d.frame(15); // 被弾のヒットストップが明けるまで
     assert.ok(sq.every((e) => !e.alive), 'squires collapse');
     d.frame(5);
     assert.ok(g.room.cleared, 'room cleared');
   }
 });
+
+// ───── お供 ─────
+import { makeCompanion as mkComp, COMPANIONS as COMPS, stageOf as stOf } from '../src/companion.js';
+function compArena(id, stage = 1, boons = []) {
+  const g = newGame(81); g.enterRoom(0, 1); g.modal = null;
+  const p = g.player; p.hp = p.maxHp = 1e6; p.setBoons(boons);
+  for (const e of g.room.enemies) { e.hp = e.maxHp = 1e6; e.cool = 99; e.x = p.x + 80 + Math.random() * 120; e.y = p.y + p.h - e.h; e.gravity = e.gravity !== false; }
+  g.comp = mkComp(id, p, stage);
+  return { g, p, d: new Driver(g), c: g.comp };
+}
+const dealtBy = (g) => g.room.enemies.reduce((a, e) => a + (e.maxHp - e.hp), 0);
+for (const id of Object.keys(COMPS)) {
+  test(`お供「${COMPS[id].name}」：自動で近くの敵を狙って攻撃し、段階が上がるほど技が増えて強くなる`, () => {
+    const res = [];
+    for (const st of [1, 2, 3]) {
+      const { g, d, c } = compArena(id, st);
+      const used = new Set();
+      for (let i = 0; i < 60 * 12; i++) { const before = c.cds.slice(); d.frame(1); c.cds.forEach((v, k) => { if (v > before[k] + 0.01) used.add(k); }); }
+      res.push(dealtBy(g));
+      assert.deepEqual([...used].sort(), [0, 1, 2].slice(0, st), `stage ${st} uses ${st} skills`);
+    }
+    assert.ok(res[0] > 0 && res[1] > res[0] * 1.5 && res[2] > res[1] * 1.3, `damage grows ${res.join(' / ')}`);
+  });
+}
+
+test('お供はレベル 5・10 で進化する（姿・技・主人公への手助けが変わる）', () => {
+  const g = newGame(82); g.meta.companion = 'neji'; g.startLoop(); g.modal = null;
+  const c = g.comp, p = g.player;
+  assert.equal(c.stage, 1);
+  const mv1 = p.stats.moveMul;
+  while (g.run.level < 5) g.gainExp(5);
+  assert.equal(c.stage, 2);
+  assert.ok(p.stats.moveMul > mv1, 'tailwind');
+  while (g.run.level < 10) g.gainExp(50);
+  assert.equal(c.stage, 3);
+  assert.ok(p.stats.dodgeCdMul < 1);
+  g.setCompanion('chiku');
+  assert.equal(g.comp.id, 'chiku'); assert.equal(g.comp.stage, 3, 'keeps the stage of the current level');
+  assert.ok(p.stats.critChance > 0.09);
+  assert.equal(stOf(4), 1); assert.equal(stOf(5), 2); assert.equal(stOf(10), 3);
+});
+
+test('ホタルは第 2 段階から主人公の HP を癒やす', () => {
+  const { g, p, d } = compArena('hotaru', 2);
+  p.hp = p.maxHp * 0.5; const h0 = p.hp;
+  d.frame(60 * 11);
+  assert.ok(p.hp > h0);
+});
+
+test('絆の強化：主人公からお供へ（絆の糸・早駆け・共鳴の印）、お供から主人公へ（守りの羽・癒しの羽音・鼓舞）', () => {
+  const a = compArena('hotaru', 1); a.d.frame(60 * 8);
+  const b = compArena('hotaru', 1, [{ id: 'kizuna', tier: 3 }, { id: 'hayagake', tier: 3 }]); b.d.frame(60 * 8);
+  assert.ok(dealtBy(b.g) > dealtBy(a.g) * 1.8, 'hero -> companion buffs');
+  // 共鳴の印
+  const r = compArena('hotaru', 1, [{ id: 'kyomei', tier: 3 }]); r.c.cds = [5, 5, 5];
+  const e = r.g.room.enemies[0]; r.p.face = 1; e.x = r.p.x + 20; e.y = r.p.y + r.p.h - e.h;
+  r.d.frame(1, ['attack']); r.d.frame(10);
+  assert.ok(r.c.cds[0] < 5 - 11 / 60 - 0.1, 'resonance shortens cooldowns');
+  // 守りの羽
+  const s = compArena('neji', 1, [{ id: 'mamori', tier: 3 }]);
+  s.g.room.enemies.forEach((x) => { x.alive = false; x.handled = true; });
+  s.d.frame(60 * 7);
+  assert.ok(s.p.compShield, 'shield is up');
+  const hp = s.p.hp; s.g.damagePlayer(20, { fromX: s.p.x });
+  assert.equal(hp - s.p.hp, 10, 'halved'); assert.equal(s.p.compShield, false);
+  // 癒しの羽音・鼓舞：お供が倒す
+  const k = compArena('neji', 1, [{ id: 'iyashi', tier: 3 }, { id: 'kobu', tier: 3 }]);
+  k.p.hp = 1000; k.p.maxHp = 1e6;
+  for (const x of k.g.room.enemies) { x.hp = x.maxHp = 1; }
+  k.d.frame(60 * 4);
+  assert.ok(k.p.hp > 1000, 'heal on companion kill');
+  assert.ok(k.p.rallyT > 0 || k.g.room.enemies.every((x) => !x.alive), 'rally');
+});
+
+test('お供を選ぶ：中断メニューから替えられ、夜をまたいで覚えている', () => {
+  const g = newGame(83); g.startLoop(); g.modal = null;
+  g.openPause(); const opts = g.pauseOptions();
+  assert.ok(opts.some((o) => o.id === 'companion'));
+  g.openCompanionPick(); g.modal.t = 1; g.modal.sel = COMP_IDS_T.indexOf('chiku');
+  const inp = new Input(); inp.set('confirm', true); inp.step(); g.updateModal(inp);
+  assert.equal(g.meta.companion, 'chiku'); assert.equal(g.comp.id, 'chiku');
+  g.endRun('death'); g.startLoop();
+  assert.equal(g.comp.id, 'chiku'); assert.equal(g.comp.stage, 1);
+});
+import { COMPANION_IDS as COMP_IDS_T } from '../src/companion.js';

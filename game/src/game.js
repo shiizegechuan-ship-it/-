@@ -5,6 +5,7 @@ import { TileMap } from './tilemap.js';
 import { Player } from './player.js';
 import { makeEnemy, RustSoldier, GearKnight, Warden, Squire, Projectile } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
+import { COMPANIONS, COMPANION_IDS, makeCompanion, updateCompanion, onHeroHit, stageOf, companionMods } from './companion.js';
 import { castArt, castWarpSlash, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell, MELEE } from './arts.js';
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
 import { Fx } from './fx.js';
@@ -126,6 +127,7 @@ export class Game {
     this.player.baseMaxHp = PC.maxHp + 15 * upLv(meta, 'hp');
     this.player.metaAtk = 1 + 0.1 * upLv(meta, 'atk');
     this.player.artifacts = [...(meta.artifacts || [])]; // 持ち越したアーティファクト
+    this.player.compMods = companionMods(meta.companion, 1);
     this.player.setBoons(wedgedBoons);
     this.player.hp = this.player.maxHp;
     this.player.gauge = Math.min(PC.gaugeMax, 20 * upLv(meta, 'gauge'));
@@ -135,6 +137,7 @@ export class Game {
     this.fx.clear();
     this.timeStopT = 0; this.slowT = 0; this.hitstop = 0;
     this.enterRoom(0, 0);
+    this.comp = meta.companion && COMPANIONS[meta.companion] ? makeCompanion(meta.companion, this.player, 1) : null;
     const pr = dawnProgress(meta);
     // 夜ごとの様相の一言（天気や塔の変化）
     const note = nightLook(meta).note;
@@ -146,6 +149,7 @@ export class Game {
       { who: '', text: '時戻しの鐘は禁忌の技。鳴らすたびに、鳴らした者の命を一夜ぶん削る。このままでは、師は朝を待たずに尽きてしまう。' },
       { who: '', text: '目的は「夜明けを迎える」こと。師を倒して鐘を止めても、夜は戻る。師が命を削ってまで夜を止める理由を探そう。', note: '進み具合は 記録帳（Tab）の「夜明け」で確認できる' },
       { who: '', text: '攻撃を当てると秒針ゲージがたまる。V（術ボタン）でゲージを消費して、装着した術を放つ。術がまだなければ「時歪・刻閃」――身をかわして時を止め、敵の数だけ白い斬撃を走らせる。', note: '術は強化の「術」系統で手に入る' },
+      { who: '', text: `あなたのそばには、小さなお供「${COMPANIONS[meta.companion] ? COMPANIONS[meta.companion].name : 'ホタル'}」がいる。近くの敵を自動で攻撃し、あなたのレベルが 5・10 に上がると進化する。`, note: 'お供は 中断メニュー・巻き戻り画面で 3 匹から選び替えられる' },
       { who: '', text: '倒れても、知ったことと、楔を打ったものは次の夜に残る。' },
     ]);
     this.save();
@@ -460,6 +464,8 @@ export class Game {
     for (const pr of room.projectiles) { updateHoming(pr, this); pr.update(this, this.timeStopT > 0 && !pr.homing ? dt * 0.3 : dt); }
     this.resolveProjectiles();
     updatePassives(this, dt);
+    updateCompanion(this, dt);
+    if (this.comp && this.comp.announce && !this.modal && !this.run.pendingRare) this.announceEvolution();
     updateSpells(this, dt);
     if (p.onGround) p.airHits = 0;
     this.updateEchoes(dt);
@@ -505,6 +511,7 @@ export class Game {
       const dir = a.def.spin || a.def.dir ? sign(cx(e) - cx(p)) || p.face : p.face;
       const info = { base: a.def.dmg, cat: a.def.cat, knock: a.def.knock * p.stats.rangeMul, dir, stop: a.def.stop, breaks: !!a.def.breaks, shake: a.def.shake || 0, heavy: a.name === 'heavy', parry: !!a.def.parry, lift: a.def.lift || 0 };
       this.dealDamage(e, info);
+      onHeroHit(this);
       // 残心：連撃の 3 段目以降の命中に、遅れて十字の追撃
       if (p.stats.zanshin && (a.name === 'combo3' || a.name === 'combo4')) MELEE.cross(this, e, p.stats.zanshin);
       // 双牙：もう一度当たる
@@ -531,7 +538,7 @@ export class Game {
 
   dealDamage(e, info) {
     const p = this.player, st = p.stats, run = this.run;
-    let dmg = info.base * st.dmgMul * st.edgeMul * (p.metaAtk || 1) * (1 + run.killStacks) * levelBonus(run.level || 1).atk;
+    let dmg = (p.rallyT > 0 && !info.companion ? 1 + (p.rallyMul || 0) : 1) * info.base * st.dmgMul * st.edgeMul * (p.metaAtk || 1) * (1 + run.killStacks) * levelBonus(run.level || 1).atk;
     // コンボ加算：つないだ数だけ与ダメージが増える
     dmg *= 1 + this.combo.n * st.comboPer;
     if (info.heavy) dmg *= st.heavyMul;
@@ -909,6 +916,35 @@ export class Game {
       this.onLevelUp();
     }
   }
+  evolveCompanion(stage) {
+    const c = this.comp, p = this.player, def = COMPANIONS[c.id];
+    c.stage = stage; c.pop = 1.2;
+    p.compMods = companionMods(c.id, stage); p.setBoons(p.boons);
+    c.announce = stage; // 進化の知らせは、強化を選ぶ画面などが閉じてから
+    this.emit('companionEvolve', { id: c.id, stage });
+  }
+  announceEvolution() {
+    const c = this.comp, def = COMPANIONS[c.id], stage = c.announce;
+    c.announce = 0; c.pop = 1.2;
+    const newSkill = def.skills[stage - 1].names[stage - 1];
+    this.fx.setBanner(`${def.name}が「${def.forms[stage - 1]}」に進化した！`, `新しい技：${newSkill}　手助け：${def.buff.name}`, def.color, 2.4);
+    this.fx.ring(c.x, c.y, def.color, 50, 0.5); this.fx.ring(c.x, c.y, '#ffffff', 30, 0.35);
+    this.fx.sparks(c.x, c.y, def.color, 24, 260); this.fx.screenFlash(def.color, 0.25);
+    this.sfx.play('perfect');
+  }
+  // お供を替える（その場で、今のレベルの段階のまま）
+  setCompanion(id) {
+    this.meta.companion = id; this.save();
+    if (this.scene === 'play' && this.player && this.run) {
+      const st = stageOf(this.run.level || 1);
+      this.comp = makeCompanion(id, this.player, st);
+      this.player.compMods = companionMods(id, st); this.player.setBoons(this.player.boons);
+      this.fx.ring(this.comp.x, this.comp.y, COMPANIONS[id].color, 30, 0.4);
+    }
+  }
+  openCompanionPick() {
+    this.modal = { type: 'companion', list: COMPANION_IDS, sel: Math.max(0, COMPANION_IDS.indexOf(this.meta.companion)), t: 0 };
+  }
   onLevelUp() {
     const run = this.run, p = this.player;
     // 最大HPを伸ばし、少し回復
@@ -922,6 +958,9 @@ export class Game {
     this.fx.text(cx(p), p.y - 30, `Lv ${run.level}！`, '#a8f07a', 20);
     this.fx.setBanner(`レベル ${run.level}`, `最大HP +${LEVEL.hpPer}・攻撃 +${Math.round(LEVEL.atkPer * 100)}%・会心 +${LEVEL.critPer * 100}%` + (rare ? '　稀少の強化を選べる！' : ''), '#a8f07a', 1.4);
     this.sfx.play('charged');
+    // お供の進化（Lv5・Lv10）
+    const c = this.comp;
+    if (c && stageOf(run.level) > c.stage) this.evolveCompanion(stageOf(run.level));
     this.emit('levelUp', { level: run.level });
   }
   openRarePick() {
@@ -1034,6 +1073,7 @@ export class Game {
     if (p.state === 'dead') return;
     if (!pit && p.invulnerable) return;
     if (!pit) dmg = Math.max(1, Math.round(dmg * (p.stats.dmgTaken || 1))); // 守りの歯車
+    if (!pit && p.compShield) { p.compShield = false; dmg = Math.max(1, Math.round(dmg * 0.5)); this.fx.text(cx(p), p.y - 34, '守りの羽', '#9fe3ff', 11); this.fx.ring(cx(p), cy(p), '#9fe3ff', 30, 0.3); }
     p.hurt(dmg, fromX ?? cx(p), pit ? 0 : knock);
     // 吹き飛ばし：白い衝撃の輪と、飛ばされる向きの風切り
     if (knock && p.state === 'hurt') { this.fx.ring(cx(p), cy(p), '#ffffff', 40, 0.3); this.fx.text(cx(p), p.y - 24, '吹き飛ばされた', '#ffd0a0', 11); this.fx.shake(8, 0.25); }
@@ -1672,6 +1712,7 @@ export class Game {
     const wedgedIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
     if (freeSlots(m) > 0 && lastBoons.some((b) => !wedgedIds.has(b.id))) opts.push({ id: 'wedgeBoon', label: '最後に掴んだ強化に楔を打つ' });
     if (m.wedges.length) opts.push({ id: 'pull', label: '楔を抜く' });
+    opts.push({ id: 'companion', label: `お供を替える（${COMPANIONS[m.companion] ? COMPANIONS[m.companion].name : 'なし'}）` });
     opts.push({ id: 'journal', label: '記録帳' });
     return opts;
   }
@@ -1699,6 +1740,7 @@ export class Game {
         else if (o.id === 'upgrade') { r.mode = 'upgrade'; r.sub = 0; r.scroll = 0; }
         else if (o.id === 'inherit') { r.mode = 'inherit'; r.sub = 0; r.scroll = 0; }
         else if (o.id === 'journal') this.openJournal();
+        else if (o.id === 'companion') this.openCompanionPick();
       }
     } else {
       if (r.mode === 'upgrade' || r.mode === 'inherit') { this.updateRewindShop(input, r); return; }
@@ -1876,6 +1918,7 @@ export class Game {
         return false;
       }
       case 'pause': { const i = row(214, 32, this.pauseOptions().length, 28); if (i < 0) return false; m.sel = i; return true; }
+      case 'companion':
       case 'forge': {
         const i = lbRowAt(m.list.length, m.sel, x, y, m);
         if (i === -2) { this.modal = null; return false; }
@@ -2020,6 +2063,16 @@ export class Game {
         }
         break;
       }
+      case 'companion': {
+        if (input.pressed('up')) { m.sel = (m.sel + m.list.length - 1) % m.list.length; this.sfx.play('select'); }
+        if (input.pressed('down')) { m.sel = (m.sel + 1) % m.list.length; this.sfx.play('select'); }
+        if (back) { this.modal = null; return; }
+        if (ok && m.t > 0.15) {
+          this.modal = null; this.setCompanion(m.list[m.sel]); this.sfx.play('confirm');
+          input.consume('attack'); input.consume('jump');
+        }
+        break;
+      }
       case 'forge': {
         if (input.pressed('up')) { m.sel = (m.sel + m.list.length - 1) % m.list.length; this.sfx.play('select'); }
         if (input.pressed('down')) { m.sel = (m.sel + 1) % m.list.length; this.sfx.play('select'); }
@@ -2066,6 +2119,7 @@ export class Game {
           const o = opts[m.sel];
           if (o.id === 'resume') this.modal = null;
           else if (o.id === 'journal') this.openJournal();
+          else if (o.id === 'companion') this.openCompanionPick();
           else if (o.id === 'shake') this.settings.shake = !this.settings.shake;
           else if (o.id === 'diff') this.cycleDifficulty();
           else if (o.id === 'vol') { this.settings.volume = (Math.round(this.settings.volume * 10) + 2) % 12 / 10; this.sfx.setVolume(this.settings.volume); }
@@ -2089,6 +2143,7 @@ export class Game {
     return [
       { id: 'resume', label: '再開' },
       { id: 'journal', label: '記録帳' },
+      { id: 'companion', label: `お供：${COMPANIONS[this.meta.companion] ? COMPANIONS[this.meta.companion].name : 'なし'}（替える）` },
       { id: 'diff', label: `難易度：${this.difficulty().name}（次の夜から）` },
       { id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}` },
       { id: 'vol', label: `音量：${Math.round(this.settings.volume * 10)}` },

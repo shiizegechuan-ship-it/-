@@ -8,6 +8,7 @@ export const SCHOOLS = {
   arts: { name: '術', color: '#ff6ad5' },
   rare: { name: '稀少', color: '#ffd84a' },
   legend: { name: '伝説', color: '#ff7ae0' },
+  bond: { name: '絆', color: '#7fe0b0' },
 };
 const pc = (n) => `${Math.round(n)}%`;
 
@@ -99,6 +100,13 @@ export const BOONS = {
   stormstep: { school: 'rare', name: '雷の歩法', desc: () => '回避するたび、近くの敵に雷が落ちる（60）' },
   lifesteal: { school: 'rare', name: '吸命の刃', desc: () => '直接攻撃の命中で、与えたダメージの3%だけHPが回復（1回につき最大HPの2%まで）' },
   eternal: { school: 'rare', name: '永劫の連撃', desc: () => 'コンボが時間で途切れなくなり、コンボ加算が2倍（被弾では途切れる）' },
+  // 絆：お供と主人公を結ぶ強化。上の 3 つは主人公からお供へ、下の 3 つはお供から主人公へ
+  kizuna: { school: 'bond', max: 3, name: '絆の糸', desc: (t) => `[絆] お供の与ダメージ +${30 * t}%` },
+  hayagake: { school: 'bond', max: 3, name: '早駆け', desc: (t) => `[絆] お供の技の待ち時間 -${12 * t}%` },
+  kyomei: { school: 'bond', max: 3, name: '共鳴の印', desc: (t) => `[絆] 主人公の直接攻撃が当たるたび、お供の技の待ち時間が ${(0.08 * t).toFixed(2)} 秒縮む` },
+  mamori: { school: 'bond', max: 3, name: '守りの羽', desc: (t) => `[絆] ${12 - 2 * t} 秒ごとに、お供が主人公へ守りの羽をかける（次の被弾を半分に）` },
+  iyashi: { school: 'bond', max: 3, name: '癒しの羽音', desc: (t) => `[絆] お供が敵を倒すたび、主人公の HP +${3 * t}` },
+  kobu: { school: 'bond', max: 3, name: '鼓舞', desc: (t) => `[絆] お供が敵を倒すと、5 秒間 主人公の与ダメージ +${8 * t}%` },
   // 伝説：行商人の店にごくまれに並ぶ。どれも戦い方が変わるほど強い
   chronarch: { school: 'legend', name: '刻の支配者', desc: () => '10 秒ごとに、ゲージを使わず時歪・刻閃が自動で発動する（敵のいる部屋で）' },
   godspeed: { school: 'legend', name: '神速', desc: () => '攻撃の速さ ×1.4、移動の速さ ×1.25、回避のクールタイムなし' },
@@ -160,6 +168,7 @@ export const RESONANCE = {
   echo: '残響の威力 +25%',
   power: '会心率 +5%',
   arts: '命中時の秒針ゲージ +50%',
+  bond: 'お供の与ダメージ +20%',
 };
 // 系統をまたぐ相乗効果（説明用。効果自体は個別の強化の組み合わせで自然に起きるものも含む）
 export const CROSS = [
@@ -170,7 +179,7 @@ export const CROSS = [
 ];
 
 export function schoolCounts(boons) {
-  const c = { haste: 0, stasis: 0, echo: 0, risk: 0, power: 0, arts: 0, rare: 0, legend: 0 };
+  const c = { haste: 0, stasis: 0, echo: 0, risk: 0, power: 0, arts: 0, rare: 0, legend: 0, bond: 0 };
   for (const b of boons) c[BOONS[b.id].school]++;
   return c;
 }
@@ -217,7 +226,8 @@ export function computeStats(boons) {
     edgeMul: 1 + 0.2 * t('edge'),
     comboPer: (0.01 * (1 + t('comboheat')) + (t('thousand') ? 0.01 * (2 + t('thousand')) : 0)) * (t('eternal') ? 2 : 1),
     // 稀少
-    phoenix: !!t('phoenix'), passiveSpeed: (t('starheart') ? 1.7 : 1) * (t('towerblessing') ? 1.5 : 1), passiveMul: t('towerblessing') ? 2 : 1, goldMul: t('midas') ? 2 : 1, midas: !!t('midas'), chronarch: !!t('chronarch'), stareater: !!t('stareater'), stormstep: !!t('stormstep'), lifesteal: t('lifesteal') ? 0.03 : 0, eternal: !!t('eternal'), wave: !!t('wave'),
+    phoenix: !!t('phoenix'), compDmg: (1 + 0.3 * t('kizuna')) * (counts.bond >= 2 ? 1.2 : 1), compCd: 1 - 0.12 * t('hayagake'), compResonate: 0.08 * t('kyomei'), compShield: t('mamori') ? 12 - 2 * t('mamori') : 0, compHealKill: 3 * t('iyashi'), compRally: 0.08 * t('kobu'),
+    passiveSpeed: (t('starheart') ? 1.7 : 1) * (t('towerblessing') ? 1.5 : 1), passiveMul: t('towerblessing') ? 2 : 1, goldMul: t('midas') ? 2 : 1, midas: !!t('midas'), chronarch: !!t('chronarch'), stareater: !!t('stareater'), stormstep: !!t('stormstep'), lifesteal: t('lifesteal') ? 0.03 : 0, eternal: !!t('eternal'), wave: !!t('wave'),
     heavyMul: (1 + 0.4 * t('heavyart')) * (t('judgement') ? 2.5 + 0.5 * (t('judgement') - 1) : 1),
     critChance: 0.1 * t('crit') + (counts.power >= 2 ? 0.05 : 0) + (t('goldeye') ? 0.25 : 0) + (t('swordsaint') ? 0.3 + 0.05 * (t('swordsaint') - 1) : 0),
     critMul: 2 + 0.5 * t('critdmg') + (t('goldeye') ? 1 : 0),

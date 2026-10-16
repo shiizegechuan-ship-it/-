@@ -54,7 +54,7 @@ function strike(game, sp, e, base, extra = {}) {
 // ───────── 時歪の必殺技「刻閃（こくせん）」 ─────────
 // 回避で身をかわしたあと、部屋の敵の数と同じ本数の白い直線の斬撃を、画面外から画面外へ超高速で続けて走らせる。
 // 線はそれぞれ 1 体の敵を貫く向きに引かれ、線上の敵すべてに当たる。最後に全ての線が砕けて、もう一度斬れる
-export const WARP_SLASH = { start: 0.3, every: 0.055, dmg: 24, shatter: 0.5, len: 1400 };
+export const WARP_SLASH = { start: 0.3, every: 0.055, dmg: 18, shatter: 0.5, len: 1400 };
 export function castWarpSlash(game) {
   const p = game.player, rng = game.fx;
   const foes = game.room.enemies.filter((e) => e.alive && !(e.boss && e.defeated) && !e.invuln);

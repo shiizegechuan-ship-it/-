@@ -1,6 +1,7 @@
 // HUD・メニュー・巻き戻り画面。装飾より可読性を優先する。
 import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC } from './config.js';
 import { clamp } from './util.js';
+import { COMPANIONS, stageOf } from './companion.js';
 import { BOONS, forgeDiff, SCHOOLS, RESONANCE, synergyHints, schoolCounts } from './boons.js';
 import { ACTIVE_ARTS } from './arts.js';
 import { ARTIFACTS, ARTIFACT_COLOR } from './artifacts.js';
@@ -155,7 +156,13 @@ export function drawHud(ctx, game) {
   // 金貨・鍵（その夜だけ）・アーティファクト（持ち越し）
   const gp = game.hudPop ? game.hudPop.gold : 0;
   text(ctx, `● 金貨 ${run.gold || 0}` + (run.keys ? `　黄金の鍵 ×${run.keys}` : ''), 22, 116, { size: 12 + Math.round(gp * 4), color: gp > 0 ? '#fff6c0' : '#ffd84a' });
-  (p.artifacts || []).forEach((id, i) => { const a = ARTIFACTS[id]; text(ctx, '◆ ' + a.name, 22, 134 + i * 15, { size: 11, color: ARTIFACT_COLOR[a.rarity] }); });
+  // お供（段階は ★ の数）
+  const comp = game.comp;
+  if (comp) { const d = COMPANIONS[comp.id]; text(ctx, `✦ ${d.forms[comp.stage - 1]}　${'★'.repeat(comp.stage)}${'☆'.repeat(3 - comp.stage)}` + (comp.stage < 3 ? `（Lv${[0, 5, 10][comp.stage]}で進化）` : ''), 22, 134, { size: 11, color: d.color }); }
+  // アーティファクト（持ち越すので多くなったら数だけ）
+  const arts = p.artifacts || [];
+  if (arts.length > 4) text(ctx, `◆ アーティファクト ${arts.length} 個`, 22, 152, { size: 11, color: ARTIFACT_COLOR.normal });
+  else arts.forEach((id, i) => { const a = ARTIFACTS[id]; text(ctx, '◆ ' + a.name, 22, 152 + i * 15, { size: 11, color: ARTIFACT_COLOR[a.rarity] }); });
   // コンボ
   const cb = game.combo;
   if (cb && cb.n >= 2) {
@@ -218,6 +225,7 @@ export function drawModal(ctx, game) {
   ctx.fillStyle = 'rgba(5,4,8,0.7)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   if (m.type === 'boon') drawBoonPick(ctx, game, m);
   if (m.type === 'forge') drawForge(ctx, game, m);
+  if (m.type === 'companion') drawCompanionPick(ctx, game, m);
   if (m.type === 'shop') drawShop(ctx, game, m);
   if (m.type === 'artifact') drawArtifactPick(ctx, game, m);
   if (m.type === 'fusion') drawFusion(ctx, game, m);
@@ -343,6 +351,11 @@ function drawArtifactPick(ctx, game, m) {
     ctx.globalAlpha = 1;
   });
   text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定', VIEW_W / 2, 412, { size: 12, align: 'center', color: C.muted });
+}
+
+function drawCompanionPick(ctx, game, m) {
+  const items = m.list.map((id) => { const d = COMPANIONS[id]; return { label: `${d.name}（${d.forms.join(' → ')}）`, right: id === game.meta.companion ? '連れている' : '', rightColor: d.color, color: d.color, desc: d.desc + ' 技：' + d.skills.map((s) => s.names.filter(Boolean).join('→')).join('／') + '。手助け：' + d.buff.name }; });
+  drawLightbox(ctx, game, { title: 'お供を選ぶ ― Lv5・Lv10 で進化する', items, sel: m.sel, color: '#7fe0b0', st: m, desc: items[m.sel] ? items[m.sel].desc : '' });
 }
 
 function drawForge(ctx, game, m) {

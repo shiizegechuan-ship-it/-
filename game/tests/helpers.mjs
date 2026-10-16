@@ -31,6 +31,7 @@ export function newGame(seed = 777, storage = memStorage()) {
   const g = new Game({ deterministicFx: true, storage });
   g.newGame(seed);
   g.modal = null; // 最初の夜の目的説明を閉じる
+  g.comp = null; // お供は、お供のテストでだけ連れる（ダメージの数値を確かめるテストを乱さないように）
   return g;
 }
 
@@ -38,7 +39,7 @@ export function newGame(seed = 777, storage = memStorage()) {
 export function sandbox(rows) {
   const g = new Game({ deterministicFx: true });
   g.newGame(1);
-  g.modal = null;
+  g.modal = null; g.comp = null;
   g.map = new TileMap(rows);
   g.room.enemies = []; g.room.items = []; g.room.projectiles = []; g.room.cleared = true;
   const P = g.map.markers.find((m) => m.c === 'P');

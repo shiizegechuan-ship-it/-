@@ -41,7 +41,7 @@ export const PLAYER = {
   gaugeMax: 100,
   gaugePerHit: 6,
   gaugePerfect: 30,
-  skillCost: 50,
+  skillCost: 75,
   skillRadius: 280,
   skillTime: 2.0,
 };
@@ -75,7 +75,7 @@ export const DIFFICULTY = {
 };
   // 激ムズ：攻撃までの間隔がさらに短く、雑魚は構えて主人公の攻撃をパリィして跳ね返す（重撃か背後なら通る）。
   // ときどき床全体が震える（赤く光ったら跳べば当たらない）
-DIFFICULTY.nightmare = { id: 'nightmare', name: '激ムズ', hp: 1.3, dmg: 1.25, tierAdd: 1, windup: 0.7, speed: 1.15, extra: 2, strategy: 'always', guards: 4, guardWave: 3, parry: true, quake: true, color: '#ff4a9a' };
+DIFFICULTY.nightmare = { id: 'nightmare', name: '激ムズ', hp: 1.5, dmg: 1.55, tierAdd: 1, windup: 0.7, speed: 1.15, extra: 2, strategy: 'always', guards: 4, guardWave: 3, parry: true, quake: true, color: '#ff4a9a' };
 export const DIFF_ORDER = ['easy', 'normal', 'hard', 'nightmare'];
 
 export const COLORS = {

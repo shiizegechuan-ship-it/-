@@ -98,10 +98,10 @@ function renderPlay(ctx, game) {
     for (let ty = 1; ty < map.h; ty++) for (let tx = x0; tx < x1; tx++) if (map.get(tx, ty) !== 0 && map.get(tx, ty - 1) === 0) rect(b, tx * TS, ty * TS - 2, TS, 3, '#ff3a3a');
     b.globalAlpha = 1;
   }
-  // 鐘楼の衛士：兜の金の飾り
   // 対策をしてきた敵：頭上に小さな赤い目
   for (const e of game.room.enemies) if (e.counter && e.alive && !e.boss) { const x = Math.round(cx(e) / 2), y = Math.round(e.y / 2) - 4; pset(b, x - 1, y, '#ff4a2a'); pset(b, x + 1, y, '#ff4a2a'); pset(b, x, y - 1, '#ffb0a0'); }
   drawPlayer(b, game, game.player);
+  if (game.comp) drawCompanion(b, game, game.comp, game.time);
   // 守りの秒針（常時の術）
   if (game.player.cloud && game.player.state !== 'dead') { // 頭上の雷雲
     const c = game.player.cloud, x = Math.round(c.x / 2), y = Math.round(c.y / 2) + Math.round(Math.sin(game.time * 3));
@@ -257,6 +257,67 @@ function heroFrame(p, t) {
   if (Math.abs(p.vx) > 30) return 'run' + (Math.floor(p.runAnim * 0.55) % 4);
   return Math.floor(t * 1.6) % 2 ? 'idle1' : 'idle0';
 }
+// ───────── お供 ─────────
+// 段階ごとに姿が変わる：1 小さく素朴 → 2 大きく飾りが増える → 3 光をまとい冠や翼が増える
+function drawCompanion(b, game, c, t) {
+  const x = Math.round(c.x / 2), y = Math.round(c.y / 2), f = c.face || 1, s = c.stage;
+  const flap = Math.floor(t * (c.dash ? 30 : 12)) % 2;
+  // 攻撃の演出
+  for (const sh of c.shots) {
+    const sx = Math.round(sh.x / 2), sy = Math.round(sh.y / 2);
+    if (sh.kind === 'orb') { glow(b, sx, sy, 4, '#ffe14a', 0.6); disc(b, sx, sy, 1, '#ffffff'); }
+    else if (sh.kind === 'gear') { const a = sh.spin || 0; glow(b, sx, sy, 4, '#c9a052', 0.4); disc(b, sx, sy, 3, '#8a6a3a'); for (let i = 0; i < 6; i++) pset(b, Math.round(sx + Math.cos(a + i) * 4), Math.round(sy + Math.sin(a + i) * 4), '#e8c070'); }
+  }
+  for (const fx of c.fx) {
+    if (fx.t < 0) continue;
+    const k = fx.t / fx.life;
+    if (fx.kind === 'beam') { b.globalAlpha = 1 - k * 0.6; const ex = fx.wide ? fx.x1 + Math.cos(Math.atan2(fx.y2 - fx.y1, fx.x2 - fx.x1)) * 320 : fx.x2, ey = fx.wide ? fx.y1 + Math.sin(Math.atan2(fx.y2 - fx.y1, fx.x2 - fx.x1)) * 320 : fx.y2; glowLine(b, fx.x1 / 2, fx.y1 / 2, ex / 2, ey / 2, fx.wide ? '#fff0a0' : '#ffe14a', fx.wide ? 4 : 2); line(b, fx.x1 / 2, fx.y1 / 2, ex / 2, ey / 2, '#ffffff'); b.globalAlpha = 1; }
+    else if (fx.kind === 'spark' && !fx.done) { const fy = fx.y / 2 - 40 * (1 - fx.t / fx.at); glow(b, fx.x / 2, fy, 3, '#ffe14a', 0.7); line(b, fx.x / 2, fy - 4, fx.x / 2, fy, '#fff6c0'); }
+    else if (fx.kind === 'bolt') { b.globalAlpha = 1 - k; let px = fx.x / 2, py = fx.top / 2; const by = fx.y / 2; while (py < by) { const nx = px + (Math.random() - 0.5) * 6, ny = Math.min(by, py + 6); glowLine(b, px, py, nx, ny, '#cfe8ff', 2); line(b, px, py, nx, ny, '#ffffff'); px = nx; py = ny; } b.globalAlpha = 1; }
+    else if (fx.kind === 'claw') { b.globalAlpha = 1 - k; for (let i = 0; i < fx.n; i++) { const o = (i - (fx.n - 1) / 2) * 3; line(b, fx.x / 2 - 6 + o, fx.y / 2 - 6, fx.x / 2 + 6 + o, fx.y / 2 + 6, '#ffffff', 1); } glowLine(b, fx.x / 2 - 6, fx.y / 2 - 6, fx.x / 2 + 6, fx.y / 2 + 6, '#d8c8ff', 2); b.globalAlpha = 1; }
+    else if (fx.kind === 'bell') { b.globalAlpha = 1 - k; circle(b, fx.x / 2, fx.y / 2, Math.round(fx.r / 2 * Math.min(1, k * 2)), '#d8c8ff'); b.globalAlpha = 1; }
+    else if (fx.kind === 'shadow' && fx.done) { b.globalAlpha = 1 - k; const a = fx.a || 0; glowLine(b, fx.x / 2 - Math.cos(a) * 12, fx.y / 2 - Math.sin(a) * 12, fx.x / 2 + Math.cos(a) * 12, fx.y / 2 + Math.sin(a) * 12, '#b89cff', 2); line(b, fx.x / 2 - Math.cos(a) * 12, fx.y / 2 - Math.sin(a) * 12, fx.x / 2 + Math.cos(a) * 12, fx.y / 2 + Math.sin(a) * 12, '#ffffff'); b.globalAlpha = 1; }
+  }
+  if (c.pop > 0) { glow(b, x, y, 10 + c.pop * 6, COMPANIONS_COLOR[c.id], 0.5); }
+  if (game.player.compShield) circle(b, Math.round(cx(game.player) / 2), Math.round(cy(game.player) / 2), 9, '#9fe3ff');
+  // 本体（段階が上がるほど大きく描く）
+  const k = [1.4, 1.75, 2.1][s - 1];
+  b.save(); b.translate(x, y); b.scale(k, k); b.translate(-x, -y);
+  if (c.id === 'hotaru') { // 灯り蛍
+    if (s >= 3) { glow(b, x, y, 4, '#fff0a0', 0.4); for (let i = 0; i < 3; i++) pset(b, x - 2 + i * 2, y - 5, i === 1 ? '#ffffff' : '#ffe14a'); } // 星の冠
+    const wc = s >= 2 ? '#cfe8ff' : '#a8b8d0';
+    if (flap) { pset(b, x - 2, y - 2, wc); pset(b, x + 1, y - 2, wc); if (s >= 2) { pset(b, x - 3, y - 3, wc); pset(b, x + 2, y - 3, wc); } }
+    else { pset(b, x - 2, y - 1, wc); pset(b, x + 1, y - 1, wc); }
+    rect(b, x - 1, y - 1, 2, 2, '#3a2a1a'); // 頭と胸
+    const tail = s >= 2 ? 3 : 2;
+    glow(b, x - f * 2, y + 1, s >= 2 ? 4 : 3, '#ffe14a', 0.55 + 0.25 * Math.sin(t * 6));
+    rect(b, f > 0 ? x - tail : x, y, tail, 2, s >= 2 ? '#ffb04a' : '#ffe14a'); // 光る尾
+    if (s >= 2) { pset(b, x + f, y - 3, '#3a2a1a'); pset(b, x + f * 2, y - 4, '#3a2a1a'); } // 触角
+  } else if (c.id === 'neji') { // 歯車の小鳥
+    const body = s >= 3 ? '#e8c070' : s >= 2 ? '#c9a052' : '#8a8a96', dark = s >= 2 ? '#7a5a2a' : '#5a5a66';
+    if (s >= 3) glow(b, x, y, 4, '#9fd0ff', 0.35);
+    disc(b, x, y, s >= 2 ? 2 : 1, body); rect(b, x - 1, y - 1, 3, 2, body);
+    pset(b, x + f * 2, y - 1, '#ffb04a'); pset(b, x + f * 3, y - 1, '#ffb04a'); // くちばし
+    pset(b, x + f, y - 2, '#1a1a22'); // 目
+    const wy = flap ? -3 : 0; line(b, x - f, y, x - f * 3, y + wy, dark); if (s >= 2) line(b, x - f, y + 1, x - f * 4, y + 1 + wy, dark);
+    if (s >= 2) { pset(b, x - f * 3, y + 2, dark); pset(b, x - f * 4, y + 3, dark); } // 尾羽
+    if (s >= 3) { pset(b, x, y - 4, '#cfe8ff'); pset(b, x + 1, y - 5, '#ffffff'); pset(b, x - 1, y - 4, '#cfe8ff'); } // 雷の冠羽
+  } else { // 時計の猫
+    const body = s >= 3 ? '#e8e0ff' : s >= 2 ? '#3a3248' : '#1e1a26', eye = s >= 3 ? '#b89cff' : '#ffe14a';
+    if (s >= 3) glow(b, x, y, 4, '#b89cff', 0.4);
+    rect(b, x - 2, y - 1, 5, 3, body); rect(b, x + f * 2 - (f > 0 ? 0 : 1), y - 3, 2, 3, body); // 胴と頭
+    pset(b, x + f * 2, y - 4, body); pset(b, x + f * 3, y - 4, body); // 耳
+    pset(b, x + f * 3, y - 2, eye);
+    const tw = Math.round(Math.sin(t * 5) * 1.5);
+    const tails = s >= 3 ? 3 : 1;
+    for (let i = 0; i < tails; i++) line(b, x - f * 3, y, x - f * (5 + i), y - 3 - i + tw, body);
+    if (s >= 2) { pset(b, x + f, y + 1, '#ffe14a'); } // 首の鈴
+    if (flap && !c.dash) { pset(b, x - 1, y + 2, body); pset(b, x + 2, y + 2, body); } else { pset(b, x - 2, y + 2, body); pset(b, x + 1, y + 2, body); }
+  }
+  b.restore();
+}
+const COMPANIONS_COLOR = { hotaru: '#ffe14a', neji: '#9fd0ff', chiku: '#d8c8ff' };
+
 function drawPlayer(b, game, p) {
   const blink = p.state === 'hurt' || (p.iframeT > 0 && !p.dodging && p.state !== 'dead');
   if (blink && Math.floor(game.time * 20) % 2 === 0) return;
