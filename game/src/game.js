@@ -84,6 +84,12 @@ export class Game {
       const w = wedgedBoons.find((x) => x.id === b.id);
       if (w) w.tier = Math.max(w.tier, b.tier); else wedgedBoons.push({ ...b });
     }
+    // めちゃ簡単：前の夜の強化・術を、何も設定しなくてもすべて Lv ごと持ち越す
+    if ((DIFFICULTY[meta.difficulty] || {}).carryAll) for (const b of (meta.lastLoop && meta.lastLoop.boons) || []) {
+      if (!BOONS[b.id]) continue;
+      const w = wedgedBoons.find((x) => x.id === b.id);
+      if (w) w.tier = Math.max(w.tier, b.tier || 1); else wedgedBoons.push({ id: b.id, tier: b.tier || 1 });
+    }
     // お供の絆の強化は、すべて持ち越す（継承・楔の枠を使わない）
     for (const b of meta.bonds || []) {
       const w = wedgedBoons.find((x) => x.id === b.id);

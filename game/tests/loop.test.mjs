@@ -34,7 +34,7 @@ test('揺らぎと因果：夜が変わると戦闘部屋は揺らぐが、因�
 
 test('楔：枠の上限・重複不可・抜くと戻る', () => {
   const m = newMeta(1);
-  assert.equal(m.slots, 2);
+  assert.equal(m.slots, 3, 'every difficulty starts with 3');
   m.slots = 1;
   assert.ok(addWedge(m, { target: 'lira' }));
   assert.ok(!addWedge(m, { target: 'glen' }), 'no free slot');
@@ -97,9 +97,9 @@ test('刻守の記憶：前の夜の戦い方を分析し、最も多い手段�
 test('偽りの勝利（鐘）：初回だけ楔の枠+1', () => {
   const m = newMeta(1);
   endLoop(m, { cause: 'bell', floor: 3, boons: [] });
-  assert.equal(m.slots, 3);
+  assert.equal(m.slots, 4);
   endLoop(m, { cause: 'bell', floor: 3, boons: [] });
-  assert.equal(m.slots, 3);
+  assert.equal(m.slots, 4);
   assert.ok(m.slots <= MAX_SLOTS);
 });
 
@@ -279,4 +279,25 @@ test('部屋に入ると主人公は左端から始まり、出口は右側（�
       assert.ok(xx > w / 2, `${name}: X at col ${xx}`);
     }
   }
+});
+
+test('めちゃ簡単：何も設定しなくても、強化・術はすべて Lv ごと次の夜へ持ち越す（ほかの難易度では持ち越さない）', async () => {
+  const { newGame } = await import('./helpers.mjs');
+  for (const [diff, carry] of [['veryeasy', true], ['normal', false]]) {
+    const g = newGame(21); g.meta.difficulty = diff; g.startLoop(); g.modal = null;
+    g.meta.inherit = [];
+    g.player.setBoons([{ id: 'edge', tier: 4 }, { id: 'satellites', tier: 2 }, { id: 'crown', tier: 1 }, { id: 'heavenblade', tier: 3 }, { id: 'gale', tier: 2 }, { id: 'crit', tier: 1 }]);
+    g.endRun('death');
+    g.meta.inherit = []; // 継承も使わない
+    g.startLoop(); g.modal = null;
+    const ids = g.player.boons.map((b) => b.id + ':' + b.tier);
+    for (const want of ['edge:4', 'satellites:2', 'crown:1', 'heavenblade:3', 'gale:2', 'crit:1']) assert.equal(ids.includes(want), carry, `${diff} ${want}`);
+    if (carry) assert.ok(g.rewind == null || true);
+  }
+});
+
+test('古いセーブ（楔の枠 2）も読み込むと 3 つになる', () => {
+  const m = newMeta(3); m.slots = 2;
+  const back = deserialize(serialize(m));
+  assert.equal(back.slots, 3);
 });

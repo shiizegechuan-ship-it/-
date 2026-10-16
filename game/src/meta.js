@@ -78,7 +78,7 @@ export function newMeta(seed = (Date.now() & 0x7fffffff)) {
     v: SAVE_VERSION,
     seed,
     loop: 1,
-    slots: 2,
+    slots: 3, // 楔の枠：どの難易度でも 3 つから（3 夜ごとに 1 つ増え、最大 6）
     wedges: [],
     knowledge: {}, // key -> 知った周回
     code: [r.int(1, 9), r.int(1, 9), r.int(1, 9)], // セーブ固定（周回では変わらない）
@@ -136,6 +136,7 @@ export function autoInherit(m, boons) {
 
 // 古いセーブに新しい項目を足す
 function migrate(m) {
+  m.slots = Math.max(m.slots || 0, 3); // 古いセーブも 3 つに
   m.shards ??= 0; m.upgrades ??= {}; m.inherit ??= []; m.artifacts ??= []; m.compStage ??= {}; m.bonds ??= []; m.allies ??= [];
   for (const k of ['power', 'arts', 'bond', 'ward']) if (!m.unlocked.includes(k)) m.unlocked.push(k);
   m.companion ??= 'hotaru';
@@ -223,7 +224,9 @@ export function endLoop(m, run) {
   if (m.inherit.length) report.kept.push({ text: `継承：${m.inherit.map((b) => BOONS[b.id].name + (b.tier > 1 ? ' Lv' + b.tier : '')).join('・')}`, sub: `最大 ${inheritCount(m)} 個（巻き戻り画面で変更できる）` });
   const inheritedIds = new Set(m.inherit.map((b) => b.id));
   const wedgedBoonIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
-  const lostBoons = (run.boons || []).filter((b) => !wedgedBoonIds.has(b.id) && !inheritedIds.has(b.id) && BOONS[b.id].school !== 'bond');
+  const carryAll = m.difficulty === 'veryeasy'; // めちゃ簡単：強化はすべて持ち越す
+  if (carryAll && (run.boons || []).length) report.kept.push({ text: `強化・術 ${run.boons.length} 個（めちゃ簡単：すべて持ち越す）`, sub: run.boons.map((b) => BOONS[b.id].name + (b.tier > 1 ? ' Lv' + b.tier : '')).join('・') });
+  const lostBoons = carryAll ? [] : (run.boons || []).filter((b) => !wedgedBoonIds.has(b.id) && !inheritedIds.has(b.id) && BOONS[b.id].school !== 'bond');
   if (lostBoons.length) report.reset.push({ text: `強化 ${lostBoons.length} 個`, sub: lostBoons.map((b) => BOONS[b.id].name).join('・') });
   report.reset.push({ text: 'HP・秒針ゲージ', sub: '' });
   // お供：届いた段階と絆の強化はすべて持ち越す

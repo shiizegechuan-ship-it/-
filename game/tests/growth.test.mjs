@@ -832,11 +832,12 @@ test('激ムズ：構えた雑魚は正面の攻撃をパリィして跳ね返�
   assert.equal(p.hp, hp1, 'airborne: no damage');
 });
 
-test('楔の枠：はじめは 2 つ、3 夜ごとに 1 つ増える（最大 6）', () => {
+test('楔の枠：どの難易度でもはじめは 3 つ、3 夜ごとに 1 つ増える（最大 6）。古いセーブも 3 つに', () => {
+  for (const diff of ['veryeasy', 'easy', 'normal', 'hard', 'nightmare']) { const g = newGame(9); g.meta.difficulty = diff; g.startLoop(); assert.equal(g.meta.slots, 3, diff); }
   const m = newMeta(9);
-  assert.equal(m.slots, 2);
-  for (let i = 0; i < 3; i++) endLoop(m, { cause: 'death', floor: 1, boons: [] });
   assert.equal(m.slots, 3);
+  for (let i = 0; i < 3; i++) endLoop(m, { cause: 'death', floor: 1, boons: [] });
+  assert.equal(m.slots, 4);
   for (let i = 0; i < 30; i++) endLoop(m, { cause: 'death', floor: 1, boons: [] });
   assert.equal(m.slots, 6);
 });
