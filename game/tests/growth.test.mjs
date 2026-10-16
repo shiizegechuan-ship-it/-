@@ -1182,3 +1182,64 @@ test('お供の成長と絆の強化は夜をまたいですべて持ち越す�
   g.setCompanion('chiku');
   assert.equal(g.comp.stage, 1);
 });
+
+test('巻き戻り画面で「お供を替える」：選ぶ窓が描かれ、決定で替わり、カーソルがまた動く', async () => {
+  const g = newGame(95); g.startLoop(); g.modal = null;
+  g.endRun('death'); g.rewind.t = 10;
+  const opts = g.rewindOptions(); g.rewind.sel = opts.findIndex((o) => o.id === 'companion');
+  const press = (...acts) => { const inp = new Input(); for (const a of acts) inp.set(a, true); inp.step(); g.updateRewind(inp); };
+  press('confirm');
+  assert.equal(g.modal && g.modal.type, 'companion');
+  const { render } = await import('../src/render.js');
+  const calls = []; const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' ? (...a) => { calls.push(k); return { width: 10 }; } : undefined), set: (t, k, v) => { t[k] = v; return true; } });
+  assert.doesNotThrow(() => { try { render(ctx, g); } catch (e) { if (!/canvas|getContext|drawImage/.test(String(e))) throw e; } });
+  g.modal.t = 1; press('down'); press('confirm');
+  assert.equal(g.modal, null);
+  assert.equal(g.meta.companion, 'neji');
+  const s0 = g.rewind.sel; press('up');
+  assert.notEqual(g.rewind.sel, s0, 'cursor moves again');
+});
+
+test('稀少の強化「仲間」でお供が増え、夜をまたいで残る。連れているお供の「仲間」は出ない', () => {
+  const g = newGame(96); g.meta.companion = 'hotaru'; g.startLoop(); g.modal = null;
+  g.enterRoom(0, 1); g.modal = null; g.player.hp = g.player.maxHp = 1e6;
+  assert.ok(!g.presentCallBoons().includes('call_neji'));
+  assert.ok(g.presentCallBoons().includes('call_hotaru'));
+  g.grantBoon('call_neji');
+  assert.equal(g.allies.length, 1); assert.equal(g.allies[0].id, 'neji');
+  assert.ok(!g.player.boons.some((b) => b.id === 'call_neji'), 'not kept as a boon');
+  assert.ok(g.presentCallBoons().includes('call_neji'));
+  g.comp = null; // 仲間だけで確かめる
+  const p = g.player; g.room.enemies.forEach((e, i) => { e.hp = e.maxHp = 1e6; e.cool = 99; e.x = p.x + 90 + i * 30; e.y = p.y + p.h - e.h; });
+  const d = new Driver(g); d.frame(60 * 6);
+  assert.ok(g.room.enemies.some((e) => e.hp < e.maxHp), 'ally attacks');
+  g.endRun('death'); g.startLoop(); g.modal = null;
+  assert.deepEqual(g.allies.map((c) => c.id), ['neji']);
+  g.setCompanion('neji'); // 仲間を主にすると、前の主が仲間に回る
+  assert.equal(g.comp.id, 'neji'); assert.deepEqual(g.allies.map((c) => c.id), ['hotaru']);
+});
+
+test('仲間技「夜明けの協奏」：3 匹そろって全員が最後の姿、ゲージ満タンのときだけ、時歪に重ねて発動する', () => {
+  const g = newGame(97); g.startLoop(); g.modal = null;
+  g.enterRoom(0, 1); g.modal = null;
+  const p = g.player; p.hp = p.maxHp = 1e6;
+  for (const e of g.room.enemies) { e.hp = e.maxHp = 1e6; e.cool = 99; }
+  g.grantBoon('call_neji'); g.grantBoon('call_chiku');
+  // まだ育っていない：満タンでも出ない
+  p.gauge = 100; g.useSkill();
+  assert.equal(g.union, null);
+  assert.ok(g.room.spells.some((s) => s.kind === 'warpslash'), 'normal warp still works');
+  g.room.spells = [];
+  for (const c of [g.comp, ...g.allies]) c.stage = 3;
+  p.gauge = 90; g.useSkill(); assert.equal(g.union, null, 'needs a full gauge');
+  g.room.spells = []; p.gauge = 100;
+  const hp0 = g.room.enemies.map((e) => e.hp);
+  g.useSkill();
+  assert.ok(g.union, 'union fires');
+  assert.equal(p.gauge, 0, 'uses the whole gauge');
+  assert.ok(g.room.spells.some((s) => s.kind === 'warpslash'), 'together with kokusen');
+  const d = new Driver(g); d.until(() => !g.union, 60 * 8);
+  assert.equal(g.union, null, 'finishes');
+  const dealt = g.room.enemies.map((e, i) => hp0[i] - e.hp);
+  assert.ok(dealt.every((x) => x > 200), `every enemy takes a big hit ${dealt.map(Math.round)}`);
+});

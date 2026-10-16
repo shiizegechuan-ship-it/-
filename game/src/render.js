@@ -101,7 +101,8 @@ function renderPlay(ctx, game) {
   // 対策をしてきた敵：頭上に小さな赤い目
   for (const e of game.room.enemies) if (e.counter && e.alive && !e.boss) { const x = Math.round(cx(e) / 2), y = Math.round(e.y / 2) - 4; pset(b, x - 1, y, '#ff4a2a'); pset(b, x + 1, y, '#ff4a2a'); pset(b, x, y - 1, '#ffb0a0'); }
   drawPlayer(b, game, game.player);
-  if (game.comp) drawCompanion(b, game, game.comp, game.time);
+  for (const c of [game.comp, ...(game.allies || [])]) if (c) drawCompanion(b, game, c, game.time);
+  if (game.union) drawUnion(b, game, game.union, game.time);
   // 守りの秒針（常時の術）
   if (game.player.cloud && game.player.state !== 'dead') { // 頭上の雷雲
     const c = game.player.cloud, x = Math.round(c.x / 2), y = Math.round(c.y / 2) + Math.round(Math.sin(game.time * 3));
@@ -315,6 +316,27 @@ function drawCompanion(b, game, c, t) {
     if (flap && !c.dash) { pset(b, x - 1, y + 2, body); pset(b, x + 2, y + 2, body); } else { pset(b, x - 2, y + 2, body); pset(b, x + 1, y + 2, body); }
   }
   b.restore();
+}
+// 仲間技「夜明けの協奏」：金色に染まり、主人公とお供から光の線が結ばれ、最後に夜明けの光が部屋を満たす
+function drawUnion(b, game, u, t) {
+  const p = game.player, px = Math.round(cx(p) / 2), py = Math.round(cy(p) / 2);
+  const comps = [game.comp, ...(game.allies || [])].filter(Boolean);
+  const k = Math.min(1, u.t / 0.4);
+  b.save(); b.setTransform(1, 0, 0, 1, 0, 0);
+  b.globalAlpha = 0.22 * k * (u.dawn ? Math.max(0, 1 - (u.t - 2.0) / 0.6) : 1); b.fillStyle = '#ffcf6a'; b.fillRect(0, 0, b.canvas.width, b.canvas.height);
+  b.restore(); b.globalAlpha = 1;
+  // 主人公とお供を結ぶ光の三角
+  for (let i = 0; i < comps.length; i++) {
+    const a = comps[i], c2 = comps[(i + 1) % comps.length];
+    glowLine(b, a.x / 2, a.y / 2, c2.x / 2, c2.y / 2, '#ffe6a0', 2);
+    glowLine(b, a.x / 2, a.y / 2, px, py, '#fff6d0', 1);
+  }
+  // 主人公から放射する光
+  for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 + t * 0.8, r = 20 + 14 * Math.sin(t * 6 + i); b.globalAlpha = 0.5 * k; line(b, px, py, px + Math.round(Math.cos(a) * r), py + Math.round(Math.sin(a) * r), '#fff0b0'); }
+  b.globalAlpha = 1;
+  glow(b, px, py, 10 + 4 * Math.sin(t * 10), '#ffe6a0', 0.6);
+  // 夜明けの一閃：地平線から昇る光の帯
+  if (u.dawn) { const d = Math.min(1, (u.t - 2.0) / 0.3); b.save(); b.setTransform(1, 0, 0, 1, 0, 0); b.globalAlpha = Math.max(0, 0.8 - (u.t - 2.0) * 1.2); b.fillStyle = '#ffffff'; b.fillRect(0, Math.round(b.canvas.height * (1 - d)), b.canvas.width, Math.round(b.canvas.height * d)); b.restore(); b.globalAlpha = 1; }
 }
 const COMPANIONS_COLOR = { hotaru: '#ffe14a', neji: '#9fd0ff', chiku: '#d8c8ff' };
 

@@ -81,13 +81,28 @@ function onCompKill(game, c, e) {
   if (st.compRally) { p.rallyT = 5; p.rallyMul = st.compRally; game.fx.text(cx(p), p.y - 26, '鼓舞', '#ffb04a', 11); }
 }
 
-export function updateCompanion(game, dt) {
-  const c = game.comp, p = game.player;
+// いま連れているお供すべて（主のお供＋稀少の強化で呼んだ仲間）
+export const allComps = (game) => [game.comp, ...(game.allies || [])].filter(Boolean);
+// お供たちからの手助けを重ねる
+export function combinedMods(list) {
+  const m = { moveMul: 1, dodgeCdMul: 1, critAdd: 0 };
+  for (const c of list) { const x = companionMods(c.id, c.stage); m.moveMul *= x.moveMul; m.dodgeCdMul *= x.dodgeCdMul; m.critAdd += x.critAdd; }
+  return m;
+}
+
+export function updateCompanions(game, dt) {
+  const p = game.player;
+  if (p && p.rallyT > 0) p.rallyT -= dt;
+  allComps(game).forEach((c, i) => updateCompanion(game, dt, c, i));
+  if (game.union) updateUnion(game, dt);
+}
+
+export function updateCompanion(game, dt, c = game.comp, slot = 0) {
+  const p = game.player;
   if (!c || !game.room) return;
   const st = p.stats;
   c.t += dt;
   if (c.pop > 0) c.pop -= dt;
-  if (p.rallyT > 0) p.rallyT -= dt;
   // ついて回る：主人公の周りをゆっくり回りながら追いかける
   let tx, ty;
   if (c.dash) {
@@ -100,8 +115,9 @@ export function updateCompanion(game, dt) {
     if (c.dash.t >= c.dash.hitAt && !c.dash.done) { c.dash.done = true; c.dash.hits.forEach((fn) => fn()); }
     if (c.dash.t > c.dash.life) c.dash = null;
   } else {
-    const a = c.t * 1.6;
-    tx = cx(p) - p.face * 26 + Math.cos(a) * 20; ty = cy(p) - 36 + Math.sin(a * 1.3) * 8;
+    const a = c.t * 1.6 + slot * Math.PI * 2 / 3; // 仲間どうしは輪の上でずらす
+    const side = slot === 2 ? 1 : -1;
+    tx = cx(p) + side * p.face * (slot ? 30 : 26) + Math.cos(a) * 20; ty = cy(p) - 36 - (slot === 1 ? 14 : 0) + Math.sin(a * 1.3) * 8;
     const k = Math.min(1, dt * 6);
     c.x += (tx - c.x) * k; c.y += (ty - c.y) * k;
     if (Math.abs(tx - c.x) > 2) c.face = sign(tx - c.x);
@@ -114,7 +130,7 @@ export function updateCompanion(game, dt) {
     const per = c.stage >= 3 ? 8 : 10;
     if (c.healT >= per) { c.healT = 0; const amt = Math.max(1, Math.round(p.maxHp * (c.stage >= 3 ? 0.02 : 0.015) * (st.healMul || 1))); if (p.hp < p.maxHp) { p.hp = Math.min(p.maxHp, p.hp + amt); game.fx.text(cx(p), p.y - 16, `+${amt}`, '#5fd18b', 11); game.fx.ring(cx(p), cy(p), '#ffe14a', 26, 0.3); } }
   }
-  if (st.compShield) {
+  if (st.compShield && slot === 0) {
     if (!p.compShield) { c.shieldT += dt; if (c.shieldT >= st.compShield) { c.shieldT = 0; p.compShield = true; game.fx.ring(cx(p), cy(p), '#9fe3ff', 22, 0.35); game.fx.text(cx(p), p.y - 22, '守りの羽', '#9fe3ff', 10); } }
   }
 
@@ -135,9 +151,9 @@ export function updateCompanion(game, dt) {
 
 // 主人公の直接攻撃が当たったとき（共鳴の印）
 export function onHeroHit(game) {
-  const c = game.comp, k = game.player.stats.compResonate;
-  if (!c || !k) return;
-  for (let i = 0; i < 3; i++) c.cds[i] -= k;
+  const k = game.player.stats.compResonate;
+  if (!k) return;
+  for (const c of allComps(game)) for (let i = 0; i < 3; i++) c.cds[i] -= k;
 }
 
 function updateShot(game, c, s, dt) {
@@ -223,3 +239,62 @@ const SKILLS = {
     }
   },
 };
+
+// ───────── 仲間を呼ぶ稀少の強化 ─────────
+export const CALL_BOON = { hotaru: 'call_hotaru', neji: 'call_neji', chiku: 'call_chiku' };
+export const callTarget = (boonId) => Object.keys(CALL_BOON).find((k) => CALL_BOON[k] === boonId) || null;
+
+// ───────── 仲間技「夜明けの協奏」 ─────────
+// 3 匹すべてを連れ、3 匹とも最後の姿（★3）まで育ったとき、秒針ゲージが満タンで術ボタンを押すと、
+// いつもの時歪・刻閃に重ねて発動する。主人公と 3 匹が力を合わせ、部屋じゅうの敵を打つ
+export function unionReady(game) {
+  const list = allComps(game);
+  return COMPANION_IDS.every((id) => list.some((c) => c.id === id && c.stage >= 3));
+}
+const U = { sparks: 16, spark: 30, bolt: 40, shadows: 18, shadow: 30, dawn: 120, dawnAt: 2.0, life: 2.6 };
+export const UNION = U;
+function unionHit(game, e, base, knock = 80) {
+  if (!e.alive || (e.boss && e.defeated)) return;
+  game.dealDamage(e, { base, cat: 'skill', knock, dir: sign(cx(e) - cx(game.player)) || 1, spell: true, companion: true, union: true });
+}
+export function castUnion(game) {
+  const p = game.player, list = allComps(game);
+  game.union = { t: 0, dawn: false };
+  p.iframeT = Math.max(p.iframeT, U.life);
+  for (const c of list) c.pop = 2.4;
+  game.fx.setBanner('仲間技「夜明けの協奏」', 'ホタル・ネジ・チク、そしてあなたの力をひとつに', '#ffe6a0', 2.6);
+  game.fx.screenFlash('#ffe6a0', 0.4); game.sfx.play('perfect'); game.sfx.play('bossBell');
+  const foes = () => game.room.enemies.filter((e) => e.alive && !(e.boss && e.defeated) && !e.invuln);
+  const by = (id) => list.find((c) => c.id === id);
+  const ho = by('hotaru'), ne = by('neji'), ch = by('chiku');
+  // ホタル：星火の大雨
+  for (let i = 0; i < U.sparks; i++) {
+    const f = { kind: 'spark', t: -0.3 - i * 0.05, life: 0.5, at: 0.3, x: 0, y: 0, o: null, done: false };
+    f.tick = () => { if (f.t < 0) return; const fs = foes(); if (!fs.length) { f.done = true; return; } if (!f.o) { f.o = fs[i % fs.length]; f.x = cx(f.o) + ((i * 7) % 13 - 6); f.y = cy(f.o); } if (!f.done && f.t >= f.at) { f.done = true; unionHit(game, f.o, U.spark, 60); game.fx.burst(f.x, f.y, '#ffe14a', 8); } };
+    ho.fx.push(f);
+  }
+  // ネジ：すべての敵へ雷を二度
+  for (let k = 0; k < 2; k++) {
+    const f = { kind: 'none', t: -0.5 - k * 0.35, life: 0.1, done: false };
+    f.tick = () => { if (f.done || f.t < 0) return; f.done = true; for (const e of foes()) { ne.fx.push({ kind: 'bolt', t: 0, life: 0.3, x: cx(e), y: e.y + e.h, top: game.cam.y - 10 }); unionHit(game, e, U.bolt, 60); } game.sfx.play('heavyHit'); game.fx.shake(5, 0.15); };
+    ne.fx.push(f);
+  }
+  // チク：影が 18 回裂く
+  for (let i = 0; i < U.shadows; i++) {
+    const f = { kind: 'shadow', t: -0.7 - i * 0.04, life: 0.2, done: false, x: 0, y: 0 };
+    f.tick = () => { if (f.done || f.t < 0) return; f.done = true; const fs = foes(); if (!fs.length) return; const o = fs[i % fs.length]; f.x = cx(o); f.y = cy(o); f.a = (i * 0.9) % Math.PI; unionHit(game, o, U.shadow, 30); };
+    ch.fx.push(f);
+  }
+}
+function updateUnion(game, dt) {
+  const u = game.union;
+  u.t += dt;
+  if (!u.dawn && u.t >= U.dawnAt) {
+    // 夜明けの一閃：部屋じゅうの敵を、金色の光がまとめて打つ
+    u.dawn = true;
+    for (const e of game.room.enemies) unionHit(game, e, U.dawn, 220);
+    game.fx.screenFlash('#fff6d0', 0.6); game.fx.shake(14, 0.5); game.sfx.play('guardBreak'); game.sfx.play('heavyHit');
+    game.hitstop = Math.max(game.hitstop, 10 / 60);
+  }
+  if (u.t > U.life) game.union = null;
+}

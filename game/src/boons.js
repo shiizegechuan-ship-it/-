@@ -113,6 +113,10 @@ export const BOONS = {
   stareater: { school: 'legend', name: '星喰らい', desc: () => '敵を倒すたび、近くの敵 3 体へ流星が降る（各70）' },
   towerblessing: { school: 'legend', name: '時計塔の加護', desc: () => '常時の術のダメージ ×2、発動の速さ ×1.5' },
   midas: { school: 'legend', name: '黄金律', desc: () => '敵から得る金貨 ×2。金貨を拾うたびに秒針ゲージ +2、HP +1' },
+  // 仲間を呼ぶ（稀少）：選ぶと、そのお供がもう 1 匹ついてくる（夜をまたいで残る）
+  call_hotaru: { school: 'rare', name: '仲間：ホタル', desc: () => 'お供のホタル（光の弾・光の帯・星火の雨）が仲間に加わる。夜が戻っても残る' },
+  call_neji: { school: 'rare', name: '仲間：ネジ', desc: () => 'お供のネジ（啄み・回る歯車・雷の羽）が仲間に加わる。夜が戻っても残る' },
+  call_chiku: { school: 'rare', name: '仲間：チク', desc: () => 'お供のチク（爪・時止めの鈴・九つの影）が仲間に加わる。夜が戻っても残る' },
   wave: { school: 'rare', name: '斬撃波', desc: () => '地上の攻撃のたびに、前へ飛ぶ斬撃波が出る（30・貫通）' },
   // 床を攻める常時の術
   quakeline: { school: 'arts', max: 5, name: '地走り', desc: (t) => `[常時] 3秒ごとに足元から左右へ衝撃波が床を走る（${Math.round(18 * (1 + 0.4 * (t - 1)))}）` },
@@ -278,8 +282,8 @@ export function rollOffer(rng, owned, unlockedSchools, n = 3) {
 // 稀少の候補（まだ持っていないものから 3 つ）
 export const RARE_IDS = Object.keys(BOONS).filter((id) => BOONS[id].school === 'rare');
 export const LEGEND_IDS = Object.keys(BOONS).filter((id) => BOONS[id].school === 'legend');
-export function rollRare(rng, owned, n = 3) {
-  return rng.shuffle(RARE_IDS.filter((id) => !owned.some((b) => b.id === id))).slice(0, n);
+export function rollRare(rng, owned, n = 3, exclude = []) {
+  return rng.shuffle(RARE_IDS.filter((id) => !owned.some((b) => b.id === id) && !exclude.includes(id))).slice(0, n);
 }
 
 // 選択肢カードに添える相乗効果のヒント

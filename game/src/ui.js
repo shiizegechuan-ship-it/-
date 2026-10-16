@@ -1,7 +1,7 @@
 // HUD・メニュー・巻き戻り画面。装飾より可読性を優先する。
 import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC } from './config.js';
 import { clamp } from './util.js';
-import { COMPANIONS, stageOf } from './companion.js';
+import { COMPANIONS, stageOf, allComps, unionReady } from './companion.js';
 import { BOONS, forgeDiff, SCHOOLS, RESONANCE, synergyHints, schoolCounts } from './boons.js';
 import { ACTIVE_ARTS } from './arts.js';
 import { ARTIFACTS, ARTIFACT_COLOR } from './artifacts.js';
@@ -90,6 +90,14 @@ export function drawHud(ctx, game) {
   ctx.fillStyle = p.gauge >= cost ? '#5aa9e6' : '#3a6a90'; ctx.fillRect(22, 38, hpW * (p.gauge / PC.gaugeMax), 8);
   for (let c = cost; c < PC.gaugeMax; c += cost) { ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillRect(22 + hpW * (c / PC.gaugeMax), 37, 1, 10); }
   text(ctx, `${art ? BOONS[art.id].name : '時歪'}${p.gauge >= cost ? ' V' : ''}`, 22 + hpW + 4, 47, { size: 10, color: p.gauge >= cost ? (art ? '#ff8ae0' : '#9fd0ff') : C.muted });
+  // 仲間技：3 匹そろって全員が最後の姿なら印が出る。ゲージ満タンで光る
+  if (unionReady(game)) {
+    const full = p.gauge >= PC.gaugeMax && !game.union;
+    const pulse = full ? 0.6 + 0.4 * Math.sin(game.time * 8) : 1;
+    ctx.globalAlpha = pulse;
+    text(ctx, full ? '仲間技 V！' : '仲間技（満タンで）', 22 + hpW + 74, 47, { size: 10, bold: full, color: full ? '#ffe6a0' : C.muted });
+    ctx.globalAlpha = 1;
+  }
   if (p.dodgeCd > 0) { ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(22, 50, hpW * clamp(1 - p.dodgeCd / 0.8, 0, 1), 2); }
   // レベルと経験値
   const lv = run.level || 1, need = expToNext(lv);
@@ -157,12 +165,12 @@ export function drawHud(ctx, game) {
   const gp = game.hudPop ? game.hudPop.gold : 0;
   text(ctx, `● 金貨 ${run.gold || 0}` + (run.keys ? `　黄金の鍵 ×${run.keys}` : ''), 22, 116, { size: 12 + Math.round(gp * 4), color: gp > 0 ? '#fff6c0' : '#ffd84a' });
   // お供（段階は ★ の数）
-  const comp = game.comp;
-  if (comp) { const d = COMPANIONS[comp.id]; text(ctx, `✦ ${d.forms[comp.stage - 1]}　${'★'.repeat(comp.stage)}${'☆'.repeat(3 - comp.stage)}` + (comp.stage < 3 ? `（Lv${[0, 5, 10][comp.stage]}で進化）` : ''), 22, 134, { size: 11, color: d.color }); }
+  const comps = allComps(game);
+  comps.forEach((comp, i) => { const d = COMPANIONS[comp.id]; text(ctx, `✦ ${d.forms[comp.stage - 1]}　${'★'.repeat(comp.stage)}${'☆'.repeat(3 - comp.stage)}` + (comp.stage < 3 ? `（Lv${[0, 5, 10][comp.stage]}で進化）` : ''), 22, 134 + i * 15, { size: 11, color: d.color }); });
   // アーティファクト（持ち越すので多くなったら数だけ）
-  const arts = p.artifacts || [];
-  if (arts.length > 4) text(ctx, `◆ アーティファクト ${arts.length} 個`, 22, 152, { size: 11, color: ARTIFACT_COLOR.normal });
-  else arts.forEach((id, i) => { const a = ARTIFACTS[id]; text(ctx, '◆ ' + a.name, 22, 152 + i * 15, { size: 11, color: ARTIFACT_COLOR[a.rarity] }); });
+  const arts = p.artifacts || [], ay = 134 + Math.max(1, comps.length) * 15 + 3;
+  if (arts.length > 4) text(ctx, `◆ アーティファクト ${arts.length} 個`, 22, ay, { size: 11, color: ARTIFACT_COLOR.normal });
+  else arts.forEach((id, i) => { const a = ARTIFACTS[id]; text(ctx, '◆ ' + a.name, 22, ay + i * 15, { size: 11, color: ARTIFACT_COLOR[a.rarity] }); });
   // コンボ
   const cb = game.combo;
   if (cb && cb.n >= 2) {
@@ -542,7 +550,8 @@ export function drawRewind(ctx, game) {
     });
   }
   if (r.mode === 'upgrade' || r.mode === 'inherit') drawRewindShop(ctx, game, r);
-  if (game.modal && game.modal.type === 'journal') { ctx.fillStyle = 'rgba(5,4,8,0.7)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); drawJournal(ctx, game, game.modal); }
+  // 巻き戻り画面の上に開いた窓（記録帳・お供を選ぶ）も描く
+  if (game.modal) { ctx.fillStyle = 'rgba(5,4,8,0.7)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); if (game.modal.type === 'journal') drawJournal(ctx, game, game.modal); else drawModal(ctx, game); }
 }
 
 // ───────── 結末 ─────────

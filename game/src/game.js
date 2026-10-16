@@ -5,7 +5,7 @@ import { TileMap } from './tilemap.js';
 import { Player } from './player.js';
 import { makeEnemy, RustSoldier, GearKnight, Warden, Squire, Projectile } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
-import { COMPANIONS, COMPANION_IDS, makeCompanion, updateCompanion, onHeroHit, stageOf, companionMods } from './companion.js';
+import { COMPANIONS, COMPANION_IDS, makeCompanion, updateCompanions, onHeroHit, stageOf, companionMods, combinedMods, allComps, CALL_BOON, callTarget, unionReady, castUnion } from './companion.js';
 import { castArt, castWarpSlash, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell, MELEE } from './arts.js';
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
 import { Fx } from './fx.js';
@@ -132,8 +132,11 @@ export class Game {
     this.player.baseMaxHp = PC.maxHp + 15 * upLv(meta, 'hp');
     this.player.metaAtk = 1 + 0.1 * upLv(meta, 'atk');
     this.player.artifacts = [...(meta.artifacts || [])]; // 持ち越したアーティファクト
-    const cst = Math.max(1, (meta.compStage || {})[meta.companion] || 1); // お供は前の夜に届いた段階のまま
-    this.player.compMods = companionMods(meta.companion, cst);
+    // お供（主のお供＋呼んだ仲間）は前の夜に届いた段階のまま
+    const stOf = (id) => Math.max(1, (meta.compStage || {})[id] || 1);
+    const allyIds = (meta.allies || []).filter((id) => id !== meta.companion && COMPANIONS[id]);
+    const cst = stOf(meta.companion);
+    this.player.compMods = combinedMods([{ id: meta.companion, stage: cst }, ...allyIds.map((id) => ({ id, stage: stOf(id) }))]);
     this.player.setBoons(wedgedBoons);
     this.player.hp = this.player.maxHp;
     this.player.gauge = Math.min(PC.gaugeMax, 20 * upLv(meta, 'gauge'));
@@ -144,6 +147,8 @@ export class Game {
     this.timeStopT = 0; this.slowT = 0; this.hitstop = 0;
     this.enterRoom(0, 0);
     this.comp = meta.companion && COMPANIONS[meta.companion] ? makeCompanion(meta.companion, this.player, cst) : null;
+    this.allies = allyIds.map((id) => makeCompanion(id, this.player, stOf(id)));
+    this.union = null;
     const pr = dawnProgress(meta);
     // 夜ごとの様相の一言（天気や塔の変化）
     const note = nightLook(meta).note;
@@ -470,8 +475,8 @@ export class Game {
     for (const pr of room.projectiles) { updateHoming(pr, this); pr.update(this, this.timeStopT > 0 && !pr.homing ? dt * 0.3 : dt); }
     this.resolveProjectiles();
     updatePassives(this, dt);
-    updateCompanion(this, dt);
-    if (this.comp && this.comp.announce && !this.modal && !this.run.pendingRare) this.announceEvolution();
+    updateCompanions(this, dt);
+    if (!this.modal && !this.run.pendingRare) for (const c of allComps(this)) if (c.announce) { this.announceEvolution(c); break; }
     updateSpells(this, dt);
     if (p.onGround) p.airHits = 0;
     this.updateEchoes(dt);
@@ -834,7 +839,7 @@ export class Game {
     // 稀少（ときどき）と伝説（ごくまれ）。上の階ほど出やすい
     const owned = this.player.boons;
     if (rng.next() < 0.05 + 0.04 * f) { const id = rng.shuffle(LEGEND_IDS.filter((x) => !owned.some((b) => b.id === x)))[0]; if (id) stock.push({ kind: 'boon', id, price: price(360 + 60 * f), tier: 'legend' }); }
-    if (rng.next() < 0.3 + 0.1 * f) { const id = rollRare(rng, owned, 1)[0]; if (id) stock.push({ kind: 'boon', id, price: price(180 + 40 * f), tier: 'rare' }); }
+    if (rng.next() < 0.3 + 0.1 * f) { const id = rollRare(rng, owned, 1, this.presentCallBoons())[0]; if (id) stock.push({ kind: 'boon', id, price: price(180 + 40 * f), tier: 'rare' }); }
     for (const id of rollOffer(rng, owned, this.meta.unlocked, 3)) stock.push({ kind: 'boon', id, price: price(60 + 20 * f) });
     stock.push({ kind: 'potion', size: 0.3, price: price(25) });
     stock.push({ kind: 'potion', size: 0.7, price: price(50) });
@@ -900,6 +905,9 @@ export class Game {
   grantBoon(id) {
     const p = this.player;
     this.run.fusionDeclined = [];
+    // 仲間を呼ぶ強化は、強化としては持たず、お供を 1 匹増やす
+    const callee = callTarget(id);
+    if (callee) { this.addAlly(callee); this.emit('boon', { id }); return; }
     const own = p.boons.find((b) => b.id === id);
     if (own) p.setBoons(p.boons.map((b) => (b.id === id ? { ...b, tier: Math.min(boonMax(id), b.tier + 1) } : b)));
     else if (BOONS[id].active) p.setBoons([...p.boons.filter((b) => !BOONS[b.id].active), { id, tier: 1 }]);
@@ -922,16 +930,16 @@ export class Game {
       this.onLevelUp();
     }
   }
-  evolveCompanion(stage) {
-    const c = this.comp, p = this.player, def = COMPANIONS[c.id];
+  refreshCompMods() { const p = this.player; p.compMods = combinedMods(allComps(this)); p.setBoons(p.boons); }
+  evolveCompanion(stage, c = this.comp) {
     c.stage = stage; c.pop = 1.2;
-    p.compMods = companionMods(c.id, stage); p.setBoons(p.boons);
+    this.refreshCompMods();
     c.announce = stage; // 進化の知らせは、強化を選ぶ画面などが閉じてから
     (this.meta.compStage ||= {})[c.id] = Math.max(this.meta.compStage[c.id] || 1, stage); // 進化した姿は夜をまたいで残る
     this.emit('companionEvolve', { id: c.id, stage });
   }
-  announceEvolution() {
-    const c = this.comp, def = COMPANIONS[c.id], stage = c.announce;
+  announceEvolution(c = this.comp) {
+    const def = COMPANIONS[c.id], stage = c.announce;
     c.announce = 0; c.pop = 1.2;
     const newSkill = def.skills[stage - 1].names[stage - 1];
     this.fx.setBanner(`${def.name}が「${def.forms[stage - 1]}」に進化した！`, `新しい技：${newSkill}　手助け：${def.buff.name}`, def.color, 2.4);
@@ -940,15 +948,38 @@ export class Game {
     this.sfx.play('perfect');
   }
   // お供を替える（その場で、今のレベルの段階のまま）
+  // 主のお供を替える。替えたお供が仲間にいたら、前の主と入れ替わる
   setCompanion(id) {
-    this.meta.companion = id; this.save();
+    const m = this.meta, old = m.companion;
+    m.allies = (m.allies || []).map((a) => (a === id ? old : a)).filter((a) => a && a !== id);
+    m.companion = id; this.save();
     if (this.scene === 'play' && this.player && this.run) {
-      const st = Math.max(stageOf(this.run.level || 1), (this.meta.compStage || {})[id] || 1);
-      this.comp = makeCompanion(id, this.player, st);
-      this.player.compMods = companionMods(id, st); this.player.setBoons(this.player.boons);
+      const st = (cid) => Math.max(stageOf(this.run.level || 1), (m.compStage || {})[cid] || 1);
+      const keep = (cid) => allComps(this).find((c) => c.id === cid);
+      this.comp = keep(id) || makeCompanion(id, this.player, st(id));
+      this.allies = m.allies.map((cid) => keep(cid) || makeCompanion(cid, this.player, st(cid)));
+      this.refreshCompMods();
       this.fx.ring(this.comp.x, this.comp.y, COMPANIONS[id].color, 30, 0.4);
     }
   }
+  // 仲間を呼ぶ（稀少の強化）：そのお供がもう 1 匹ついてくる。夜をまたいで残る
+  addAlly(id) {
+    const m = this.meta;
+    if (!COMPANIONS[id] || id === m.companion || (m.allies || []).includes(id)) return false;
+    (m.allies ||= []).push(id);
+    const st = Math.max(stageOf(this.run.level || 1), (m.compStage || {})[id] || 1);
+    const c = makeCompanion(id, this.player, st);
+    (this.allies ||= []).push(c);
+    this.refreshCompMods();
+    const def = COMPANIONS[id];
+    c.pop = 1.5;
+    this.fx.setBanner(`${def.name}が仲間に加わった！`, `${def.forms[st - 1]}　${'★'.repeat(st)}`, def.color, 2.2);
+    this.fx.ring(c.x, c.y, def.color, 40, 0.4); this.sfx.play('perfect');
+    this.save();
+    return true;
+  }
+  // 呼べる仲間（もう連れているお供の「仲間」の強化は出さない）
+  presentCallBoons() { return allComps(this).map((c) => CALL_BOON[c.id]).concat(COMPANION_IDS.filter((id) => id === this.meta.companion || (this.meta.allies || []).includes(id)).map((id) => CALL_BOON[id])); }
   openCompanionPick() {
     this.modal = { type: 'companion', list: COMPANION_IDS, sel: Math.max(0, COMPANION_IDS.indexOf(this.meta.companion)), t: 0 };
   }
@@ -966,14 +997,13 @@ export class Game {
     this.fx.setBanner(`レベル ${run.level}`, `最大HP +${LEVEL.hpPer}・攻撃 +${Math.round(LEVEL.atkPer * 100)}%・会心 +${LEVEL.critPer * 100}%` + (rare ? '　稀少の強化を選べる！' : ''), '#a8f07a', 1.4);
     this.sfx.play('charged');
     // お供の進化（Lv5・Lv10）
-    const c = this.comp;
-    if (c && stageOf(run.level) > c.stage) this.evolveCompanion(stageOf(run.level));
+    for (const c of allComps(this)) if (stageOf(run.level) > c.stage) this.evolveCompanion(stageOf(run.level), c);
     this.emit('levelUp', { level: run.level });
   }
   openRarePick() {
     const run = this.run, p = this.player;
     run.pendingRare--;
-    const offer = rollRare(run.rareRng, p.boons);
+    const offer = rollRare(run.rareRng, p.boons, 3, this.presentCallBoons());
     if (!offer.length) { p.hp = p.maxHp; this.fx.text(cx(p), p.y - 30, '全回復', '#5fd18b', 16); return; }
     this.modal = { type: 'boon', offer, sel: 1 % offer.length, count: 1, rare: true, t: 0 };
     this.sfx.play('perfect');
@@ -1128,6 +1158,14 @@ export class Game {
   }
 
   useSkill() {
+    const p = this.player;
+    // 仲間技：3 匹そろって全員が最後の姿、ゲージ満タンなら、いつもの技に重ねて発動する
+    const union = !this.union && p.gauge >= PC.gaugeMax && unionReady(this);
+    const r = this.useSkillMain();
+    if (union && r) { castUnion(this); p.gauge = 0; this.emit('union'); }
+    return r;
+  }
+  useSkillMain() {
     const p = this.player;
     const art = p.stats.activeArt;
     if (art) {
@@ -1683,7 +1721,7 @@ export class Game {
     if (this.room) this.flushPickups();
     run.ended = true;
     const report = endLoop(this.meta, {
-      cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock, shards: run.shards, dodges: p.dodgeCount || 0, level: run.level || 1, gold: run.gold || 0, artifacts: p.artifacts || [], comp: this.comp ? { id: this.comp.id, stage: this.comp.stage } : null,
+      cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock, shards: run.shards, dodges: p.dodgeCount || 0, level: run.level || 1, gold: run.gold || 0, artifacts: p.artifacts || [], comp: this.comp ? { id: this.comp.id, stage: this.comp.stage } : null, comps: allComps(this).map((c) => ({ id: c.id, stage: c.stage })),
     });
     this.save();
     this.sfx.play('rewind');

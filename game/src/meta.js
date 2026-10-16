@@ -89,6 +89,7 @@ export function newMeta(seed = (Date.now() & 0x7fffffff)) {
     inherit: [], // 次の夜に持ち越す強化（巻き戻り画面で選ぶ）
     artifacts: [], // 手に入れたアーティファクト（すべて持ち越す）
     compStage: {}, // お供ごとの届いた段階（持ち越す）
+    allies: [], // 稀少の強化で呼んだ仲間のお供（持ち越す）
     bonds: [], // 絆の強化（すべて持ち越す）
     lastLoop: null,
     flags: { bossBeaten: false, diaryRead: false, archiveOpened: false, ending: false, seenRewind: false },
@@ -135,7 +136,7 @@ export function autoInherit(m, boons) {
 
 // 古いセーブに新しい項目を足す
 function migrate(m) {
-  m.shards ??= 0; m.upgrades ??= {}; m.inherit ??= []; m.artifacts ??= []; m.compStage ??= {}; m.bonds ??= [];
+  m.shards ??= 0; m.upgrades ??= {}; m.inherit ??= []; m.artifacts ??= []; m.compStage ??= {}; m.bonds ??= []; m.allies ??= [];
   for (const k of ['power', 'arts', 'bond']) if (!m.unlocked.includes(k)) m.unlocked.push(k);
   m.companion ??= 'hotaru';
   return m;
@@ -223,7 +224,7 @@ export function endLoop(m, run) {
   if (lostBoons.length) report.reset.push({ text: `強化 ${lostBoons.length} 個`, sub: lostBoons.map((b) => BOONS[b.id].name).join('・') });
   report.reset.push({ text: 'HP・秒針ゲージ', sub: '' });
   // お供：届いた段階と絆の強化はすべて持ち越す
-  if (run.comp) m.compStage[run.comp.id] = Math.max(m.compStage[run.comp.id] || 1, run.comp.stage);
+  for (const c of run.comps || (run.comp ? [run.comp] : [])) m.compStage[c.id] = Math.max(m.compStage[c.id] || 1, c.stage);
   for (const b of (run.boons || []).filter((x) => BOONS[x.id] && BOONS[x.id].school === 'bond')) {
     const o = m.bonds.find((x) => x.id === b.id);
     if (o) o.tier = Math.max(o.tier, b.tier); else m.bonds.push({ id: b.id, tier: b.tier });
@@ -231,7 +232,7 @@ export function endLoop(m, run) {
   if (run.comp || m.bonds.length) {
     const nm = { hotaru: 'ホタル', neji: 'ネジ', chiku: 'チク' };
     const st = Object.entries(m.compStage).map(([id, s]) => `${nm[id] || id}${'★'.repeat(s)}`).join('・');
-    report.kept.push({ text: `お供の成長${st ? '：' + st : ''}`, sub: m.bonds.length ? '絆：' + m.bonds.map((b) => BOONS[b.id].name + (b.tier > 1 ? ' Lv' + b.tier : '')).join('・') : '' });
+    report.kept.push({ text: `お供の成長${st ? '：' + st : ''}${(m.allies || []).length ? `（仲間 ${m.allies.length + 1} 匹）` : ''}`, sub: m.bonds.length ? '絆：' + m.bonds.map((b) => BOONS[b.id].name + (b.tier > 1 ? ' Lv' + b.tier : '')).join('・') : '' });
   }
   // アーティファクトはすべて持ち越す
   const before = new Set(m.artifacts || []);
