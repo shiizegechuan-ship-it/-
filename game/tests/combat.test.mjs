@@ -205,3 +205,37 @@ test('すり抜け床の上で ↓ を倒すと、回転斬りしながら降り
   d2.frame(20);
   assert.ok(Math.abs(g2.player.y - y1) < 2, 'stayed on the platform');
 });
+
+test('守護の強化：時の盾・鉄の心・棘の外套・不動・踏みとどまる', () => {
+  // 時の盾：張られると次の被弾を 1 回まるごと防ぐ
+  let { g, d, e } = withEnemy(RustSoldier, 300);
+  const p = g.player; p.setBoons([{ id: 'timeshield', tier: 3 }]); g.room.enemies = [];
+  d.frame(60 * 8 + 5);
+  assert.ok(p.wardUp, 'shield up after 8s');
+  const hp = p.hp; g.damagePlayer(30, { fromX: p.x + 20 });
+  assert.equal(p.hp, hp, 'blocked'); assert.equal(p.wardUp, false);
+  // 鉄の心
+  ({ g, d, e } = withEnemy(RustSoldier, 300));
+  g.player.setBoons([{ id: 'ironheart', tier: 3 }]); g.player.hp = 100; g.player.maxHp = 1000;
+  g.damagePlayer(40, { fromX: g.player.x + 20 });
+  assert.equal(100 - g.player.hp, 30, '-25%');
+  // 棘の外套：殴ってきた敵へ返す
+  ({ g, d, e } = withEnemy(RustSoldier, 40));
+  g.player.setBoons([{ id: 'thornmail', tier: 3 }]); g.player.hp = g.player.maxHp = 1000; e.hp = e.maxHp = 1000;
+  e.facePlayer(g.player); e.setState('windup');
+  d.until(() => g.player.hp < 1000, 120);
+  d.frame(2);
+  assert.ok(e.hp < 1000, 'thorns hurt the attacker');
+  // 不動：吹き飛ばされにくく、無敵が延びる
+  ({ g, d, e } = withEnemy(RustSoldier, 300));
+  const q = g.player; q.setBoons([{ id: 'steadfast', tier: 3 }]); q.hp = q.maxHp = 1000;
+  g.room.enemies = []; const x0 = q.x; g.damagePlayer(10, { fromX: q.x + 30, knock: 600 }); d.frame(20);
+  assert.ok(Math.abs(q.x - x0) < 40, `barely moved ${q.x - x0}`);
+  // 踏みとどまる：部屋ごとに 1 度、HP1 で耐え、Lv3 なら回復
+  ({ g, d, e } = withEnemy(RustSoldier, 300));
+  const r = g.player; r.setBoons([{ id: 'laststand', tier: 3 }]); r.maxHp = 100; r.hp = 10;
+  g.damagePlayer(50, { fromX: r.x + 20 });
+  assert.ok(r.state !== 'dead' && r.hp >= 1 + 20 - 1, `survived with ${r.hp}`);
+  r.iframeT = 0; r.hp = 5; g.damagePlayer(50, { fromX: r.x + 20 });
+  assert.equal(r.state, 'dead', 'only once per room');
+});

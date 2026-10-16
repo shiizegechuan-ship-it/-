@@ -29,7 +29,7 @@ export function rollArtifacts(rng, owned, rarity, n) {
 export function applyArtifacts(s, arts) {
   const has = (id) => arts.includes(id);
   s.artifacts = arts.slice();
-  s.dmgTaken = has('guardgear') ? 0.85 : 1;
+  s.dmgTaken = (s.dmgTaken || 1) * (has('guardgear') ? 0.85 : 1);
   s.goldMul = (s.goldMul || 1) * (has('purse') ? 1.5 : 1);
   s.healMul = has('vial') ? 1.4 : 1;
   s.extraAirJumps = has('springboots') ? 1 : 0;

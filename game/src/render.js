@@ -103,6 +103,7 @@ function renderPlay(ctx, game) {
   drawPlayer(b, game, game.player);
   for (const c of [game.comp, ...(game.allies || [])]) if (c) drawCompanion(b, game, c, game.time);
   if (game.union) drawUnion(b, game, game.union, game.time);
+  if (game.player.wardUp && game.player.state !== 'dead') { const px = Math.round(cx(game.player) / 2), py = Math.round(cy(game.player) / 2); glow(b, px, py, 12, '#9fe3ff', 0.18 + 0.08 * Math.sin(game.time * 4)); circle(b, px, py, 12, '#9fe3ff'); } // 時の盾
   // 守りの秒針（常時の術）
   if (game.player.cloud && game.player.state !== 'dead') { // 頭上の雷雲
     const c = game.player.cloud, x = Math.round(c.x / 2), y = Math.round(c.y / 2) + Math.round(Math.sin(game.time * 3));
@@ -1180,8 +1181,17 @@ function outlinedImg(b, img, x, y, color) {
 }
 
 function drawBoss(b, game, e, bx, by, t, flash, slowGlow) {
-  const f = e.face, duel = e.trueDuel;
-  const wind = ['swingWind', 'handsWind', 'stopWind', 'stepWind', 'antiAirWind', 'leapWind', 'feint', 'punishWind'].includes(e.state);
+  const f = e.face, duel = e.finalForm ? 'final' : e.trueDuel;
+  const wind = ['swingWind', 'handsWind', 'stopWind', 'stepWind', 'antiAirWind', 'leapWind', 'feint', 'punishWind', 'rainWind', 'ringsWind', 'tripleWind', 'dashWind'].includes(e.state);
+  // 白き刻守の技の予告
+  if (e.state === 'rainWind' && e.rainXs) for (const x of e.rainXs) { const gx = Math.round(x / 2), gy = Math.round(Math.min(game.map.groundBelow(x, e.y), game.map.pxH) / 2); b.globalAlpha = 0.3 + 0.5 * e.tell; rect(b, gx - 3, gy - 2, 7, 2, '#ff4a2a'); line(b, gx, gy - 4, gx, gy - 4 - Math.round(e.tell * 30), '#ff8a6a'); b.globalAlpha = 1; }
+  if (e.state === 'dashWind') { b.globalAlpha = 0.25 + 0.5 * e.tell; rect(b, bx + (f > 0 ? 0 : -160), Math.round(cy(e) / 2) - 1, 160, 3, '#ff4a2a'); b.globalAlpha = 1; }
+  if (e.state === 'tripleWind') wedge(b, bx, Math.round(cy(e) / 2) - 2, 56, f > 0 ? -0.8 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 0.8, e.tell > 0.6 ? 'rgba(255,74,42,0.5)' : 'rgba(255,90,60,0.3)');
+  if (e.state === 'ringsWind') circle(b, bx, Math.round(cy(e) / 2), 8 + Math.round(e.tell * 10), '#ffffff');
+  if (e.state === 'triple' && e.stateT < 0.16) arc(b, bx + f * 6, Math.round(cy(e) / 2), 40, f > 0 ? -1.0 : Math.PI - 0.8, f > 0 ? 0.8 : Math.PI + 1.0, '#ffffff', 3);
+  // 白き刻守：白く大きい（体を 1.45 倍に描く）。白い光をまとう
+  const big = e.finalForm ? 1.45 : 1;
+  if (e.finalForm) { glow(b, bx, by - 20, 26 + 3 * Math.sin(t * 3), '#ffffff', e.state === 'transform' ? 0.6 : 0.22); b.save(); b.translate(bx, by); b.scale(big, big); b.translate(-bx, -by); }
   // 予告（範囲）は体より先に
   if (e.state === 'leap') {
     const gx = Math.round(e.leapX / 2), gy = Math.round(game.map.groundBelow(e.leapX, e.y + e.h) / 2);
@@ -1223,6 +1233,7 @@ function drawBoss(b, game, e, bx, by, t, flash, slowGlow) {
     for (let i = 0; i < 4; i++) rect(b, ex - i, ey - 3 + i, i * 2 + 1, 1, '#f2c14e'), rect(b, ex - i, ey + 3 - i, i * 2 + 1, 1, '#f2c14e');
     if (e.state === 'swing') arc(b, bx, Math.round(cy(e) / 2) - 2, 50, f > 0 ? -0.9 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 0.9, '#ffc878', 4);
   }
+  if (e.finalForm) b.restore();
   // 懐中時計
   if (e.state === 'stopWind') {
     const k = e.tell, wx = bx - f * 3, wy = by - 34 - Math.round(k * 5);

@@ -310,9 +310,11 @@ export const ALL_FRAMES = { HERO_FRAMES, SOLDIER_FRAMES, BAT_FRAMES, KNIGHT_FRAM
 // 色違い（白＝被弾の光、赤＝予備動作の縁取り、青＝遅延、亡霊＝回避の残像）
 const MONO = { white: '#ffffff', red: '#ff4a2a', blue: '#5aa9e6', ghost: '#9fe3ff', gold: '#f2c14e' };
 const GROUPS = { archer: [ARCHER_FRAMES, PAL_FOE], phantom: [PHANTOM_FRAMES, PAL_PHANTOM], bell: [BELL_FRAMES, PAL_BELL], hero: [HERO_FRAMES, PAL_ALLY], soldier: [SOLDIER_FRAMES, PAL_FOE], bat: [BAT_FRAMES, PAL_FOE], knight: [KNIGHT_FRAMES, PAL_FOE], boss: [BOSS_FRAMES, PAL_FOE], lira: [{ a: LIRA }, PAL_ALLY], glen: [{ a: GLEN }, PAL_ALLY] };
+// 白き刻守（最終夜の第 2 形態）の色
+const PAL_WHITE = { k: '#4a4a60', m: '#dcdcec', M: '#ffffff', h: '#bfc8ec', u: '#9fb8ff', U: '#e0ecff', x: '#ffd38a', W: '#ffffff', g: '#e8dcb0', y: '#f4f0e0' };
 export function spr(group, frame, variant = null, duel = false) {
   const [frames, basePal] = GROUPS[group];
-  let pal = duel ? { ...basePal, m: '#4a4058', M: '#6e6280' } : basePal;
+  let pal = duel === 'final' ? { ...basePal, ...PAL_WHITE } : duel ? { ...basePal, m: '#4a4058', M: '#6e6280' } : basePal;
   if (variant) { const c = MONO[variant]; pal = Object.fromEntries(Object.keys(basePal).map((k) => [k, c])); }
-  return sprite(`${group}:${frame}:${variant || ''}:${duel ? 'd' : ''}`, frames[frame], pal);
+  return sprite(`${group}:${frame}:${variant || ''}:${duel === 'final' ? 'f' : duel ? 'd' : ''}`, frames[frame], pal);
 }

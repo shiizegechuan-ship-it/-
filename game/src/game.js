@@ -17,7 +17,7 @@ import { nightLook } from './nightlook.js';
 import { LAYOUTS, FLOOR_NAMES, buildPlan, layoutRows, extraEnemyTypes } from './world.js';
 import {
   newMeta, serialize, deserialize, endLoop, learn, knows, hasWedge, addWedge, removeWedge, freeSlots,
-  bossCounter, trueEndReady, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
+  bossCounter, trueEndReady, finalReady, FINAL_NIGHT, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
   upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount, habitAnalysis, dawnProgress, MOB_COUNTERS,
 } from './meta.js';
 
@@ -153,7 +153,8 @@ export class Game {
     // 夜ごとの様相の一言（天気や塔の変化）
     const note = nightLook(meta).note;
     this.nightNote = note ? { text: note, t: 0 } : null;
-    this.fx.setBanner(`第 ${meta.loop} 夜`, pr.next ? `夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}` : `終わらない夜　深さLv${this.run.scale.level}`, '#f2c14e', 2.6);
+    if (finalReady(meta) && !meta.flags.ending) this.fx.setBanner(`第 ${meta.loop} 夜 ― 最終夜`, '鐘楼で、リラの言葉を師に届けよ', '#ffd38a', 3);
+    else this.fx.setBanner(`第 ${meta.loop} 夜`, pr.next ? `夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}` : `終わらない夜　深さLv${this.run.scale.level}`, '#f2c14e', 2.6);
     if (meta.loop === 1 && !meta.flags.ending) this.openDialog([
       { who: '', text: 'あなたは時計塔の主「刻守」の弟子。この町は、同じ夜を繰り返している。' },
       { who: '', text: '夜の終わりに師が鐘を鳴らすと、時は夜のはじめに戻る。それを覚えていられるのは、師から「時の楔」を習ったあなただけ。' },
@@ -476,6 +477,8 @@ export class Game {
     this.resolveProjectiles();
     updatePassives(this, dt);
     updateCompanions(this, dt);
+    // 時の盾：一定時間ごとに張り直す
+    if (p.stats.wardShield && !p.wardUp) { p.wardT = (p.wardT || 0) + dt; if (p.wardT >= p.stats.wardShield) { p.wardUp = true; p.wardT = 0; this.fx.ring(cx(p), cy(p), '#9fe3ff', 26, 0.3); } }
     if (!this.modal && !this.run.pendingRare) for (const c of allComps(this)) if (c.announce) { this.announceEvolution(c); break; }
     updateSpells(this, dt);
     if (p.onGround) p.airHits = 0;
@@ -1036,7 +1039,7 @@ export class Game {
     const p = this.player;
     for (const e of this.room.enemies) {
       if (!e.alive) continue;
-      for (const a of e.attacks) this.hitPlayer(a, Math.round(a.dmg * this.enemyDmgMul() * (e.dmgMul || 1)), cx(e), a.key, a.knock);
+      for (const a of e.attacks) { this.attacker = e; this.hitPlayer(a, Math.round(a.dmg * this.enemyDmgMul() * (e.dmgMul || 1)), cx(e), a.key, a.knock); this.attacker = null; }
     }
   }
   resolveProjectiles() {
@@ -1113,8 +1116,28 @@ export class Game {
     if (p.state === 'dead') return;
     if (!pit && p.invulnerable) return;
     if (!pit) dmg = Math.max(1, Math.round(dmg * (p.stats.dmgTaken || 1))); // 守りの歯車
+    const st = p.stats;
+    // 時の盾：次の被弾を 1 回まるごと防ぐ
+    if (!pit && p.wardUp) { p.wardUp = false; p.wardT = 0; p.iframeT = Math.max(p.iframeT, 0.5); this.fx.text(cx(p), p.y - 30, '時の盾', '#9fe3ff', 13); this.fx.ring(cx(p), cy(p), '#9fe3ff', 34, 0.35); this.fx.sparks(cx(p), cy(p), '#cfefff', 12, 220); this.sfx.play('block'); return; }
+    // 踏みとどまる：部屋ごとに 1 度、倒れるほどの一撃を HP1 で耐える
+    let stood = false;
+    if (!pit && st.lastStand && dmg >= p.hp && !this.room.lastStandUsed) { this.room.lastStandUsed = true; dmg = Math.max(0, p.hp - 1); stood = true; }
     if (!pit && p.compShield) { p.compShield = false; dmg = Math.max(1, Math.round(dmg * 0.5)); this.fx.text(cx(p), p.y - 34, '守りの羽', '#9fe3ff', 11); this.fx.ring(cx(p), cy(p), '#9fe3ff', 30, 0.3); }
-    p.hurt(dmg, fromX ?? cx(p), pit ? 0 : knock);
+    p.hurt(dmg, fromX ?? cx(p), pit ? 0 : (st.steadfast ? 0 : knock));
+    if (!pit && st.steadfast && p.state === 'hurt') { p.vx *= 0.3; p.vy = Math.max(p.vy, -120); p.hurtStun = (p.hurtStun || 0.3) * 0.6; p.iframeT += st.steadfast; }
+    if (stood && p.state !== 'dead') {
+      this.fx.setBanner('踏みとどまった', '', '#9fe3ff', 1.2); this.fx.ring(cx(p), cy(p), '#ffffff', 50, 0.4);
+      if (st.lastStand >= 2) p.iframeT = Math.max(p.iframeT, 2);
+      if (st.lastStand >= 3) p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.2));
+    }
+    // 棘の外套：受けたダメージを攻撃してきた敵へ返す（弾なら近くの敵へ）
+    if (!pit && st.thorns && dmg > 0) {
+      const src = this.attacker && this.attacker.alive ? this.attacker : this.room.enemies.filter((e) => e.alive && !(e.boss && e.defeated)).sort((a, b) => Math.abs(cx(a) - cx(p)) - Math.abs(cx(b) - cx(p)))[0];
+      if (src && Math.hypot(cx(src) - cx(p), cy(src) - cy(p)) < 260) {
+        this.dealDamage(src, { base: dmg * st.thorns / Math.max(0.01, st.dmgMul), cat: 'echo', knock: 100, dir: sign(cx(src) - cx(p)) || 1, echo: true });
+        this.fx.sparks(cx(src), cy(src), '#9fe3ff', 8, 220); this.fx.text(cx(src), src.y - 20, '棘', '#9fe3ff', 11);
+      }
+    }
     // 吹き飛ばし：白い衝撃の輪と、飛ばされる向きの風切り
     if (knock && p.state === 'hurt') { this.fx.ring(cx(p), cy(p), '#ffffff', 40, 0.3); this.fx.text(cx(p), p.y - 24, '吹き飛ばされた', '#ffd0a0', 11); this.fx.shake(8, 0.25); }
     // 落下からの復帰では吹き飛ばさない（同じ穴へ落ち続けないように）
@@ -1661,7 +1684,8 @@ export class Game {
       this.fx.setBanner('第三楽章', '', '#f2c14e', 1.2);
       this.learnK('lira_name');
       const lines = [{ who: '刻守（師）', text: 'リラ……もう一度だけ、あの子が家にいる夜を……！' }];
-      if (trueEndReady(this.meta)) {
+      if (trueEndReady(this.meta) && !finalReady(this.meta)) lines.push({ who: '', text: `（リラの言葉を伝えようとしたが、師の耳には届かない。まだその夜ではない――第${FINAL_NIGHT}夜を待て）` });
+      if (finalReady(this.meta)) {
         b.setState('talk');
         this.openDialog(lines, [
           { label: '「リラは覚えている」と伝える', fn: () => this.beginTrueDuel(b) },
@@ -1669,6 +1693,24 @@ export class Game {
         ]);
       } else this.openDialog(lines);
     }
+  }
+  beginFinalForm(b) {
+    b.defeated = false; b.finalForm = true;
+    const ox = cx(b), oy = b.y + b.h;
+    b.w = 48; b.h = 82; b.x = ox - b.w / 2; b.y = oy - b.h;
+    b.maxHp = Math.round(b.maxHp * 1.1); b.hp = b.maxHp;
+    b.poiseDmg = 0; b.cool = 1.2; b.ownVx = 0; b.vx = 0;
+    b.setState('transform');
+    this.room.projectiles = [];
+    this.fx.screenFlash('#ffffff', 0.7); this.fx.shake(12, 0.8); this.sfx.play('bossBell'); this.sfx.play('guardBreak');
+    this.fx.burst(cx(b), cy(b), '#ffffff', 50);
+    this.hitstop = 0.25;
+    this.openDialog([
+      { who: '刻守（師）', text: '……まだだ。最後の鐘の力を、すべてこの身に。' },
+      { who: '刻守（師）', text: '朝を見せるというなら、この白い夜を越えてみせろ！' },
+    ]);
+    this.fx.setBanner('第 2 形態 ― 白き刻守', '攻撃の選択肢が増える', '#ffffff', 2.4);
+    this.emit('bossFinalForm');
   }
   beginTrueDuel(b) {
     this.clearGuards();
@@ -1684,6 +1726,8 @@ export class Game {
     this.fx.setBanner('夜明けの決闘', '', '#ffd38a', 2.0);
   }
   onBossDefeated(b) {
+    // 最終夜の決闘：一度倒すと、白く大きな第 2 形態「白き刻守」になる
+    if (b.trueDuel && !b.finalForm) { this.beginFinalForm(b); return; }
     this.clearGuards();
     this.addShards(40 + 10 * this.run.scale.level, cx(b), b.y - 30);
     this.room.projectiles = [];

@@ -35,8 +35,8 @@ export class Tokimori extends Enemy {
     this.ownVx = this.vx;
   }
   get enraged() { return this.brake && this.phase >= 2; }
-  get speedMul() { return (this.phase === 3 ? 0.85 : 1) * (this.enraged ? 0.85 : 1) * (this.trueDuel ? 0.9 : 1); }
-  get invuln() { return this.state === 'phaseShift' || this.state === 'intro' || this.state === 'defeated' || this.state === 'talk'; }
+  get speedMul() { return (this.phase === 3 ? 0.85 : 1) * (this.enraged ? 0.85 : 1) * (this.trueDuel ? 0.9 : 1) * (this.finalForm ? 0.85 : 1); }
+  get invuln() { return this.state === 'phaseShift' || this.state === 'intro' || this.state === 'defeated' || this.state === 'talk' || this.state === 'transform'; }
 
   think(game, dt) {
     const p = game.player;
@@ -185,6 +185,49 @@ export class Tokimori extends Enemy {
           this.recover(1.0); // 撃った直後は長い隙
         }
         break;
+      // ───── 白き刻守の技 ─────
+      case 'transform':
+        this.vx = 0; this.tell = 1; this.tellKind = 'real';
+        if (this.stateT >= 2.0) { this.cool = 0.6; this.setState('idle'); }
+        break;
+      case 'rainWind': // 天へ針を放ち、印の位置へ降らせる
+        this.vx = 0; this.tell = clamp(this.stateT / (0.7 * wm), 0, 1); this.tellKind = 'watch';
+        if (this.stateT >= 0.7 * wm) {
+          const top = game.cam.y - 20;
+          this.rainXs.forEach((x, i) => { const pr = new Projectile('hand', x - 6, top, 0, 520, 15); pr.delay = 0.25 + i * 0.05; pr.life = 4; game.spawnProjectile(pr); });
+          game.sfx.play('shoot'); this.recover(0.9);
+        }
+        break;
+      case 'ringsWind': // 白い光輪を 3 重に広げる（輪と輪の間を跳ぶ）
+        this.vx = 0; this.tell = clamp(this.stateT / (0.6 * wm), 0, 1); this.tellKind = 'bell';
+        if (this.stateT >= 0.6 * wm) {
+          for (let i = 0; i < 3; i++) { const r = new Projectile('ring', cx(this), cy(this) + 10, 0, 0, 16); r.r = 12; r.maxR = 340; r.speed = 230; r.band = 14; r.life = 3; r.delay = i * 0.45; game.spawnProjectile(r); }
+          game.sfx.play('bossBell'); game.fx.shake(5, 0.2); this.recover(0.8);
+        }
+        break;
+      case 'tripleWind': // 白の三連斬：踏み込みながら 3 回薙ぐ
+        this.vx = 0; this.facePlayer(p); this.tell = clamp(this.stateT / (0.45 * wm), 0, 1); this.tellKind = 'pendulum';
+        if (this.stateT >= 0.45 * wm) { this.setState('triple'); this.swing++; this.vx = this.face * 300; game.sfx.play('heavySwing'); }
+        break;
+      case 'triple':
+        this.vx = approach(this.vx, 0, 1200 * dt);
+        if (this.stateT < 0.16) this.attacks.push({ ...this.frontBox(110, 70, -4), dmg: 18, knock: 380, key: this.id * 1000 + this.swing });
+        if (this.stateT >= 0.24) {
+          this.hits--;
+          if (this.hits > 0) { this.facePlayer(p); this.setState('tripleWind'); this.stateT = 0.45 * wm - 0.18; }
+          else this.recover(0.75);
+        }
+        break;
+      case 'dashWind': // 白い突進：部屋を一直線に駆け抜ける
+        this.vx = 0; this.tell = clamp(this.stateT / (0.55 * wm), 0, 1); this.tellKind = 'red';
+        if (this.stateT >= 0.55 * wm) { this.setState('dash'); this.swing++; game.sfx.play('heavySwing'); }
+        break;
+      case 'dash':
+        this.vx = this.face * 760;
+        if (Math.floor(this.stateT * 30) !== Math.floor((this.stateT - dt) * 30)) game.fx.sparks(cx(this) - this.face * 20, cy(this), '#ffffff', 3, 120);
+        this.attacks.push({ x: this.x - 6, y: this.y, w: this.w + 12, h: this.h, dmg: 20, knock: 520, key: this.id * 1000 + this.swing });
+        if (this.stateT >= 0.5 || (this.coll && this.coll.hitX)) { this.vx = 0; game.fx.shake(6, 0.2); this.recover(0.9); }
+        break;
       case 'recover':
         this.vx = approach(this.vx, 0, 900 * dt);
         if (this.stateT >= this.recT) { this.cool = this.nextCool(); this.setState('idle'); }
@@ -218,6 +261,8 @@ export class Tokimori extends Enemy {
     if (adx < 150) opts.push('swing', 'swing');
     if (adx > 120) opts.push('hands', 'leap');
     opts.push('hands', 'leap');
+    // 白き刻守：攻撃の選択肢が増える
+    if (this.finalForm) { opts.push('rain', 'rain', 'rings', 'rings', 'dash'); if (adx < 200) opts.push('triple', 'triple'); else opts.push('dash', 'rain'); }
     if (this.phase >= 2 && !this.brake && this.lastMoveName !== 'stop') opts.push('stop', 'stop');
     let m = this.rng.pick(opts);
     // 同じ技の3連続は避ける
@@ -229,6 +274,16 @@ export class Tokimori extends Enemy {
     if (m === 'hands') { this.setState('handsWind'); this.aimHands(p); game.sfx.play('tellBig'); }
     if (m === 'leap') { this.setState('leapWind'); }
     if (m === 'stop') { this.setState('stopWind'); game.sfx.play('tellBig'); }
+    if (m === 'rain') { this.setState('rainWind'); this.rainXs = this.planRain(game); game.sfx.play('tellBig'); }
+    if (m === 'rings') { this.setState('ringsWind'); game.sfx.play('tellBig'); }
+    if (m === 'triple') { this.setState('tripleWind'); this.hits = 3; game.sfx.play('tellBig'); }
+    if (m === 'dash') { this.facePlayer(p); this.setState('dashWind'); game.sfx.play('tellBig'); }
+  }
+  // 時針の雨：主人公の位置と、その左右に間隔を空けて落とす（すき間に入れば当たらない）
+  planRain(game) {
+    const p = game.player, xs = [], base = cx(p), gap = 64;
+    for (let i = -4; i <= 4; i++) if (i !== 1 && i !== -3) xs.push(clamp(base + i * gap + (this.rng.next() - 0.5) * 16, 30, game.map.pxW - 30));
+    return xs;
   }
   tryCounter(game, adx) {
     const p = game.player;

@@ -82,7 +82,7 @@ export function newMeta(seed = (Date.now() & 0x7fffffff)) {
     wedges: [],
     knowledge: {}, // key -> 知った周回
     code: [r.int(1, 9), r.int(1, 9), r.int(1, 9)], // セーブ固定（周回では変わらない）
-    unlocked: ['haste', 'echo', 'risk', 'power', 'arts', 'bond'],
+    unlocked: ['haste', 'echo', 'risk', 'power', 'arts', 'bond', 'ward'],
     companion: 'hotaru', // お供（巻き戻り画面・中断メニューで替えられる）
     shards: 0, // 時の欠片（恒久強化の通貨）
     upgrades: {}, // 刻印（恒久強化）の Lv
@@ -137,7 +137,7 @@ export function autoInherit(m, boons) {
 // 古いセーブに新しい項目を足す
 function migrate(m) {
   m.shards ??= 0; m.upgrades ??= {}; m.inherit ??= []; m.artifacts ??= []; m.compStage ??= {}; m.bonds ??= []; m.allies ??= [];
-  for (const k of ['power', 'arts', 'bond']) if (!m.unlocked.includes(k)) m.unlocked.push(k);
+  for (const k of ['power', 'arts', 'bond', 'ward']) if (!m.unlocked.includes(k)) m.unlocked.push(k);
   m.companion ??= 'hotaru';
   return m;
 }
@@ -175,6 +175,9 @@ export function wedgeLabel(w) {
 export function trueEndReady(m) {
   return hasWedge(m, 'lira') && knows(m, 'lira_message') && knows(m, 'master_reason');
 }
+// 最終夜：夜明けの決闘（最終ステージ）に挑めるのは第 5 夜から。物語の準備がそろっていても、それより前は師に届かない
+export const FINAL_NIGHT = 5;
+export const finalReady = (m) => trueEndReady(m) && m.loop >= FINAL_NIGHT;
 
 // 前の周回の戦い方の分析。最も使った手段 → 刻守の対策（1つだけ。毎周上書き）
 export function habitAnalysis(lastLoop) {
@@ -299,7 +302,8 @@ export function nightStory(m) {
 }
 // 物語の進み具合に応じた一言（あれば巻き戻りの助言の代わりに出す）
 function progressLine(m) {
-  if (trueEndReady(m)) return 'リラの言葉を、師に届ける時が来た。鐘楼で、第三楽章まで戦い抜け。';
+  if (finalReady(m)) return 'リラの言葉を、師に届ける時が来た。鐘楼で、第三楽章まで戦い抜け。';
+  if (trueEndReady(m)) return `リラの言葉はそろった。けれど師の心はまだ固い――届くのは最後の夜、第${FINAL_NIGHT}夜から。`;
   if (hasWedge(m, 'lira') && !knows(m, 'lira_message')) return 'リラだけが、この夜を覚えている。名前で呼びかけてみよう。';
   if (knows(m, 'master_reason') && !hasWedge(m, 'lira')) return '師は命と引き換えに夜を買っている。止められるのは、師が守ろうとしている娘の言葉だけかもしれない。';
   return null;
@@ -323,7 +327,7 @@ export const DAWN_STEPS = [
   { title: '師の日誌を読む', hint: '中層の書庫の扉を番号で開ける', done: (m) => knows(m, 'master_reason') },
   { title: 'リラに楔を打つ', hint: '市場の少女に楔を打てば、次の夜もあなたを覚えている', done: (m) => hasWedge(m, 'lira') },
   { title: 'リラの伝言を聞く', hint: '覚えているリラに、名前で呼びかける（楔を打った次の夜）', done: (m) => knows(m, 'lira_message') },
-  { title: '夜明けの決闘に勝つ', hint: '刻守の第三楽章で「リラは覚えている」と伝え、勝つ', done: (m) => !!m.flags.ending },
+  { title: '夜明けの決闘に勝つ', hint: '第5夜（最終夜）以降、刻守の第三楽章で「リラは覚えている」と伝え、白き刻守まで倒す', done: (m) => !!m.flags.ending },
 ];
 export function dawnProgress(m) {
   const done = DAWN_STEPS.filter((s) => s.done(m)).length;

@@ -192,7 +192,7 @@ export function drawHud(ctx, game) {
   const b = game.room.boss;
   if (b) {
     const w = 520, x = VIEW_W / 2 - w / 2, y = VIEW_H - 40;
-    text(ctx, b.trueDuel ? '刻守 ― 夜明けの決闘' : '刻守', x, y - 6, { size: 13, bold: true, color: b.trueDuel ? '#ffd38a' : '#efe6d2', font: SERIF });
+    text(ctx, b.finalForm ? '白き刻守 ― 第 2 形態' : b.trueDuel ? '刻守 ― 夜明けの決闘' : '刻守', x, y - 6, { size: 13, bold: true, color: b.trueDuel ? '#ffd38a' : '#efe6d2', font: SERIF });
     if (b.counter) {
       text(ctx, `対策：${COUNTERS[b.counter].name}`, x + w, y - 6, { size: 11, align: 'right', color: '#ff9a7a' });
       text(ctx, `崩し方：${COUNTERS[b.counter].weak}`, VIEW_W / 2, y + 26, { size: 11, align: 'center', color: '#c9b0a0' });

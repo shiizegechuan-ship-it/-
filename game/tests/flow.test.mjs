@@ -84,10 +84,10 @@ test('死亡 → 巻き戻り → 強化に楔 → 次の夜をその強化で�
   assert.deepEqual(g.player.boons, [{ id: 'lag', tier: 1 }]);
 });
 
-test('真の結末：条件を満たして第3段階で言葉を伝え、決闘に勝つ', () => {
+test('真の結末：最終夜（第5夜以降）に、条件を満たして第3段階で言葉を伝え、白き刻守（第2形態）まで倒す', () => {
   const g = newGame(7);
   const d = new Driver(g);
-  g.meta.slots = 3;
+  g.meta.slots = 3; g.meta.loop = 5;
   addWedge(g.meta, { target: 'lira' });
   learn(g.meta, 'lira_message'); learn(g.meta, 'master_reason');
   g.enterRoom(2, g.run.plan.floors[2].findIndex((r) => r.type === 'boss'));
@@ -99,6 +99,12 @@ test('真の結末：条件を満たして第3段階で言葉を伝え、決闘�
   d.frame(10); d.frame(1, ['confirm']);
   while (g.modal) { d.frame(10); d.frame(1, ['confirm']); }
   assert.ok(b.trueDuel);
+  b.hp = 1; b.state = 'idle'; b.takeHit(g, { dmg: 5, dir: 1, knock: 0, cat: 'combo' });
+  // 一度倒すと白き刻守（第 2 形態）になる：大きく、夜明けはまだ来ない
+  assert.ok(b.finalForm && !b.defeated && b.hp === b.maxHp);
+  assert.ok(b.h > 70 && b.w > 40, 'bigger');
+  assert.notEqual(g.scene, 'ending');
+  while (g.modal) { d.frame(10); d.frame(1, ['confirm']); }
   b.hp = 1; b.state = 'idle'; b.takeHit(g, { dmg: 5, dir: 1, knock: 0, cat: 'combo' });
   d.until(() => g.scene === 'ending', 400);
   assert.equal(g.scene, 'ending');
@@ -124,4 +130,40 @@ test('楔を打つ動作は回避で中断でき、中断すると楔は打た�
   d.frame(80);
   assert.equal(g.meta.wedges.length, 1);
   assert.ok(lira.wedged);
+});
+
+test('最終夜より前（第4夜まで）は、条件がそろっていても夜明けの決闘に入れない', () => {
+  const g = newGame(7);
+  const d = new Driver(g);
+  g.meta.slots = 3; g.meta.loop = 4;
+  addWedge(g.meta, { target: 'lira' });
+  learn(g.meta, 'lira_message'); learn(g.meta, 'master_reason');
+  g.enterRoom(2, g.run.plan.floors[2].findIndex((r) => r.type === 'boss'));
+  while (g.modal) { d.frame(10); d.frame(1, ['confirm']); }
+  const b = g.room.boss;
+  b.hp = b.maxHp * 0.2; b.phase = 2; b.checkPhase(g);
+  assert.ok(!g.modal.choices, 'no choice to tell yet');
+  assert.ok(g.modal.lines.some((l) => l.text.includes('第5夜')));
+});
+
+test('白き刻守は新しい技（時針の雨・光輪・三連斬・突進）を使い、それぞれ当たる', async () => {
+  const g = newGame(8); g.meta.loop = 5; g.startLoop(); g.modal = null;
+  g.enterRoom(2, g.run.plan.floors[2].findIndex((r) => r.type === 'boss'));
+  g.modal = null;
+  const b = g.room.boss; b.trueDuel = true; b.brake = true; g.room.duel = true;
+  g.beginFinalForm(b); g.modal = null;
+  // 技の候補に入っている
+  let opts = null; const pick0 = b.rng.pick.bind(b.rng); b.rng.pick = (o) => { opts = o.slice(); return pick0(o); };
+  b.chooseMove(g, 100); b.rng.pick = pick0;
+  for (const m of ['rain', 'rings', 'triple', 'dash']) assert.ok(opts.includes(m), m);
+  // それぞれ実際に出して、主人公に当たる
+  const d = new Driver(g), p = g.player;
+  for (const m of ['rain', 'rings', 'triple', 'dash']) {
+    p.hp = p.maxHp = 1e7; p.iframeT = 0; g.room.projectiles = [];
+    p.x = b.x + (b.face > 0 ? 90 : -90); p.y = b.y + b.h - p.h;
+    b.rng.pick = () => m; b.chooseMove(g, 90); b.rng.pick = pick0;
+    for (let i = 0; i < 60 * 3 && p.hp === p.maxHp; i++) { d.frame(1); p.iframeT = 0; if (g.modal) g.modal = null; }
+    assert.ok(p.hp < p.maxHp, `${m} hits`);
+    b.setState('idle'); b.cool = 99;
+  }
 });
