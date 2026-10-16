@@ -310,6 +310,7 @@ test('敵 1 体ごとの金貨：めちゃ簡単 ×3・簡単 ×2・普通〜激
     g.enterRoom(0, 1); g.modal = null;
     const e = g.room.enemies.find((x) => x.kind === 'soldier') || g.room.enemies[0];
     let got = 0; g.dropGold = (n) => { got += n; };
+    g.room.budget = null; // 部屋の取り分の分配を外して、1 体そのものの金貨を比べる
     e.hp = 0; e.alive = false; g.handleDeaths();
     return got;
   };

@@ -32,7 +32,8 @@ const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourg
 export const GUARDS = { elite: 3, boss: 5 };
 // 戦闘部屋の最短の戦い：この秒数に満たないうちは、敵が減ると時間差で増援が湧く（強い術で一瞬で終わらないように）
 export const MIN_FIGHT = 15;
-const REINF = { warn: 0.9, gap: 1.6, gold: 0.5, exp: 0.5 }; // 増援の金貨と粒は半分（長く戦える分で稼ぎすぎないように）
+// warn：予兆の秒数、cap：場に同時にいる敵（湧く予定を含む）の上限、hp・dmg：増援の体力と攻撃の倍率
+const REINF = { warn: 0.6, cap: 4, hp: 0.6, dmg: 0.6 };
 const GOLD = { lancer: 7, trapper: 7, clocker: 7, vane: 6, squire: 2, mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
 
 export class Game {
@@ -218,7 +219,7 @@ export class Game {
     }
     const setup = {
       entry: () => this.setupEntry(),
-      combat: () => { this.run.combats = (this.run.combats || 0) + 1; for (const e of this.formation(desc.enemies)) this.addEnemy(makeEnemy(e.type, e.x * TILE, e.y * TILE)); this.spawnThreatExtras(desc); },
+      combat: () => { this.run.combats = (this.run.combats || 0) + 1; for (const e of this.formation(desc.enemies)) this.addEnemy(makeEnemy(e.type, e.x * TILE, e.y * TILE)); this.spawnThreatExtras(desc); this.room.incoming = []; this.initRoomBudget(); },
       forge: () => this.setupForge(),
       elite: () => this.setupElite(),
       archive: () => this.setupArchive(),
@@ -288,35 +289,73 @@ export class Game {
       if (e) { e.extra = true; if (this.room.formation === 'aoe') e.spread = true; }
     }
   }
-  // 増援：戦闘部屋で MIN_FIGHT 秒たつまで、敵が残り 1 体以下になるたびに、少し先の足場へ予兆を出してから 2〜3 体湧かせる
-  updateReinforcements(dt) {
+  // 増援：戦闘部屋で MIN_FIGHT 秒たつまでは、1 体倒すごとに別の場所へ 1 体湧く。
+  // 場所は主人公からなるべく遠く（できれば画面の外）、そして出口の扉の側
+  reinforceSpot() {
     const room = this.room, p = this.player;
+    const vw = VIEW_W / ZOOM, vh = VIEW_H / ZOOM;
+    const X = this.marker('X');
+    const taken = [...room.enemies.filter((e) => e.alive), ...(room.incoming || [])];
+    const scored = this.map.markers.filter((m) => m.c === 'g' || m.c === 'a').map((m) => {
+      const mx = m.x + TILE / 2, my = m.y + TILE / 2;
+      const off = mx < this.cam.x - 8 || mx > this.cam.x + vw + 8 || my < this.cam.y - 8 || my > this.cam.y + vh + 8;
+      const far = Math.hypot(mx - cx(p), my - cy(p));
+      const door = X ? Math.hypot(mx - X.x, my - X.y) : 0;
+      const crowd = taken.filter((o) => Math.hypot((o.x + 10) - mx, (o.y + 10) - my) < 28).length;
+      return { m, score: (off ? 2000 : 0) + (far > 5 * TILE ? 600 : 0) + far * 0.4 - door * 0.8 - crowd * 400 };
+    }).sort((a, b) => b.score - a.score);
+    if (!scored.length) return null;
+    const rng = (room.reinfRng ||= makeRng((this.run.plan.offerSeed ^ (this.run.fi * 131 + this.run.ri * 17 + 7)) >>> 0));
+    // 上位の候補から少し揺らして選ぶ（毎回同じ一点に湧かないように）
+    const top = scored.filter((c) => c.score >= scored[0].score - 150).slice(0, 3);
+    return { m: rng.pick(top).m, rng };
+  }
+  queueReinforcement() {
+    const spot = this.reinforceSpot();
+    if (!spot) return;
+    const { m, rng } = spot;
+    const types = extraEnemyTypes(this.run.fi, this.run.scale.level);
+    this.room.incoming.push({ x: m.x, y: m.y, type: this.easyType(rng.pick(types[m.c])), t: REINF.warn });
+    this.fx.ring(m.x + 10, m.y + 10, '#ff7a5a', 30, 0.5);
+    this.room.waves = (this.room.waves || 0) + 1;
+  }
+  updateReinforcements(dt) {
+    const room = this.room;
     if (room.desc.type !== 'combat' || room.cleared) return;
     const inc = (room.incoming ||= []);
     for (const s of inc) {
       s.t -= dt;
       if (s.t > 0) { if ((s.pulse = (s.pulse || 0) + dt) > 0.3) { s.pulse = 0; this.fx.ring(s.x + 10, s.y + 10, '#ff7a5a', 18, 0.3); } continue; }
       const e = this.addEnemy(makeEnemy(s.type, s.x, s.y));
-      if (e) { e.extra = true; e.reinf = true; }
+      // 増援は少し脆く、攻撃も控えめ（15 秒戦い続けても削られすぎないように）
+      if (e) { e.extra = true; e.reinf = true; e.maxHp = e.hp = Math.max(1, Math.round(e.maxHp * REINF.hp)); e.dmgMul = (e.dmgMul || 1) * REINF.dmg; }
       this.fx.burst(s.x + 10, s.y + 10, '#ff7a5a', 14);
     }
     room.incoming = inc.filter((s) => s.t > 0);
-    room.reinfGap = Math.max(0, (room.reinfGap || 0) - dt);
-    const living = room.enemies.filter((e) => e.alive && !e.boss).length;
-    if (room.t >= MIN_FIGHT || living > 1 || room.incoming.length || room.reinfGap > 0) return;
-    const rng = (room.reinfRng ||= makeRng((this.run.plan.offerSeed ^ (this.run.fi * 131 + this.run.ri * 17 + 7)) >>> 0));
-    const types = extraEnemyTypes(this.run.fi, this.run.scale.level);
-    const ptx = Math.floor(cx(p) / TILE);
-    let slots = this.map.markers.filter((m) => (m.c === 'g' || m.c === 'a') && Math.abs(m.tx - ptx) > 4);
-    if (!slots.length) slots = this.map.markers.filter((m) => m.c === 'g' || m.c === 'a');
-    if (!slots.length) return;
-    const n = Math.min(slots.length, 2 + (this.run.scale.level >= 2 || rng.next() < 0.35 ? 1 : 0));
-    const pick = rng.shuffle(slots.slice()).slice(0, n);
-    pick.forEach((m, i) => { room.incoming.push({ x: m.x, y: m.y, type: this.easyType(rng.pick(types[m.c])), t: REINF.warn + i * 0.25 }); this.fx.ring(m.x + 10, m.y + 10, '#ff7a5a', 30, 0.5); });
-    room.reinfGap = REINF.gap;
-    room.waves = (room.waves || 0) + 1;
-    this.fx.text(cx(p), p.y - 30, '増援', '#ff7a5a', 13);
-    this.sfx.play('tellBig');
+    // 念のため：15 秒たつ前に敵も増援もいなくなったら 1 体呼ぶ
+    if (room.t < MIN_FIGHT && !room.incoming.length && !room.enemies.some((e) => e.alive && !e.boss)) this.queueReinforcement();
+  }
+  // 戦闘部屋の取り分：金貨・粒・欠片は、部屋に入った時の敵の分を総量として、倒すたびに分けて渡す。
+  // 増援で倒す数が増えても、部屋 1 つで受け取れる量は今までとほぼ同じ（最後の 1 体で残りをすべて渡す）
+  initRoomBudget() {
+    const room = this.room;
+    const foes = room.enemies.filter((e) => e.alive && !e.boss);
+    room.budget = { gold: 0, exp: 0, shard: 0, kills: 0, valSum: 0 };
+    for (const e of foes) { const v = this.killValue(e); room.budget.gold += v.gold; room.budget.exp += v.exp; room.budget.shard += v.shard; }
+    room.budget.avg = foes.length ? room.budget.gold / foes.length : 1;
+  }
+  killValue(e) {
+    return { gold: (GOLD[e.kind] || 5) * (1 + 0.25 * this.run.scale.level), exp: expFor(e, this.run.scale), shard: (e.elite ? 12 : 2) + Math.floor(this.run.scale.level / 2) };
+  }
+  // この 1 体で渡す割合（残りの総量のうち）
+  killShare(e) {
+    const room = this.room, B = room.budget;
+    const v = this.killValue(e).gold;
+    const livingV = room.enemies.filter((o) => o.alive && !o.boss && o !== e).reduce((a, o) => a + this.killValue(o).gold, 0) + (room.incoming || []).length * B.avg;
+    // まだ増援が来る間は、これまでの倒す速さから残りの数を見積もる
+    let future = 0;
+    if (room.t < MIN_FIGHT) { const rate = (B.kills + 1) / Math.max(1, room.t); future = rate * (MIN_FIGHT - room.t) * B.avg; }
+    return v / (v + livingV + future);
   }
   // 主人公の戦い方（今の強化と前の夜の傾向）
   buildStyle() {
@@ -380,7 +419,7 @@ export class Game {
     if (tellKey) e.tellKey = tellKey;
     return e;
   }
-  spawnProjectile(p) { p.dmg = Math.round(p.dmg * this.enemyDmgMul()); this.room.projectiles.push(p); }
+  spawnProjectile(p) { p.dmg = Math.round(p.dmg * this.enemyDmgMul() * ((this.updatingEnemy && this.updatingEnemy.dmgMul) || 1)); this.room.projectiles.push(p); }
   marker(c) { return this.map.markers.find((m) => m.c === c); }
   addItem(it) { this.room.items.push({ w: 24, h: 40, ...it }); return it; }
   addSign(m) {
@@ -534,7 +573,7 @@ export class Game {
     this.resolvePlayerAttacks();
     for (const e of room.enemies) {
       const edt = (this.timeStopT > 0 && !e.boss ? dt * 0.3 : dt) * this.enemyHaste(e);
-      if (e.alive) e.update(this, edt);
+      if (e.alive) { this.updatingEnemy = e; e.update(this, edt); this.updatingEnemy = null; }
     }
     this.resolveEnemyAttacks();
     for (const pr of room.projectiles) { updateHoming(pr, this); pr.update(this, this.timeStopT > 0 && !pr.homing ? dt * 0.3 : dt); }
@@ -1304,10 +1343,25 @@ export class Game {
         near.forEach((o, i) => room.spells.push(new Spell('star', cx(o), cy(o), { delay: 0.08 + i * 0.07, fall: 0.25, dmg: 70, track: o, from: { x: cx(e), y: e.y - 160 } })));
         if (near.length) this.fx.ring(cx(e), cy(e), '#ff7ae0', 36, 0.3);
       }
-      this.addShards((e.elite ? 12 : 2) + Math.floor(this.run.scale.level / 2), cx(e), e.y - 20);
-      this.dropExp(Math.max(1, Math.round(expFor(e, this.run.scale) * (e.reinf ? REINF.exp : 1))), cx(e), cy(e));
-      // 敵 1 体ごとの金貨：めちゃ簡単 ×3、簡単 ×2、普通〜激ムズ ×1.25
-      this.dropGold(Math.round((GOLD[e.kind] || 5) * (1 + 0.25 * this.run.scale.level) * p.stats.goldMul * ((this.run.diff && this.run.diff.goldMul) || 1) * (e.reinf ? REINF.gold : 1)), cx(e), cy(e));
+      // 敵 1 体ごとの取り分（戦闘部屋は部屋の総量を分ける）
+      const gmul = p.stats.goldMul * ((this.run.diff && this.run.diff.goldMul) || 1);
+      let v = this.killValue(e);
+      v.gold *= gmul;
+      if (room.budget) {
+        const B = room.budget, k = this.killShare(e), take = (key) => { const n = B[key] * k; B[key] -= n; return n; };
+        v = { gold: take('gold') * gmul, exp: take('exp'), shard: take('shard') };
+        B.kills++;
+        // 端数は持ち越して、整数で渡す
+        B.carry ||= { gold: 0, exp: 0, shard: 0 };
+        for (const key of ['gold', 'exp', 'shard']) { const n = v[key] + B.carry[key]; v[key] = Math.floor(n); B.carry[key] = n - v[key]; }
+        // 増援は場の敵（湧く予定を含む）が上限を下回っている時だけ。最初から多い部屋は、減ってから湧き始める
+        if (room.t < MIN_FIGHT && !room.cleared && room.enemies.filter((o) => o.alive && !o.boss).length + room.incoming.length < REINF.cap) this.queueReinforcement();
+      }
+      this.addShards(v.shard, cx(e), e.y - 20);
+      if (v.exp > 0) this.dropExp(v.exp, cx(e), cy(e));
+      // 金貨：めちゃ簡単 ×3、簡単 ×2、普通〜激ムズ ×1.25
+      const gold = Math.round(v.gold);
+      if (gold > 0) this.dropGold(gold, cx(e), cy(e));
       this.sfx.play('kill');
       this.fx.burst(cx(e), cy(e), e.elite ? '#f2c14e' : '#e8dcc4', e.elite ? 30 : 16);
       this.hitstop = Math.max(this.hitstop, (e.elite ? 10 : 4) / 60);

@@ -118,6 +118,7 @@ test('会心は周回の乱数で決まり、同じ夜なら再現する', () =>
 test('時の欠片：倒すと貯まり、刻印で恒久強化。次の夜に反映される', () => {
   const g = newGame(12);
   g.enterRoom(0, 1);
+  g.room.t = MIN_FIGHT; // 最短の戦いは済んだことにする（部屋の取り分を最後の敵でまとめて受け取る）
   for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
   new Driver(g).frame(2);
   assert.ok(g.run.shards > 0);

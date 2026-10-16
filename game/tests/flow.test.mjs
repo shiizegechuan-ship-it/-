@@ -295,25 +295,67 @@ test('戦闘部屋は最低15秒続く：敵を一瞬で倒しても、時間差
   assert.ok(reinfKinds.size >= 1 && killed >= 10, `killed ${killed}`);
 });
 
-test('増援は予兆の後に、主人公から離れた足場へ湧く。15秒を過ぎたら湧かない', () => {
+test('15秒の間は1体倒すごとに1体、主人公から遠く（画面の外）・扉の側に湧く。15秒を過ぎたら湧かない', () => {
   const g = newGame(32); g.startLoop(); g.modal = null;
   const ri = g.run.plan.floors[0].findIndex((r) => r.type === 'combat');
   g.enterRoom(0, ri); g.modal = null;
   const d = new Driver(g), p = g.player;
-  for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
-  d.frame(2);
-  assert.ok(g.room.incoming.length >= 2, 'reinforcements are telegraphed');
+  d.frame(5);
+  const foes = g.room.enemies.filter((e) => e.alive && !e.boss);
+  foes[0].hp = 0; foes[0].alive = false;
+  d.frame(1);
+  assert.equal(g.room.incoming.length, 1, 'one kill → one reinforcement');
+  for (const e of foes.slice(1)) { e.hp = 0; e.alive = false; }
+  d.until(() => foes.every((e) => e.handled), 30); // ヒットストップの間は進まない
+  assert.equal(g.room.incoming.length, foes.length, 'one per kill');
   assert.equal(g.room.cleared, false);
-  const before = g.room.enemies.filter((e) => e.alive).length;
-  assert.equal(before, 0, 'not instant');
+  const X = g.marker('X'), vw = 640;
+  for (const s of g.room.incoming) {
+    const sx = s.x + 10;
+    assert.ok(Math.abs(sx - cx(p)) > 5 * 16, 'far from the hero');
+    const off = sx < g.cam.x || sx > g.cam.x + vw;
+    // 画面の外か、少なくとも主人公より扉に近い
+    assert.ok(off || Math.abs(sx - X.x) < Math.abs(cx(p) - X.x), 'off screen or on the door side');
+  }
   d.until(() => g.room.enemies.some((e) => e.alive && e.reinf), 120);
-  for (const e of g.room.enemies.filter((e) => e.reinf)) assert.ok(Math.abs(cx(e) - cx(p)) > 4 * 16 - 20, 'away from the hero');
-  // 15秒を過ぎて全滅させたら制圧
+  assert.ok(g.room.enemies.some((e) => e.alive && e.reinf));
+  // 15秒を過ぎて全滅させたら、もう湧かずに制圧
   g.room.t = MIN_FIGHT; g.room.incoming = [];
   for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
   d.frame(2);
   assert.ok(g.room.cleared);
   assert.equal(g.room.incoming.length, 0);
+});
+
+test('増援で倒す数が増えても、部屋1つで受け取る金貨・粒・欠片の総量は今までとほぼ同じ', () => {
+  const run = (instant) => {
+    const g = newGame(41); g.startLoop(); g.modal = null;
+    const ri = g.run.plan.floors[0].findIndex((r) => r.type === 'combat');
+    g.enterRoom(0, ri); g.modal = null;
+    g.player.maxHp = g.player.hp = 1e9;
+    const d = new Driver(g);
+    const exp0 = () => g.run.exp + g.run.level * 1000;
+    let gold = 0, exp = 0;
+    const dg = g.dropGold.bind(g), de = g.dropExp.bind(g);
+    g.dropGold = (n, ...a) => { gold += n; return dg(n, ...a); };
+    g.dropExp = (n, ...a) => { exp += n; return de(n, ...a); };
+    const sh0 = g.run.shards;
+    if (instant) g.room.t = MIN_FIGHT; // 今まで：最初の敵を倒せば終わり
+    let kills = 0;
+    for (let f = 0; f < 60 * 30 && !g.room.cleared; f++) {
+      if (g.modal) g.modal = null;
+      // 1秒に1体ずつ倒す
+      if (f % 60 === 30) { const e = g.room.enemies.find((o) => o.alive && !o.boss); if (e) { e.hp = 0; e.alive = false; kills++; } }
+      d.frame(1);
+    }
+    assert.ok(g.room.cleared);
+    return { gold, exp, shards: g.run.shards - sh0, kills };
+  };
+  const old = run(true), now = run(false);
+  assert.ok(now.kills >= old.kills + 8, `kills ${old.kills} → ${now.kills}`);
+  for (const k of ['gold', 'exp', 'shards']) {
+    assert.ok(Math.abs(now[k] - old[k]) <= Math.max(2, old[k] * 0.05), `${k}: ${old[k]} → ${now[k]}`);
+  }
 });
 
 test('増援は戦闘部屋だけ：中ボス部屋は全滅で即制圧のまま', () => {
