@@ -53,7 +53,7 @@ export class Game {
     this.storage = opts.storage || null;
     this.fx = new Fx();
     if (opts.deterministicFx) this.fx.rand = makeRng(1).next;
-    this.settings = { shake: true, volume: 0.6, ...(opts.settings || {}) };
+    this.settings = { shake: true, volume: 0.6, bgm: 0.5, ...(opts.settings || {}) };
     this.fx.settings = this.settings;
     this.scene = 'title';
     this.modal = null;
@@ -84,7 +84,7 @@ export class Game {
     this.saveSettings();
   }
   saveSettings() {
-    if (this.storage && this.storage.saveSettings) { try { this.storage.saveSettings(JSON.stringify({ difficulty: this.settings.difficulty, shake: this.settings.shake, volume: this.settings.volume })); } catch { /* 保存できなくても遊べる */ } }
+    if (this.storage && this.storage.saveSettings) { try { this.storage.saveSettings(JSON.stringify({ difficulty: this.settings.difficulty, shake: this.settings.shake, volume: this.settings.volume, bgm: this.settings.bgm })); } catch { /* 保存できなくても遊べる */ } }
   }
 
   // ───────── 進行 ─────────
@@ -2574,6 +2574,7 @@ export class Game {
           else if (o.id === 'companion') this.openCompanionPick();
           else if (o.id === 'shake') { this.settings.shake = !this.settings.shake; this.saveSettings(); }
           else if (o.id === 'diff') this.cycleDifficulty();
+          else if (o.id === 'bgm') { this.settings.bgm = ((Math.round(this.settings.bgm * 10) + 2) % 12) / 10; this.saveSettings(); }
           else if (o.id === 'vol') { this.settings.volume = (Math.round(this.settings.volume * 10) + 2) % 12 / 10; this.sfx.setVolume(this.settings.volume); this.saveSettings(); }
           else if (o.id === 'giveup') { this.modal = null; this.player.hp = 0; this.player.state = 'dead'; this.run.deathT = 1.6; this.endRun('death'); }
           input.consume('jump'); input.consume('attack');
@@ -2599,6 +2600,7 @@ export class Game {
       { id: 'diff', label: `難易度：${this.difficulty().name}（次の夜から）` },
       { id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}` },
       { id: 'vol', label: `音量：${Math.round(this.settings.volume * 10)}` },
+      { id: 'bgm', label: `音楽：${this.settings.bgm > 0 ? Math.round(this.settings.bgm * 10) : 'なし'}` },
       { id: 'giveup', label: 'この夜をあきらめる（巻き戻る）' },
     ];
   }

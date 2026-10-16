@@ -4,6 +4,8 @@ import { Input, attachKeyboard, pollGamepad } from './input.js';
 import { Game } from './game.js';
 import { makeEnemy } from './enemies.js';
 import { Sfx } from './audio.js';
+import { Music } from './music.js';
+import { musicFor } from './songs.js';
 import { render } from './render.js';
 import { isTouchDevice, setupTouch } from './touch.js';
 
@@ -21,6 +23,8 @@ const input = new Input();
 const sfx = new Sfx();
 const game = new Game({ sfx, storage });
 sfx.setVolume(game.settings.volume); // 保存した音量
+const music = new Music(sfx);
+window.__music = music; // デバッグ・自動テスト用
 window.__game = game; // デバッグ・自動テスト用
 window.__input = input;
 window.__makeEnemy = makeEnemy; // デバッグ用
@@ -74,6 +78,9 @@ function draw() {
   ctx.save();
   render(ctx, game);
   ctx.restore();
+  // BGM：場面に合った曲を流す（メニューを開いている間は小さく）
+  if (music.level !== game.settings.bgm) music.setLevel(game.settings.bgm);
+  music.update(musicFor(game), { quiet: !!game.modal });
   if (touchUI) touchUI.radar(game.modal ? [] : game.enemyBearings());
 }
 
