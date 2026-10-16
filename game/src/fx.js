@@ -8,6 +8,8 @@ export class Fx {
     this.rings = [];
     this.impacts = [];
     this.streaks = []; // 跳躍の風切り線
+    this.twinkles = []; // キラキラ（四方に光る十字）
+    this.flares = []; // 放射状の光の筋（パリィ・伝説の術）
     this.pillars = []; // 撃破の光の柱
     this.shakeT = 0; this.shakeMag = 0;
     this.flash = 0; this.flashColor = '#fff';
@@ -59,6 +61,15 @@ export class Fx {
   text(x, y, str, color = '#fff', size = 14) { this.texts.push({ x, y, str, color, size, t: 0, life: 0.7 }); }
   afterimage(e) { this.ghosts.push({ x: e.x, y: e.y, w: e.w, h: e.h, face: e.face, t: 0, life: 0.22 }); }
   slash(p, name) { this.slashes.push({ owner: p, name, t: 0, life: name === 'dropSpin' ? 0.32 : name === 'heavy' || name === 'parry' ? 0.26 : name === 'down' ? 0.2 : name === 'combo3' || name === 'combo4' ? 0.22 : 0.17, face: p.face }); }
+  // キラキラ：点の周りに小さな十字の光をいくつか散らす
+  twinkle(x, y, colors, n = 6, spread = 30, life = 0.45) {
+    const cs = Array.isArray(colors) ? colors : [colors];
+    for (let i = 0; i < n; i++) this.twinkles.push({ x: x + (this.rand() - 0.5) * spread * 2, y: y + (this.rand() - 0.5) * spread * 2, color: cs[i % cs.length], t: -this.rand() * 0.12, life, size: 2 + Math.floor(this.rand() * 3) });
+  }
+  // 放射状の光の筋（色を順に巡らせる）
+  flare(x, y, colors, rays = 12, r = 60, life = 0.4) { this.flares.push({ x, y, colors: Array.isArray(colors) ? colors : [colors], rays, r, life, t: 0, rot: this.rand() * Math.PI }); }
+  // いくつかの色の火花をまとめて
+  prism(x, y, colors, n = 18, speed = 340) { const per = Math.max(1, Math.round(n / colors.length)); for (const c of colors) this.sparks(x, y, c, per, speed); }
   setBanner(text, sub = '', color = '#efe6d2', life = 1.6) { this.banner = { text, sub, color, t: 0, life }; }
 
   update(dt) {
@@ -76,6 +87,10 @@ export class Fx {
     this.rings = this.rings.filter((r) => r.t < r.life);
     for (const s of this.pillars) s.t += dt;
     this.pillars = this.pillars.filter((s) => s.t < s.life);
+    for (const s of this.twinkles) s.t += dt;
+    this.twinkles = this.twinkles.filter((s) => s.t < s.life);
+    for (const s of this.flares) s.t += dt;
+    this.flares = this.flares.filter((s) => s.t < s.life);
     for (const s of this.streaks) s.t += dt;
     this.streaks = this.streaks.filter((s) => s.t < s.life);
     if (this.shakeT > 0) this.shakeT -= dt; else this.shakeMag = 0;
@@ -83,5 +98,5 @@ export class Fx {
     this.vignette = Math.max(0, this.vignette - dt * 2);
     if (this.banner) { this.banner.t += dt; if (this.banner.t > this.banner.life) this.banner = null; }
   }
-  clear() { this.parts = []; this.texts = []; this.ghosts = []; this.slashes = []; this.rings = []; this.impacts = []; this.streaks = []; this.pillars = []; this.shakeT = 0; this.flash = 0; }
+  clear() { this.parts = []; this.texts = []; this.ghosts = []; this.slashes = []; this.rings = []; this.impacts = []; this.streaks = []; this.pillars = []; this.twinkles = []; this.flares = []; this.shakeT = 0; this.flash = 0; }
 }

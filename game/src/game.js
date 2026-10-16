@@ -6,7 +6,7 @@ import { Player } from './player.js';
 import { makeEnemy, RustSoldier, GearKnight, Warden, Squire, Projectile } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
 import { COMPANIONS, COMPANION_IDS, makeCompanion, updateCompanions, onHeroHit, stageOf, companionMods, combinedMods, allComps, CALL_BOON, callTarget, unionReady, castUnion } from './companion.js';
-import { castArt, castWarpSlash, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell, MELEE } from './arts.js';
+import { castArt, castWarpSlash, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell, MELEE, PRISM } from './arts.js';
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
 import { Fx } from './fx.js';
 import { NullSfx } from './audio.js';
@@ -34,6 +34,8 @@ export const GUARDS = { elite: 3, boss: 5 };
 export const MIN_FIGHT = 15;
 // warn：予兆の秒数、cap：場に同時にいる敵（湧く予定を含む）の上限、hp・dmg：増援の体力と攻撃の倍率
 const REINF = { warn: 0.6, cap: 4, hp: 0.6, dmg: 0.6 };
+// パリィの瞬間のスロー：この秒数（ゲーム内の時間で）だけ、全ての速さをこの倍率に
+export const PARRY_SLOW = { time: 0.35, scale: 0.2 };
 const GOLD = { lancer: 7, trapper: 7, clocker: 7, vane: 6, squire: 2, mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
 
 export class Game {
@@ -434,6 +436,21 @@ export class Game {
   }
   spawnProjectile(p) { p.dmg = Math.round(p.dmg * this.enemyDmgMul() * ((this.updatingEnemy && this.updatingEnemy.dmgMul) || 1)); this.room.projectiles.push(p); }
   marker(c) { return this.map.markers.find((m) => m.c === c); }
+  // パリィの瞬間：一瞬だけ全てがゆっくりになり、金と白の光が弾ける（1 回のパリィ斬りで 1 度だけ）
+  parryMoment(e) {
+    const p = this.player;
+    if (p.atk && p.atk.parryFx) return;
+    if (p.atk) p.atk.parryFx = true;
+    this.slowT = Math.max(this.slowT, PARRY_SLOW.time); this.slowScale = PARRY_SLOW.scale;
+    const x = (cx(p) + cx(e)) / 2, y = (cy(p) + cy(e)) / 2;
+    this.fx.screenFlash('#fff6d0', 0.4);
+    this.fx.flare(x, y, ['#ffffff', '#ffe14a', '#fff6d0'], 16, 120, 0.5);
+    this.fx.ring(x, y, '#ffffff', 50, 0.35); this.fx.ring(x, y, '#ffe14a', 90, 0.5);
+    this.fx.sparks(x, y, '#ffe14a', 18, 420); this.fx.sparks(x, y, '#ffffff', 10, 300);
+    this.fx.twinkle(x, y, ['#ffe14a', '#ffffff'], 8, 40, 0.6);
+    this.fx.impact(x, y, '#ffffff', 14);
+    this.fx.shake(6, 0.2);
+  }
   // スティックの外縁に出す、敵のいる方向（ang：右が 0・下が正のラジアン。near：近いほど 1。big：中ボス・刻守）
   enemyBearings() {
     if (this.scene !== 'play' || !this.room || !this.player || this.player.state === 'dead') return [];
@@ -733,7 +750,7 @@ export class Game {
       if (p.onGround && Math.abs(p.vx) > 150 && st.momentumMul > 1) dmg *= st.momentumMul;
       // パリィ斬りは必ず会心
       if (info.parry || run.critRng.next() < st.critChance + 0.02 * upLv(this.meta, 'crit') + levelBonus(run.level || 1).crit) { crit = true; dmg *= st.critMul; }
-      if (info.parry) this.fx.text(cx(e), e.y - 34, 'パリィ', '#ffe14a', 16);
+      if (info.parry) { this.fx.text(cx(e), e.y - 34, 'パリィ', '#ffe14a', 16); this.parryMoment(e); }
       if (direct && p.afterT > 0 && st.afterimageMul > 1) { dmg *= st.afterimageMul; p.afterT = 0; this.fx.text(cx(e), e.y - 18, '残影', '#5fd18b', 12); }
       if (direct && p.empowerNext > 1) { dmg *= p.empowerNext; p.empowerNext = 1; this.fx.text(cx(e), e.y - 30, '×3', '#e35d5d', 14); }
       if (info.heavy && e.slowed && st.shatterMul > 1) {
@@ -1378,8 +1395,8 @@ export class Game {
       // 星喰らい：倒した敵の近くの敵 3 体へ流星
       if (p.stats.stareater) {
         const near = room.enemies.filter((o) => o.alive && o !== e && !(o.boss && o.defeated)).sort((a, b) => Math.hypot(cx(a) - cx(e), cy(a) - cy(e)) - Math.hypot(cx(b) - cx(e), cy(b) - cy(e))).slice(0, 3);
-        near.forEach((o, i) => room.spells.push(new Spell('star', cx(o), cy(o), { delay: 0.08 + i * 0.07, fall: 0.25, dmg: 70, track: o, from: { x: cx(e), y: e.y - 160 } })));
-        if (near.length) this.fx.ring(cx(e), cy(e), '#ff7ae0', 36, 0.3);
+        near.forEach((o, i) => room.spells.push(new Spell('star', cx(o), cy(o), { delay: 0.08 + i * 0.07, fall: 0.25, dmg: 70, track: o, legend: true, from: { x: cx(e), y: e.y - 160 } })));
+        if (near.length) { this.fx.ring(cx(e), cy(e), '#ff6ad5', 36, 0.3); this.fx.ring(cx(e), cy(e), '#5fe3ff', 24, 0.3); this.fx.twinkle(cx(e), e.y - 20, PRISM, 6, 26); }
       }
       // 敵 1 体ごとの取り分（戦闘部屋は部屋の総量を分ける）
       const gmul = p.stats.goldMul * ((this.run.diff && this.run.diff.goldMul) || 1);

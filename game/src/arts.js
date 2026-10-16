@@ -55,7 +55,9 @@ function strike(game, sp, e, base, extra = {}) {
 // 回避で身をかわしたあと、部屋の敵の数と同じ本数の白い直線の斬撃を、画面外から画面外へ超高速で続けて走らせる。
 // 線はそれぞれ 1 体の敵を貫く向きに引かれ、線上の敵すべてに当たる。最後に全ての線が砕けて、もう一度斬れる
 export const WARP_SLASH = { start: 0.3, every: 0.055, dmg: 18, shatter: 0.5, len: 1400 };
-export function castWarpSlash(game) {
+// 伝説の術の色：金・桃・水色・紫（取り合わせの良い 4 色）
+export const PRISM = ['#ffd84a', '#ff6ad5', '#5fe3ff', '#a98bff'];
+export function castWarpSlash(game, legend = false) {
   const p = game.player, rng = game.fx;
   const foes = game.room.enemies.filter((e) => e.alive && !(e.boss && e.defeated) && !e.invuln);
   const st = p.stats || {};
@@ -70,7 +72,7 @@ export function castWarpSlash(game) {
     const L = WARP_SLASH.len;
     lines.push({ x1: ax - Math.cos(a) * L, y1: ay - Math.sin(a) * L, x2: ax + Math.cos(a) * L, y2: ay + Math.sin(a) * L, at: WARP_SLASH.start + i * WARP_SLASH.every, done: false, real: !!e });
   }
-  const sp = new Spell('warpslash', cx(p), cy(p), { lines, life: WARP_SLASH.start + n * WARP_SLASH.every + WARP_SLASH.shatter + 0.3, dmg: WARP_SLASH.dmg * mul, shattered: false });
+  const sp = new Spell('warpslash', cx(p), cy(p), { lines, life: WARP_SLASH.start + n * WARP_SLASH.every + WARP_SLASH.shatter + 0.3, dmg: WARP_SLASH.dmg * mul, shattered: false, legend });
   game.room.spells.push(sp);
   return sp;
 }
@@ -233,7 +235,8 @@ export function updateSpells(game, dt) {
           for (const e of enemiesOnSegment(game, ln.x1, ln.y1, ln.x2, ln.y2, 6)) {
             strike(game, sp, e, sp.dmg, { knock: 40, dir: sign(ln.x2 - ln.x1) || 1 });
             (sp.cut ||= new Map()).set(e, (sp.cut.get(e) || 0) + 1);
-            game.fx.sparks(cx(e), cy(e), '#ffffff', 8, 320);
+            if (sp.legend) { game.fx.prism(cx(e), cy(e), PRISM, 12, 320); game.fx.twinkle(cx(e), cy(e), ['#ffe14a', '#ffffff'], 4, 22); }
+            else game.fx.sparks(cx(e), cy(e), '#ffffff', 8, 320);
           }
           game.sfx.play('swing'); game.fx.shake(3, 0.06);
           game.hitstop = Math.max(game.hitstop, 2 / 60);
@@ -243,7 +246,9 @@ export function updateSpells(game, dt) {
           // 納刀：全ての線が一度に砕け、斬られた敵はもう一度（斬られた本数ぶん強く）斬れる
           sp.shattered = true; sp.shatterT = sp.t;
           for (const [e, k] of sp.cut || []) {
-            if (!e.alive) continue; strike(game, sp, e, sp.dmg * 0.6 * Math.min(k, 3), { knock: 160 }); game.fx.burst(cx(e), cy(e), '#e8f4ff', 16);
+            if (!e.alive) continue; strike(game, sp, e, sp.dmg * 0.6 * Math.min(k, 3), { knock: 160 });
+            if (sp.legend) { game.fx.prism(cx(e), cy(e), PRISM, 24, 380); game.fx.flare(cx(e), cy(e), PRISM, 12, 70, 0.4); game.fx.twinkle(cx(e), cy(e), ['#ffe14a', '#fff6d0'], 8, 36, 0.6); }
+            else game.fx.burst(cx(e), cy(e), '#e8f4ff', 16);
           }
           game.fx.screenFlash('#ffffff', 0.45); game.fx.shake(12, 0.4); game.sfx.play('guardBreak'); game.sfx.play('heavyHit');
           game.hitstop = Math.max(game.hitstop, 8 / 60);
@@ -266,7 +271,9 @@ export function updateSpells(game, dt) {
         if (k >= 1 && !sp.boomed) {
           sp.boomed = true;
           for (const e of enemiesNear(game, sp.x, sp.y, 44)) strike(game, sp, e, sp.dmg, { knock: 140 });
-          game.fx.burst(sp.x, sp.y, '#ffe14a', 14); game.fx.shake(2, 0.06); game.sfx.play('hit');
+          if (sp.legend) { game.fx.prism(sp.x, sp.y, PRISM, 20, 340); game.fx.flare(sp.x, sp.y, PRISM, 10, 64, 0.35); game.fx.twinkle(sp.x, sp.y, ['#ffe14a', '#ffffff'], 6, 30); }
+          else game.fx.burst(sp.x, sp.y, '#ffe14a', 14);
+          game.fx.shake(2, 0.06); game.sfx.play('hit');
         }
         if (k > 1.6) sp.alive = false;
         break;
@@ -479,7 +486,7 @@ export function updatePassives(game, dt) {
   // 刻の支配者（伝説）：10 秒ごとに刻閃が自動で走る
   if (p.stats.chronarch && game.room.enemies.some((e) => e.alive && !(e.boss && e.defeated)) && !game.room.spells.some((s) => s.kind === 'warpslash')) {
     T.chronarch = (T.chronarch || 0) + dt;
-    if (T.chronarch >= 10) { T.chronarch = 0; castWarpSlash(game); game.fx.text(cx(p), p.y - 26, '刻閃', '#ff7ae0', 16); game.sfx.play('skill'); }
+    if (T.chronarch >= 10) { T.chronarch = 0; castWarpSlash(game, true); game.fx.text(cx(p), p.y - 26, '刻閃', '#ff7ae0', 16); game.fx.twinkle(cx(p), cy(p), PRISM, 10, 34, 0.6); game.sfx.play('skill'); }
   }
   dt *= p.stats.passiveSpeed || 1; // 星の心臓：常時の術が速く回る
   const px = cx(p), py = cy(p);

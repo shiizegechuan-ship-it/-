@@ -1430,3 +1430,58 @@ test('スティックの外縁の赤：敵のいる方向（右・上・左下�
   g.scene = 'title';
   assert.deepEqual(g.enemyBearings(), []);
 });
+
+test('パリィの瞬間：一瞬だけ全てがゆっくりになり、放射状の光とキラキラが出る（1 回のパリィ斬りで 1 度だけ）', async () => {
+  const { PARRY_SLOW } = await import('../src/game.js');
+  const { g, d, e } = arena(RustSoldier, 75);
+  const e2 = new RustSoldier(e.x + 10, e.y); g.addEnemy(e2);
+  for (const o of [e, e2]) { o.hp = o.maxHp = 1e6; o.cool = 99; }
+  d.frame(1, ['dodge', 'left']);
+  d.until(() => g.player.state === 'normal', 40);
+  g.player.face = 1;
+  let calls = 0; const pm = g.parryMoment.bind(g);
+  let slowSeen = null;
+  g.parryMoment = (x) => { pm(x); calls++; slowSeen ||= { t: g.slowT, s: g.slowScale, flares: g.fx.flares.length, tw: g.fx.twinkles.length }; };
+  const before = e.hp;
+  d.frame(1, ['attack', 'right']);
+  d.until(() => e.hp < before, 20);
+  assert.ok(slowSeen, 'parry moment happened');
+  assert.equal(slowSeen.s, PARRY_SLOW.scale); assert.ok(slowSeen.t >= PARRY_SLOW.time - 1e-9);
+  assert.ok(slowSeen.flares >= 1 && slowSeen.tw >= 4, 'burst of light');
+  // 全てがゆっくり：同じコマ数で進む夜の時計が遅い
+  const c0 = g.run.clock; d.frame(5); const slowAdv = g.run.clock - c0;
+  d.frame(60); const c1 = g.run.clock; d.frame(5); const normAdv = g.run.clock - c1;
+  assert.ok(slowAdv < normAdv * 0.6, `slow ${slowAdv} vs ${normAdv}`);
+  assert.ok(e2.hp < 1e6, 'hit both enemies');
+  assert.ok(g.slowT <= 0, 'only a moment');
+  // 2 体に当たっても演出は 1 度
+  assert.ok(g.fx.flares.length <= 1);
+});
+
+test('伝説の攻撃の術（星喰らい・刻の支配者）は、金・桃・水色・紫の 4 色で光り、キラキラが出る', async () => {
+  const { PRISM } = await import('../src/arts.js');
+  assert.ok(new Set(PRISM).size >= 3);
+  const { g, d, e } = arena(RustSoldier, 60);
+  const e2 = new RustSoldier(e.x + 40, e.y); g.addEnemy(e2);
+  for (const o of [e, e2]) { o.cool = 99; }
+  const p = g.player;
+  p.setBoons([{ id: 'stareater', tier: 1 }]);
+  e.hp = 0; e.alive = false;
+  e2.hp = e2.maxHp = 1e6;
+  d.frame(2);
+  const stars = g.room.spells.filter((s) => s.kind === 'star');
+  assert.ok(stars.length && stars.every((s) => s.legend), 'stareater meteors are legend-colored');
+  const colors = new Set();
+  const sp = g.fx.sparks.bind(g.fx); g.fx.sparks = (x, y, c, ...a) => { colors.add(c); return sp(x, y, c, ...a); };
+  d.until(() => stars.every((s) => s.boomed), 60);
+  assert.ok(PRISM.filter((c) => colors.has(c)).length >= 3, `impact colors ${[...colors]}`);
+  assert.ok(g.fx.flares.length + g.fx.twinkles.length > 0);
+  // 刻の支配者の自動の刻閃
+  p.setBoons([{ id: 'chronarch', tier: 1 }]);
+  g.room.spells = [];
+  d.until(() => g.room.spells.some((s) => s.kind === 'warpslash'), 60 * 12);
+  assert.ok(g.room.spells.find((s) => s.kind === 'warpslash').legend);
+  // ふつうの時歪の刻閃は白いまま
+  const { castWarpSlash } = await import('../src/arts.js');
+  assert.ok(!castWarpSlash(g).legend);
+});

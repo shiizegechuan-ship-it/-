@@ -8,6 +8,7 @@ import { drawHud, drawModal, drawTitle, drawRewind, drawEnding, FONT } from './u
 import { PW, PH, makeCanvas, rect, pset, line, dashLine, circle, disc, wedge, arc, drawSprite } from './pix.js';
 import { drawBackground, backgroundFor, gearFrame, TS } from './background.js';
 import { spr } from './sprites.js';
+import { PRISM } from './arts.js';
 
 const SC = VIEW_W / PW; // 3
 let buf = null, b = null;
@@ -154,6 +155,25 @@ function renderPlay(ctx, game) {
     const w = Math.max(1, Math.round(22 * (k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85)));
     b.globalAlpha = 0.35 * (1 - k); rect(b, x - w - 4, 0, (w + 4) * 2, y, s.color);
     b.globalAlpha = 0.9 * (1 - k); rect(b, x - w, 0, w * 2, y, '#fff6d8');
+    b.globalAlpha = 1;
+  }
+  for (const f of fx.flares || []) { // 放射状の光の筋：伸びながら細くなって消える
+    const k = f.t / f.life, x = f.x / 2, y = f.y / 2;
+    const r0 = f.r / 2 * (0.15 + 0.5 * k), r1 = f.r / 2 * (0.45 + 0.75 * Math.sqrt(k));
+    b.globalAlpha = Math.max(0, 1 - k);
+    for (let i = 0; i < f.rays; i++) {
+      const a = f.rot + i / f.rays * Math.PI * 2, long = i % 2 ? 0.7 : 1;
+      line(b, x + Math.cos(a) * r0, y + Math.sin(a) * r0, x + Math.cos(a) * r1 * long, y + Math.sin(a) * r1 * long, f.colors[i % f.colors.length]);
+    }
+    b.globalAlpha = 1;
+  }
+  for (const s of fx.twinkles || []) { // キラキラ：十字の光が膨らんで縮む
+    if (s.t < 0) continue;
+    const k = s.t / s.life, n = Math.max(1, Math.round(s.size * Math.sin(k * Math.PI)));
+    const x = Math.round(s.x / 2), y = Math.round(s.y / 2);
+    b.globalAlpha = Math.min(1, 1.4 * (1 - k));
+    rect(b, x - n, y, n * 2 + 1, 1, s.color); rect(b, x, y - n, 1, n * 2 + 1, s.color);
+    pset(b, x, y, '#ffffff');
     b.globalAlpha = 1;
   }
   for (const s of fx.streaks || []) { // 跳躍の風切り線
@@ -506,7 +526,7 @@ function drawSlash(b, s) {
 function haloFor(b, sp) {
   const x = Math.round(sp.x / 2), y = Math.round(sp.y / 2);
   switch (sp.kind) {
-    case 'star': if (sp.t >= sp.delay) { const k = (sp.t - sp.delay) / sp.fall; if (k >= 1 && k < 1.5) glow(b, x, y, 18 * (1.5 - k) * 2, '#ffe14a', 0.8); } break;
+    case 'star': if (sp.t >= sp.delay) { const k = (sp.t - sp.delay) / sp.fall; if (k >= 1 && k < 1.5) glow(b, x, y, 18 * (1.5 - k) * 2, sp.legend ? PRISM[Math.floor(k * 12) % PRISM.length] : '#ffe14a', 0.8); } break;
     case 'flamering': glow(b, x, y, Math.round(sp.r / 2) * 0.6, '#ff7a3c', 0.35); break;
     case 'toll': glow(b, x, y, Math.round(sp.r / 2) * 0.5, '#f2c14e', 0.3); break;
     case 'thunder': if (sp.t < sp.life) glow(b, x, y, 14 * (1 - sp.t / sp.life), '#cfe8ff', 0.9); break;
@@ -592,11 +612,19 @@ function drawSpell(b, sp, t) {
         if (a <= 0) continue;
         // 画面の端から端まで続く長い線なので、ここは滑らかな線で描く（点を打つより速い）
         const stroke = (col, lw, al, add) => { b.save(); if (add) b.globalCompositeOperation = 'lighter'; b.globalAlpha = al; b.strokeStyle = col; b.lineWidth = lw; b.lineCap = 'round'; b.beginPath(); b.moveTo(x1, y1); b.lineTo(x2, y2); b.stroke(); b.restore(); };
-        stroke('#7fc8ff', w + 5, a * 0.3, true);
-        stroke('#cfe8ff', w + 2, a * 0.6, true);
-        stroke('#ffffff', w, a, false);
+        if (sp.legend) {
+          // 伝説（刻の支配者）：線ごとに金・桃・水色・紫の光をまとい、芯は白金
+          const ci = sp.lines.indexOf(ln), c1 = PRISM[ci % PRISM.length], c2 = PRISM[(ci + 2) % PRISM.length];
+          stroke(c2, w + 7, a * 0.3, true);
+          stroke(c1, w + 3, a * 0.75, true);
+          stroke('#fff6d0', w, a, false);
+        } else {
+          stroke('#7fc8ff', w + 5, a * 0.3, true);
+          stroke('#cfe8ff', w + 2, a * 0.6, true);
+          stroke('#ffffff', w, a, false);
+        }
       }
-      if (sp.shattered) { const k = (sp.t - sp.shatterT) / 0.3; if (k < 1) for (const ln of sp.lines) { b.globalAlpha = 1 - k; const mx = (ln.x1 + ln.x2) / 4, my = (ln.y1 + ln.y2) / 4; circle(b, mx, my, Math.round(4 + k * 18), '#ffffff'); } b.globalAlpha = 1; }
+      if (sp.shattered) { const k = (sp.t - sp.shatterT) / 0.3; if (k < 1) sp.lines.forEach((ln, i) => { b.globalAlpha = 1 - k; const mx = (ln.x1 + ln.x2) / 4, my = (ln.y1 + ln.y2) / 4; circle(b, mx, my, Math.round(4 + k * 18), sp.legend ? PRISM[i % PRISM.length] : '#ffffff'); if (sp.legend) circle(b, mx, my, Math.round(2 + k * 11), '#ffe14a'); }); b.globalAlpha = 1; }
       break;
     }
     case 'flamering': {
@@ -615,7 +643,22 @@ function drawSpell(b, sp, t) {
     case 'star': {
       if (sp.t < sp.delay) break;
       const k = (sp.t - sp.delay) / sp.fall;
-      if (k < 1) {
+      if (k < 1 && sp.legend) {
+        // 伝説（星喰らい）：金・桃・水色・紫の尾を引き、先端は色を巡らせて光る
+        const sx = (sp.from.x + (sp.x - sp.from.x) * k) / 2, sy = (sp.from.y + (sp.y - sp.from.y) * k) / 2;
+        const fx0 = sp.from.x / 2, fy0 = sp.from.y / 2, dx = sx - fx0, dy = sy - fy0, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+        PRISM.forEach((c, i) => { const off = (i - 1.5) * 1.2; b.globalAlpha = 0.75; line(b, sx - ux * (26 - i * 3) - uy * off, sy - uy * (26 - i * 3) + ux * off, sx - uy * off, sy + ux * off, c); });
+        b.globalAlpha = 1;
+        const hc = PRISM[Math.floor(t * 18) % PRISM.length];
+        rect(b, sx - 4, sy, 9, 1, hc); rect(b, sx, sy - 4, 1, 9, hc); rect(b, sx - 1, sy - 1, 3, 3, '#fff6d0'); pset(b, sx, sy, '#ffffff');
+      } else if (k >= 1 && sp.legend) {
+        const r = Math.round((k - 1) * 44);
+        b.globalAlpha = Math.max(0, 1 - (k - 1) / 0.6);
+        PRISM.forEach((c, i) => circle(b, x, y, Math.max(1, r - i * 4), c));
+        circle(b, x, y, Math.max(1, Math.round(r * 0.3)), '#ffffff');
+        rect(b, x - r - 4, y, r * 2 + 9, 1, '#ffe14a'); rect(b, x, y - r - 4, 1, r * 2 + 9, '#ffe14a');
+        b.globalAlpha = 1;
+      } else if (k < 1) {
         const sx = (sp.from.x + (sp.x - sp.from.x) * k) / 2, sy = (sp.from.y + (sp.y - sp.from.y) * k) / 2;
         dashLine(b, sx - 10, sy - 20, sx, sy, 'rgba(255,225,74,0.6)', 2, 1);
         if (sp.sword) { line(b, sx - 3, sy - 8, sx, sy, '#e8f4ff', 2); rect(b, sx - 4, sy - 7, 4, 1, '#ffe14a'); pset(b, sx, sy + 1, '#ffffff'); }
