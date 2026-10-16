@@ -1516,11 +1516,11 @@ function drawPrompt(ctx, game) {
   const text = game.interactPrompt(it);
   if (!text) return;
   ctx.font = `15px ${FONT}`; ctx.textAlign = 'center';
-  const w = Math.ceil(ctx.measureText(text).width) + 42;
+  const w = Math.ceil(ctx.measureText(text).width) + (game.touch ? 42 : 58);
   const x = Math.round(SX(it.x + it.w / 2)), y = Math.round(SY(it.y) - (it.kind === 'door' ? 54 : it.causal ? 46 : 18));
   ctx.fillStyle = '#0a0610'; ctx.fillRect(x - w / 2 - 3, y - 21, w + 6, 30);
   ctx.fillStyle = it.causal ? '#f2c14e' : '#6a5a7a'; ctx.fillRect(x - w / 2, y - 18, w, 24);
   ctx.fillStyle = '#140f1c'; ctx.fillRect(x - w / 2 + 3, y - 15, w - 6, 18);
-  ctx.fillStyle = '#f2c14e'; ctx.fillText(game.touch ? '◆' : '↑', x - w / 2 + 14, y);
-  ctx.fillStyle = C.text; ctx.fillText(text, x + 8, y);
+  ctx.fillStyle = '#f2c14e'; ctx.fillText(game.touch ? '◆' : 'Z/↑', x - w / 2 + (game.touch ? 14 : 22), y);
+  ctx.fillStyle = C.text; ctx.fillText(text, x + (game.touch ? 8 : 16), y);
 }

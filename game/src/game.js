@@ -203,7 +203,7 @@ export class Game {
       shop: () => this.setupShop(),
       shrine: () => this.setupShrine(),
       elite2: () => this.setupWarden(),
-      trial: () => { room0.wave = 0; for (const e of desc.waves[0]) this.addEnemy(makeEnemy(e.type, e.x * TILE, e.y * TILE)); this.fx.setBanner('試練の間', '2 波を退けると、アーティファクトか強化と金貨', '#ff9a7a', 1.8); },
+      trial: () => { room0.wave = 0; for (const e of desc.waves[0]) this.addEnemy(makeEnemy(this.easyType(e.type), e.x * TILE, e.y * TILE)); this.fx.setBanner('試練の間', '2 波を退けると、アーティファクトか強化と金貨', '#ff9a7a', 1.8); },
       golden: () => this.setupGolden(),
     }[desc.type];
     const room0 = this.room;
@@ -260,7 +260,7 @@ export class Game {
     const pool = free.length ? free : rng.shuffle(slots);
     for (let i = 0; i < n && pool.length; i++) {
       const m = pool[i % pool.length];
-      const e = this.addEnemy(makeEnemy(rng.pick(types[m.c]), m.x + (i >= pool.length ? 20 : 0), m.y));
+      const e = this.addEnemy(makeEnemy(this.easyType(rng.pick(types[m.c])), m.x + (i >= pool.length ? 20 : 0), m.y));
       if (e) { e.extra = true; if (this.room.formation === 'aoe') e.spread = true; }
     }
   }
@@ -280,8 +280,11 @@ export class Game {
   // 陣形：主人公の戦い方とその階層に合わせて、敵の並びと顔ぶれを組み替える
   //  槍衾（剣の相手）…入口に近い前衛は近接、奥の後衛は遠距離（光線砲手・弓兵）
   //  散開（術の相手）…固まらずに散らばり、足の速いネズミと遠距離が増える
+  // 簡単：指向性の針を撃つ風見鶏は出さない（振り子蝙蝠に替える）
+  easyType(t) { return (this.run.diff && this.run.diff.id === 'easy' && t === 'G') ? 'B' : t; }
   formation(list) {
     const diff = this.run.diff || DIFFICULTY.normal;
+    list = list.map((e) => ({ ...e, type: this.easyType(e.type) }));
     // 簡単：陣形を組まず、敵が 1 体少ない。難しい：戦い方に関係なく、階層ごとに陣形を組む
     let style = diff.strategy ? this.buildStyle() : null;
     if (!style && diff.strategy === 'always') style = this.run.fi % 2 === 0 ? 'melee' : 'aoe';
@@ -462,6 +465,11 @@ export class Game {
     }
     // 時止め中はプレイヤーだけが遅くなる（完全停止はさせない）
     const pdt = this.timeStopT > 0 ? dt * 0.3 : dt;
+    // 調べられる物（扉・看板・人物など）の前では、跳ぶ（決定）ボタンでも調べる。その時は跳ばない
+    if (p.state === 'normal' && p.onGround && (input.pressed('jump') || input.pressed('confirm'))) {
+      const it = this.nearestInteractable();
+      if (it && this.interactPrompt(it)) { input.consume('jump'); input.consume('confirm'); p.bufferT = 0; this.tryInteract(); }
+    }
     p.update(this, input, pdt);
     if (p.wallSlam) this.onWallSlam();
     if (p.afterT > 0) p.afterT -= pdt;
@@ -1260,7 +1268,7 @@ export class Game {
     // 試練の間：1 波目を倒すと 2 波目
     if (t === 'trial' && !room.cleared && living === 0 && room.wave === 0) {
       room.wave = 1;
-      for (const e of room.desc.waves[1]) this.addEnemy(makeEnemy(e.type, e.x * TILE, e.y * TILE));
+      for (const e of room.desc.waves[1]) this.addEnemy(makeEnemy(this.easyType(e.type), e.x * TILE, e.y * TILE));
       this.fx.setBanner('第二波', '', '#ff9a7a', 1.0); this.sfx.play('tellBig');
       return;
     }
@@ -1326,6 +1334,7 @@ export class Game {
     if (this.run.keys > 0 && next.desc.type !== 'boss' && this.room.desc.type !== 'golden') {
       this.addItem({ kind: 'door', golden: true, x: X.x + dir * n * 90 - 6, y: doorY, w: 36, h: 50, to: { fi: this.run.fi, ri: this.run.ri, override: { type: 'golden', layout: 'vault' } }, reward: null, label: '黄金の部屋' });
     }
+    this.separateFromDoors();
     this.sfx.play('door');
   }
 
@@ -1367,6 +1376,23 @@ export class Game {
   }
 
   // ───────── 調べる ─────────
+  // 楔を打つ物（騎士の残骸・人物・歯止めなど）が扉と重ならないよう、扉の横へずらす
+  separateFromDoors() {
+    const map = this.map, doors = this.room.items.filter((i) => i.kind === 'door');
+    if (!doors.length) return;
+    const clash = (it) => doors.some((d) => it.x < d.x + d.w + 10 && it.x + it.w > d.x - 10 && it.y < d.y + d.h && it.y + it.h > d.y);
+    const groundOk = (it, nx) => { const bottom = it.y + it.h; const c = nx + it.w / 2; return nx > 4 && nx + it.w < map.pxW - 4 && Math.abs(map.groundBelow(c, bottom - 10) - bottom) < 8 && !map.solidAt(c, bottom - it.h / 2); };
+    for (const it of this.room.items) {
+      if (it.kind === 'door' || it.kind === 'reward' || !(it.causal || it.kind === 'wreck')) continue;
+      if (!clash(it)) continue;
+      const tries = [];
+      for (const d of doors) tries.push(d.x - it.w - 14, d.x + d.w + 14);
+      for (let k = 1; k <= 6; k++) tries.push(it.x - k * 30, it.x + k * 30);
+      tries.sort((a, b) => Math.abs(a - it.x) - Math.abs(b - it.x));
+      const ox = it.x;
+      for (const nx of tries) { it.x = nx; if (groundOk(it, nx) && !clash(it)) break; it.x = ox; }
+    }
+  }
   nearestInteractable() {
     const p = this.player;
     const zone = { x: p.x - 14, y: p.y - 10, w: p.w + 28, h: p.h + 20 };
@@ -2245,6 +2271,7 @@ export class Game {
 
   onKnightDown(e) {
     this.addItem({ kind: 'wreck', x: e.x - 6, y: e.y + e.h - 24, w: 42, h: 24, causal: true, wedged: false, life: 12 });
+    this.separateFromDoors();
     this.fx.setBanner('歯車騎士を倒した', '残骸に楔を打てる（約12秒）', '#f2c14e', 2.0);
   }
 }

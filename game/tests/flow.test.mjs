@@ -167,3 +167,42 @@ test('白き刻守は新しい技（時針の雨・光輪・三連斬・突進�
     b.setState('idle'); b.cool = 99;
   }
 });
+
+test('調べられる物の前では、跳ぶ（決定）ボタンで調べる（その時は跳ばない）。何もない所では跳ぶ', () => {
+  const g = newGame(11); const d = new Driver(g);
+  d.frame(5);
+  const p = g.player;
+  const sign = g.room.items.find((i) => i.kind === 'sign' || i.kind === 'npc');
+  assert.ok(sign, 'room has something to read');
+  p.x = sign.x + sign.w / 2 - p.w / 2; p.y = sign.y + sign.h - p.h; p.vy = 0;
+  d.frame(5);
+  assert.ok(p.onGround);
+  d.frame(1, ['jump']);
+  assert.equal(g.modal && g.modal.type, 'dialog', 'jump opens the dialog');
+  assert.ok(p.vy >= 0, 'did not jump');
+  // 会話は跳ぶボタンで進む
+  while (g.modal) { d.frame(10); d.frame(1, ['jump']); }
+  p.x += 300; d.frame(10);
+  if (!g.nearestInteractable()) { d.frame(1, ['jump']); d.frame(2); assert.ok(p.vy < 0 || !p.onGround, 'jumps when nothing is near'); }
+});
+
+test('簡単では風見鶏（指向性の針を撃つ空の敵）が出ない', () => {
+  for (let s = 1; s <= 25; s++) {
+    const g = newGame(s * 31); g.meta.difficulty = 'easy'; g.startLoop(); g.modal = null;
+    for (let fi = 0; fi < 3; fi++) g.run.plan.floors[fi].forEach((r, ri) => { if (r.type === 'combat' || r.type === 'trial') { g.enterRoom(fi, ri); g.modal = null; assert.ok(!g.room.enemies.some((e) => e.kind === 'vane'), `seed ${s} room ${fi}-${ri}`); } });
+  }
+});
+
+test('楔を打つ物（騎士の残骸など）は扉と重ならない', () => {
+  const g = newGame(12); g.startLoop(); g.modal = null;
+  let fi = -1, ri = -1; g.run.plan.floors.forEach((fl, i) => fl.forEach((r, j) => { if (r.type === 'elite' && fi < 0) { fi = i; ri = j; } }));
+  g.enterRoom(fi, ri); g.modal = null;
+  const X = g.marker('X'), k = g.room.enemies.find((e) => e.kind === 'knight');
+  k.x = X.x - 4; k.y = X.y + 30 - k.h; // 出口の上で倒れる
+  k.hp = 0; k.alive = false;
+  const d = new Driver(g); d.frame(30);
+  g.openDoors(); // 報酬を取ると扉が開く
+  const doors = g.room.items.filter((i) => i.kind === 'door'), wreck = g.room.items.find((i) => i.kind === 'wreck');
+  assert.ok(doors.length && wreck);
+  for (const dr of doors) assert.ok(wreck.x + wreck.w <= dr.x - 10 || wreck.x >= dr.x + dr.w + 10, `wreck ${wreck.x} vs door ${dr.x}`);
+});

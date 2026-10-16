@@ -398,7 +398,7 @@ function drawPause(ctx, game, m) {
     text(ctx, (i === m.sel ? '▶ ' : '') + o.label, VIEW_W / 2, yy, { size: 14, align: 'center', color: i === m.sel ? C.gold : '#ddd' });
   });
   drawDawnStrip(ctx, game, y + h + 30);
-  if (!game.touch) text(ctx, '移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃・↑↓＋Xで上下）　回避 C　術 V（ゲージ消費／術がなければ時歪）　調べる ↑/E', VIEW_W / 2, VIEW_H - 30, { size: 11, align: 'center', color: C.muted });
+  if (!game.touch) text(ctx, '移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃・↑↓＋Xで上下）　回避 C　術 V（ゲージ消費／術がなければ時歪）　調べる Z/↑/E（調べられる物の前）', VIEW_W / 2, VIEW_H - 30, { size: 11, align: 'center', color: C.muted });
 }
 
 const TABS = ['人物', '謎', '敵', '夜明け'];
