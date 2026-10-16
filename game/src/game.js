@@ -57,15 +57,28 @@ export class Game {
   // ───────── セーブ ─────────
   loadSave() {
     if (!this.storage) return;
+    // 設定（難易度・画面揺れ・音量）は記録とは別に残る。記録を消してやり直しても同じ難易度で始まる
+    try { const st = this.storage.loadSettings && this.storage.loadSettings(); if (st) Object.assign(this.settings, JSON.parse(st)); } catch { /* 壊れていれば既定値 */ }
     const s = this.storage.load();
     this.meta = s ? deserialize(s) : null;
+    if (this.meta && this.meta.difficulty && !this.settings.difficulty) this.settings.difficulty = this.meta.difficulty;
   }
-  save() { if (this.storage && this.meta) this.storage.save(serialize(this.meta)); }
+  save() {
+    if (!this.storage) return;
+    if (this.meta) this.storage.save(serialize(this.meta));
+    this.saveSettings();
+  }
+  saveSettings() {
+    if (this.storage && this.storage.saveSettings) { try { this.storage.saveSettings(JSON.stringify({ difficulty: this.settings.difficulty, shake: this.settings.shake, volume: this.settings.volume })); } catch { /* 保存できなくても遊べる */ } }
+  }
 
   // ───────── 進行 ─────────
   newGame(seed) {
+    // 難易度は、記録を消してはじめからやり直しても引き継ぐ
+    const diff = this.settings.difficulty || (this.meta && this.meta.difficulty) || 'normal';
+    this.settings.difficulty = diff;
     this.meta = newMeta(seed);
-    this.meta.difficulty = this.settings.difficulty || 'normal';
+    this.meta.difficulty = diff;
     this.save();
     this.startLoop();
   }
@@ -2002,7 +2015,7 @@ export class Game {
     const order = ['veryeasy', 'easy', 'normal', 'hard', 'nightmare'];
     const next = order[(order.indexOf(this.difficulty().id) + 1) % order.length];
     this.settings.difficulty = next;
-    if (this.meta) { this.meta.difficulty = next; this.save(); }
+    if (this.meta) { this.meta.difficulty = next; this.save(); } else this.saveSettings();
   }
   updateTitle(input) {
     const opts = this.titleOptions();
@@ -2019,7 +2032,7 @@ export class Game {
       this.sfx.play('confirm');
       if (o.id === 'continue') this.continueGame();
       else if (o.id === 'new') { if (this.meta) this.titleConfirm = true; else this.newGame(); }
-      else if (o.id === 'shake') this.settings.shake = !this.settings.shake;
+      else if (o.id === 'shake') { this.settings.shake = !this.settings.shake; this.saveSettings(); }
       else if (o.id === 'diff') this.cycleDifficulty();
     }
   }
@@ -2299,9 +2312,9 @@ export class Game {
           if (o.id === 'resume') this.modal = null;
           else if (o.id === 'journal') this.openJournal();
           else if (o.id === 'companion') this.openCompanionPick();
-          else if (o.id === 'shake') this.settings.shake = !this.settings.shake;
+          else if (o.id === 'shake') { this.settings.shake = !this.settings.shake; this.saveSettings(); }
           else if (o.id === 'diff') this.cycleDifficulty();
-          else if (o.id === 'vol') { this.settings.volume = (Math.round(this.settings.volume * 10) + 2) % 12 / 10; this.sfx.setVolume(this.settings.volume); }
+          else if (o.id === 'vol') { this.settings.volume = (Math.round(this.settings.volume * 10) + 2) % 12 / 10; this.sfx.setVolume(this.settings.volume); this.saveSettings(); }
           else if (o.id === 'giveup') { this.modal = null; this.player.hp = 0; this.player.state = 'dead'; this.run.deathT = 1.6; this.endRun('death'); }
           input.consume('jump'); input.consume('attack');
         }

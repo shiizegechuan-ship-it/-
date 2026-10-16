@@ -337,3 +337,35 @@ test('めちゃ簡単：継承は最初から無限。夜を何度重ねても�
   const n = newGame(42); n.meta.difficulty = 'normal';
   assert.equal(inheritCount(n.meta), 3);
 });
+
+test('難易度は、記録を消してはじめからやり直しても（読み込み直したあとでも）引き継ぐ', async () => {
+  const { Game } = await import('../src/game.js');
+  let save = null, settings = null;
+  const storage = { load: () => save, save: (v) => { save = v; }, loadSettings: () => settings, saveSettings: (v) => { settings = v; } };
+  for (const diff of ['veryeasy', 'easy', 'hard', 'nightmare']) {
+    save = null; settings = null;
+    let g = new Game({ deterministicFx: true, storage });
+    while (g.difficulty().id !== diff) g.cycleDifficulty();
+    g.newGame(1); g.modal = null;
+    assert.equal(g.meta.difficulty, diff);
+    // ページを読み込み直す → 「はじめから（記録を消す）」
+    g = new Game({ deterministicFx: true, storage });
+    assert.equal(g.difficulty().id, diff, 'remembered after reload');
+    g.newGame(2); g.modal = null;
+    assert.equal(g.meta.difficulty, diff, 'kept after erasing the save');
+    assert.equal(g.run.diff.id, diff);
+    // 設定だけが残っていて記録がないときも
+    save = null;
+    g = new Game({ deterministicFx: true, storage });
+    g.newGame(3); g.modal = null;
+    assert.equal(g.meta.difficulty, diff, 'settings alone keep it');
+  }
+  // 設定の保存がない古い環境でも、記録の難易度を引き継ぐ
+  save = null;
+  const old = { load: () => save, save: (v) => { save = v; } };
+  let g = new Game({ deterministicFx: true, storage: old });
+  g.cycleDifficulty(); g.newGame(4); // hard
+  g = new Game({ deterministicFx: true, storage: old });
+  g.newGame(5);
+  assert.equal(g.meta.difficulty, 'hard');
+});

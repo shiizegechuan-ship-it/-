@@ -11,6 +11,8 @@ const SAVE_KEY = 'wedge-of-dawn-save-v1';
 const storage = {
   load() { try { return localStorage.getItem(SAVE_KEY); } catch { return null; } },
   save(s) { try { localStorage.setItem(SAVE_KEY, s); } catch { /* 保存できない環境でも遊べる */ } },
+  loadSettings() { try { return localStorage.getItem(SAVE_KEY + ':settings'); } catch { return null; } },
+  saveSettings(s) { try { localStorage.setItem(SAVE_KEY + ':settings', s); } catch { /* 保存できない環境でも遊べる */ } },
 };
 
 const canvas = document.getElementById('game');
@@ -18,6 +20,7 @@ const ctx = canvas.getContext('2d');
 const input = new Input();
 const sfx = new Sfx();
 const game = new Game({ sfx, storage });
+sfx.setVolume(game.settings.volume); // 保存した音量
 window.__game = game; // デバッグ・自動テスト用
 window.__input = input;
 window.__makeEnemy = makeEnemy; // デバッグ用
