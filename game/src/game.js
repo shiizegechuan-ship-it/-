@@ -18,7 +18,7 @@ import { LAYOUTS, FLOOR_NAMES, buildPlan, layoutRows, extraEnemyTypes } from './
 import {
   newMeta, serialize, deserialize, endLoop, learn, knows, hasWedge, addWedge, removeWedge, freeSlots,
   bossCounter, trueEndReady, finalReady, FINAL_NIGHT, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
-  upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount, habitAnalysis, dawnProgress, MOB_COUNTERS,
+  upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount, inheritLabel, habitAnalysis, dawnProgress, MOB_COUNTERS,
 } from './meta.js';
 
 const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
@@ -1259,7 +1259,8 @@ export class Game {
       }
       this.addShards((e.elite ? 12 : 2) + Math.floor(this.run.scale.level / 2), cx(e), e.y - 20);
       this.dropExp(expFor(e, this.run.scale), cx(e), cy(e));
-      this.dropGold(Math.round((GOLD[e.kind] || 5) * (1 + 0.25 * this.run.scale.level) * p.stats.goldMul), cx(e), cy(e));
+      // 敵 1 体ごとの金貨：めちゃ簡単 ×3、簡単 ×2、普通〜激ムズ ×1.25
+      this.dropGold(Math.round((GOLD[e.kind] || 5) * (1 + 0.25 * this.run.scale.level) * p.stats.goldMul * ((this.run.diff && this.run.diff.goldMul) || 1)), cx(e), cy(e));
       this.sfx.play('kill');
       this.fx.burst(cx(e), cy(e), e.elite ? '#f2c14e' : '#e8dcc4', e.elite ? 30 : 16);
       this.hitstop = Math.max(this.hitstop, (e.elite ? 10 : 4) / 60);
@@ -1880,7 +1881,7 @@ export class Game {
     const m = this.meta;
     const opts = [{ id: 'next', label: '次の夜へ' }];
     opts.push({ id: 'upgrade', label: `刻印を刻む（時の欠片 ${m.shards}）` });
-    if (((m.lastLoop && m.lastLoop.boons) || []).length) opts.push({ id: 'inherit', label: `継承する強化を選ぶ（${(m.inherit || []).length}/${inheritCount(m)}）` });
+    if (((m.lastLoop && m.lastLoop.boons) || []).length) opts.push({ id: 'inherit', label: `継承する強化を選ぶ（${(m.inherit || []).length}/${inheritLabel(m)}）` });
     const lastBoons = (m.lastLoop && m.lastLoop.boons) || [];
     const wedgedIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
     if (freeSlots(m) > 0 && lastBoons.some((b) => !wedgedIds.has(b.id))) opts.push({ id: 'wedgeBoon', label: '最後に掴んだ強化に楔を打つ' });

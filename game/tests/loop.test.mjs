@@ -301,3 +301,39 @@ test('古いセーブ（楔の枠 2）も読み込むと 3 つになる', () => 
   const back = deserialize(serialize(m));
   assert.equal(back.slots, 3);
 });
+
+test('敵 1 体ごとの金貨：めちゃ簡単 ×3・簡単 ×2・普通〜激ムズ ×1.25（以前と比べて）', async () => {
+  const { newGame } = await import('./helpers.mjs');
+  const { DIFFICULTY } = await import('../src/config.js');
+  const goldOf = (diff) => {
+    const g = newGame(31); g.meta.difficulty = diff; g.startLoop(); g.modal = null;
+    g.enterRoom(0, 1); g.modal = null;
+    const e = g.room.enemies.find((x) => x.kind === 'soldier') || g.room.enemies[0];
+    let got = 0; g.dropGold = (n) => { got += n; };
+    e.hp = 0; e.alive = false; g.handleDeaths();
+    return got;
+  };
+  const base = goldOf('normal') / 1.25;
+  assert.equal(DIFFICULTY.veryeasy.goldMul, 3); assert.equal(DIFFICULTY.easy.goldMul, 2);
+  for (const d of ['normal', 'hard', 'nightmare']) assert.equal(DIFFICULTY[d].goldMul, 1.25);
+  assert.ok(Math.abs(goldOf('veryeasy') - base * 3) <= 1.5, 'x3');
+  assert.ok(Math.abs(goldOf('easy') - base * 2) <= 1.5, 'x2');
+});
+
+test('めちゃ簡単：継承は最初から無限。夜を何度重ねても、すべての強化を Lv のまま最後まで持ち越す', async () => {
+  const { newGame } = await import('./helpers.mjs');
+  const { inheritCount, inheritLabel } = await import('../src/meta.js');
+  const g = newGame(41); g.meta.difficulty = 'veryeasy'; g.startLoop(); g.modal = null;
+  assert.equal(inheritCount(g.meta), Infinity); assert.equal(inheritLabel(g.meta), '∞');
+  const all = [{ id: 'edge', tier: 5 }, { id: 'crit', tier: 3 }, { id: 'satellites', tier: 4 }, { id: 'gale', tier: 2 }, { id: 'echo', tier: 2 }, { id: 'aura', tier: 3 }, { id: 'meteor', tier: 2 }, { id: 'crown', tier: 1 }, { id: 'heavenblade', tier: 4 }, { id: 'timeshield', tier: 3 }];
+  g.player.setBoons(all.map((b) => ({ ...b })));
+  for (let night = 0; night < 4; night++) {
+    g.endRun('death');
+    assert.equal(g.meta.inherit.length >= all.length, true, 'all inherited');
+    g.startLoop(); g.modal = null;
+    for (const b of all) assert.ok(g.player.boons.some((x) => x.id === b.id && x.tier === b.tier), `night ${night + 2}: ${b.id} Lv${b.tier}`);
+  }
+  // ほかの難易度は従来どおり
+  const n = newGame(42); n.meta.difficulty = 'normal';
+  assert.equal(inheritCount(n.meta), 3);
+});

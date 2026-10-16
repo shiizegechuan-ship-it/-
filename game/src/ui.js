@@ -5,7 +5,7 @@ import { COMPANIONS, stageOf, allComps, unionReady } from './companion.js';
 import { BOONS, forgeDiff, SCHOOLS, RESONANCE, synergyHints, schoolCounts } from './boons.js';
 import { ACTIVE_ARTS } from './arts.js';
 import { ARTIFACTS, ARTIFACT_COLOR } from './artifacts.js';
-import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, openQuestions, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritCount, enemyScale, DAWN_STEPS, dawnProgress } from './meta.js';
+import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, openQuestions, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritCount, inheritLabel, enemyScale, DAWN_STEPS, dawnProgress } from './meta.js';
 import { FLOOR_NAMES } from './world.js';
 import { expToNext, LEVEL } from './level.js';
 import { LB, lbStart, rewindGrid } from './layout.js';
@@ -60,7 +60,15 @@ export function drawLightbox(ctx, game, { title, right = '', items, sel, color =
   for (let k = 0; k < Math.min(LB.rows, n - start); k++) {
     const i = start + k, it = items[i], yy = LB.top + k * LB.rowH, on = i === sel;
     if (on) { ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(x + 16, yy - 26, w - 32, LB.rowH - 4); ctx.fillStyle = color; ctx.fillRect(x + 16, yy - 26, 4, LB.rowH - 4); }
-    text(ctx, (on ? '▶ ' : '　') + it.label, x + 34, yy, { size: 19, color: on ? '#ffffff' : (it.color || '#d8d0c4') });
+    // 伝説の強化：枠が虹色に光る（色が流れる）
+    if (it.rainbow) {
+      const t = (game.time || 0) * 120, rx = x + 16, ry = yy - 26, rw = w - 32, rh = LB.rowH - 4;
+      const gr = ctx.createLinearGradient(rx, ry, rx + rw, ry + rh);
+      for (let k2 = 0; k2 <= 6; k2++) gr.addColorStop(k2 / 6, `hsl(${(t + k2 * 60) % 360},100%,65%)`);
+      ctx.save(); ctx.strokeStyle = gr; ctx.lineWidth = 3; ctx.shadowColor = `hsl(${t % 360},100%,70%)`; ctx.shadowBlur = 10 + 4 * Math.sin((game.time || 0) * 6);
+      ctx.strokeRect(rx + 1.5, ry + 1.5, rw - 3, rh - 3); ctx.restore();
+    }
+    text(ctx, (on ? '▶ ' : '　') + it.label, x + 34, yy, { size: 19, color: it.rainbow ? `hsl(${((game.time || 0) * 120) % 360},100%,78%)` : on ? '#ffffff' : (it.color || '#d8d0c4') });
     if (it.right) text(ctx, it.right, x + w - 34, yy, { size: 16, align: 'right', color: it.rightColor || C.muted });
   }
   // 上下にまだ項目があるときの印（右端）
@@ -303,7 +311,7 @@ function drawBoonPick(ctx, game, m) {
 }
 
 function drawShop(ctx, game, m) {
-  const items = m.stock.map((s) => { const l = game.shopLabel(s); const can = !s.sold && game.run.gold >= s.price; return { label: l.name, color: s.sold ? '#5a5260' : s.tier === 'legend' ? '#ff7ae0' : s.tier === 'rare' ? '#ffd84a' : s.kind === 'key' ? '#ffd84a' : s.kind === 'artifact' ? '#7fe0d0' : '#d8d0c4', right: s.sold ? '売り切れ' : `${s.price} G`, rightColor: s.sold ? '#5a5260' : can ? '#ffd84a' : '#8a6a7a', desc: l.desc }; });
+  const items = m.stock.map((s) => { const l = game.shopLabel(s); const can = !s.sold && game.run.gold >= s.price; return { label: l.name, color: s.sold ? '#5a5260' : s.tier === 'legend' ? '#ff7ae0' : s.tier === 'rare' ? '#ffd84a' : s.kind === 'key' ? '#ffd84a' : s.kind === 'artifact' ? '#7fe0d0' : '#d8d0c4', right: s.sold ? '売り切れ' : `${s.price} G`, rightColor: s.sold ? '#5a5260' : can ? '#ffd84a' : '#8a6a7a', desc: l.desc, rainbow: s.tier === 'legend' && !s.sold }; });
   drawLightbox(ctx, game, { title: '行商人の店', right: `● 金貨 ${game.run.gold}`, items, sel: m.sel, color: '#ffd84a', st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: game.touch ? 'タップで選択、もう一度タップで買う／枠の外で閉じる' : '↑↓ 選ぶ　Z 買う　C 閉じる' });
 }
 
@@ -591,7 +599,7 @@ function drawRewindShop(ctx, game, r) {
       const def = BOONS[b.id], on = m.inherit.some((x2) => x2.id === b.id);
       return { label: (on ? '◆ ' : '◇ ') + def.name + (def.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: on ? C.gold : '#bbb', right: on ? '持ち越す' : SCHOOLS[def.school].name, rightColor: on ? C.gold : SCHOOLS[def.school].color, desc: def.desc(b.tier || 1) };
     });
-    drawLightbox(ctx, game, { title: `継承 ― 次の夜に持ち越す強化`, right: `${m.inherit.length} / ${inheritCount(m)}`, items, sel: r.sub, color: C.gold, st: r, desc: items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? 'タップで選択、もう一度タップで ◆持ち越す／◇外す　枠の外で戻る' : '↑↓ 選ぶ　Z ◆持ち越す／◇外す　C 戻る' });
+    drawLightbox(ctx, game, { title: `継承 ― 次の夜に持ち越す強化`, right: `${m.inherit.length} / ${inheritLabel(m)}`, items, sel: r.sub, color: C.gold, st: r, desc: items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? 'タップで選択、もう一度タップで ◆持ち越す／◇外す　枠の外で戻る' : '↑↓ 選ぶ　Z ◆持ち越す／◇外す　C 戻る' });
   }
 }
 
