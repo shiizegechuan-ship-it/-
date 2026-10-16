@@ -3,7 +3,7 @@ import { DT, TILE, VIEW_W, VIEW_H, ZOOM, PLAYER as PC, DIFFICULTY } from './conf
 import { overlap, cx, cy, clamp, lerp, makeRng, sign } from './util.js';
 import { TileMap } from './tilemap.js';
 import { Player } from './player.js';
-import { makeEnemy, RustSoldier, GearKnight, Warden, BellGuard, Projectile } from './enemies.js';
+import { makeEnemy, RustSoldier, GearKnight, Warden, Squire, Projectile } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
 import { castArt, castWarpSlash, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell, MELEE } from './arts.js';
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
@@ -27,7 +27,9 @@ const MELEE_IDS = ['edge', 'crit', 'critdmg', 'comboheat', 'heavyart', 'fourth',
 export const THREAT = { free: 3, per: 3, hp: 0.45, dmg: 0.08, bossHp: 0.65, extraCap: 3, growCap: 2 }; // 最初の 3 つ（Lv の合計）は数えない
 const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourglass: '砂時計', gold: '金貨', artifact: 'アーティファクト' };
 // 敵ごとの金貨（夜が深いほど多い）
-const GOLD = { mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
+// 小さな護衛の数：中ボスに 3 体、刻守に 5 体（第二楽章の増援は難易度による）
+export const GUARDS = { elite: 3, boss: 5 };
+const GOLD = { squire: 2, mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
 
 export class Game {
   constructor(opts = {}) {
@@ -301,7 +303,7 @@ export class Game {
     const st = this.run.diff ? this.run.diff.strategy : true;
     if (st === 'always' || (st && (this.run.aoeTendency || this.player.boons.filter((b) => PASSIVE_IDS.includes(b.id)).reduce((a, b) => a + passiveWeight(b), 0) >= 6))) e.aoeDodge = true;
     this.room.enemies.push(e);
-    const tellKey = { mallet: 'tell_mallet', beamer: 'tell_beamer', chain: 'tell_chain', rat: 'tell_rat', hopper: 'tell_hopper', warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
+    const tellKey = { squire: 'tell_squire', mallet: 'tell_mallet', beamer: 'tell_beamer', chain: 'tell_chain', rat: 'tell_rat', hopper: 'tell_hopper', warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
     if (tellKey) e.tellKey = tellKey;
     return e;
   }
@@ -363,8 +365,9 @@ export class Game {
       return;
     }
     this.addItem({ kind: 'lift', x: U.x - 6, y: U.y + TILE - 50, w: 42, h: 50, dead: true });
-    this.addEnemy(new GearKnight(K.x, K.y + TILE));
-    this.fx.setBanner('歯車騎士', '盾は重撃で崩せる', '#f2c14e', 1.6);
+    const kn = this.addEnemy(new GearKnight(K.x, K.y + TILE));
+    this.spawnGuards(GUARDS.elite, kn);
+    this.fx.setBanner('歯車騎士', '盾は重撃で崩せる。従者は騎士を倒すと崩れる', '#f2c14e', 1.6);
   }
   setupArchive() {
     const C = this.marker('C'), Y = this.marker('Y'), O = this.marker('O'), H = this.marker('H');
@@ -385,7 +388,7 @@ export class Game {
     const b = this.addEnemy(new Tokimori(M.x, M.y + TILE, { counter, brake: hasWedge(this.meta, 'brake'), rng: this.run.bossRng }));
     b.face = -1;
     this.room.boss = b;
-    this.spawnGuards((this.run.diff || DIFFICULTY.normal).guards);
+    this.spawnGuards(GUARDS.boss);
     this.room.boss = b;
     const lines = [];
     if (this.meta.flags.bossBeaten) lines.push({ who: '刻守（師）', text: 'また来たか、弟子よ。この命が尽きるまで、鐘は鳴らす。朝は来させん。' });
@@ -783,7 +786,8 @@ export class Game {
   }
   setupWarden() {
     const Z = this.marker('Z');
-    this.addEnemy(new Warden(Z.x, Z.y + TILE));
+    const wd = this.addEnemy(new Warden(Z.x, Z.y + TILE));
+    this.spawnGuards(GUARDS.elite, wd);
     this.fx.setBanner('振り子の番人', '大技のあとに長い隙。そこへ重撃を', '#f2c14e', 1.8);
   }
   useShrine(it) {
@@ -1117,6 +1121,7 @@ export class Game {
       if (e.boss) continue;
       this.run.kills++;
       this.run.killStacks += p.stats.killStack;
+      if (e.elite) this.clearGuards(e); // 中ボスが倒れると従者も崩れ落ちる
       // 星喰らい：倒した敵の近くの敵 3 体へ流星
       if (p.stats.stareater) {
         const near = room.enemies.filter((o) => o.alive && o !== e && !(o.boss && o.defeated)).sort((a, b) => Math.hypot(cx(a) - cx(e), cy(a) - cy(e)) - Math.hypot(cx(b) - cx(e), cy(b) - cy(e))).slice(0, 3);
@@ -1539,19 +1544,22 @@ export class Game {
 
   // ───────── 刻守 ─────────
   // 刻守の護衛（鐘楼の衛士）：弱いが数で押してくる。第二楽章で増援。刻守が倒れると崩れ落ちる
-  spawnGuards(n) {
-    const b = this.room.boss;
+  // 小さな護衛（従者）を主のまわりに呼ぶ。槍と礫が交互
+  spawnGuards(n, leader = this.room.boss) {
+    const b = leader;
     if (!b || n <= 0 || this.room.duel) return;
+    const have = this.room.enemies.filter((e) => e.guard && e.leader === b).length;
     for (let i = 0; i < n; i++) {
-      const side = i % 2 === 0 ? -1 : 1;
-      const gx = clamp(cx(b) + side * (70 + 40 * Math.floor(i / 2)), 60, this.map.pxW - 60);
-      const g = this.addEnemy(new BellGuard(gx - 10, b.y + b.h));
-      g.guard = true;
-      this.fx.burst(gx, b.y + b.h - 16, '#c9a052', 10);
+      const k = have + i, side = k % 2 === 0 ? -1 : 1;
+      const gx = clamp(cx(b) + side * (60 + 34 * Math.floor(k / 2)), 60, this.map.pxW - 60);
+      const g = this.addEnemy(new Squire(gx - 15, b.y + b.h, k % 2 ? 'sling' : 'lance', b));
+      g.lord = b.boss ? 'boss' : 'elite';
+      if (this.run.diff && this.run.diff.id === 'easy') { g.maxHp = g.hp = Math.round(g.maxHp * 0.7); }
+      this.fx.burst(gx, b.y + b.h - 10, b.boss ? '#f2c14e' : '#c98a52', 10);
     }
   }
-  clearGuards() {
-    for (const e of this.room.enemies) if (e.guard && e.alive) { e.alive = false; e.handled = true; this.fx.burst(cx(e), cy(e), '#c9a052', 12); }
+  clearGuards(leader) {
+    for (const e of this.room.enemies) if (e.guard && e.alive && (!leader || e.leader === leader)) { e.alive = false; e.handled = true; this.fx.burst(cx(e), cy(e), '#c9a052', 12); this.fx.text(cx(e), e.y - 8, '崩れた', '#c9a052', 9); }
   }
   onBossPhase(b, phase) {
     if (phase === 2) { const w = (this.run.diff || DIFFICULTY.normal).guardWave; this.spawnGuards(w); if (w) this.fx.text(cx(b), b.y - 40, '衛士の増援', '#c9a052', 14); }

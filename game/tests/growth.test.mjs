@@ -45,7 +45,7 @@ test('夜の深さ：夜を重ねると敵の HP・攻撃が上がり、段階�
 
 test('段階2の錆兵は返しの二段斬りを使う', () => {
   let seen = false;
-  for (let k = 0; k < 6 && !seen; k++) {
+  for (let k = 0; k < 30 && !seen; k++) { // 二段目は確率で出る
     const { g, d, e } = arena(RustSoldier, 40, 2);
     e.facePlayer(g.player); e.setState('windup');
     for (let i = 0; i < 90; i++) { d.frame(1); if (e.state === 'windup2') seen = true; g.player.iframeT = 0; }
@@ -753,8 +753,8 @@ test('難易度はタイトルで切り替えられ、新しく始めた記録�
   assert.equal(g.meta.difficulty, 'easy'); assert.equal(g.run.diff.id, 'easy');
 });
 
-test('刻守の護衛：鐘楼の衛士が現れ（数は難易度しだい）、第二楽章で増援、刻守が倒れると崩れ落ちる', () => {
-  for (const [diff, n0] of [['easy', 1], ['normal', 2], ['hard', 3]]) {
+test('刻守の護衛：小さな従者が 5 体現れ、第二楽章で増援（難易度しだい）、刻守が倒れると崩れ落ちる', () => {
+  for (const [diff, n0] of [['easy', 5], ['normal', 5], ['hard', 5]]) {
     const g = newGame(62); g.meta.difficulty = diff; g.startLoop(); g.modal = null;
     const bi = g.run.plan.floors[2].findIndex((r) => r.type === 'boss');
     g.enterRoom(2, bi); g.modal = null;
@@ -1001,4 +1001,30 @@ test('店で伝説を買うと手に入り、鍛冶には並ばない', () => {
   assert.ok(g.player.boons.some((b) => b.id === 'godspeed'));
   assert.equal(g.run.gold, 9499);
   assert.equal(canForge({ id: 'godspeed', tier: 1 }), false);
+});
+
+test('中ボスの護衛：歯車騎士と振り子の番人には小さな従者が 3 体（槍と礫）。中ボスが倒れると崩れ落ち、部屋は制圧になる', () => {
+  for (const type of ['elite', 'elite2']) {
+    const g = newGame(64);
+    let fi = -1, ri = -1;
+    g.run.plan.floors.forEach((fl, i) => fl.forEach((r, j) => { if (r.type === type && fi < 0) { fi = i; ri = j; } }));
+    g.enterRoom(fi, ri); g.modal = null;
+    const lead = g.room.enemies.find((e) => e.elite);
+    const sq = g.room.enemies.filter((e) => e.kind === 'squire');
+    assert.equal(sq.length, 3, type);
+    assert.ok(sq.every((e) => e.leader === lead && e.maxHp < lead.maxHp * 0.25));
+    assert.ok(sq.some((e) => e.role === 'lance') && sq.some((e) => e.role === 'sling'));
+    // 従者も攻撃してくる（予兆のあと）
+    const d = new Driver(g); const p = g.player; p.hp = p.maxHp = 1e6;
+    lead.cool = 99; lead.stateT = 0; lead.think = () => {};
+    p.x = cx(lead) - 120; p.y = lead.y + lead.h - p.h;
+    let told = false;
+    for (let i = 0; i < 60 * 8; i++) { d.frame(1); p.iframeT = 0; if (sq.some((e) => e.tell > 0.5)) told = true; }
+    assert.ok(told && p.hp < p.maxHp, 'squires tell, then hit');
+    lead.hp = 0; lead.alive = false;
+    d.frame(3);
+    assert.ok(sq.every((e) => !e.alive), 'squires collapse');
+    d.frame(5);
+    assert.ok(g.room.cleared, 'room cleared');
+  }
 });

@@ -99,7 +99,6 @@ function renderPlay(ctx, game) {
     b.globalAlpha = 1;
   }
   // 鐘楼の衛士：兜の金の飾り
-  for (const e of game.room.enemies) if (e.kind === 'guard' && e.alive) { const x = Math.round(cx(e) / 2), y = Math.round(e.y / 2); rect(b, x - 1, y - 3, 3, 2, '#f2c14e'); pset(b, x, y - 4, '#fff2b0'); }
   // 対策をしてきた敵：頭上に小さな赤い目
   for (const e of game.room.enemies) if (e.counter && e.alive && !e.boss) { const x = Math.round(cx(e) / 2), y = Math.round(e.y / 2) - 4; pset(b, x - 1, y, '#ff4a2a'); pset(b, x + 1, y, '#ff4a2a'); pset(b, x, y - 1, '#ffb0a0'); }
   drawPlayer(b, game, game.player);
@@ -792,7 +791,7 @@ function drawEnemy(b, game, e) {
     else outlined(b, group, frame, bx, by, f, slowGlow, 'blue', duel);
     drawSprite(b, spr(group, frame, flash ? 'white' : null, duel), bx, by, f);
   };
-  switch (e.kind === 'guard' ? 'soldier' : e.kind) { // 衛士は錆兵の姿（金の飾り付き）
+  switch (e.kind) {
     case 'soldier': {
       const winding = e.state === 'windup' || e.state === 'windup2' || e.state === 'thrustWind';
       const frame = winding ? 'crouch' : Math.abs(e.vx) > 10 ? (Math.floor(t * 8) % 2 ? 'walk0' : 'walk1') : 'stand';
@@ -976,6 +975,19 @@ function drawEnemy(b, game, e) {
       disc(b, bx, by - 6 + sq, 7, flash ? '#ffffff' : '#5a4a3a'); disc(b, bx - 2, by - 8 + sq, 3, flash ? '#ffffff' : '#7a6a52');
       pset(b, bx + f * 3, by - 7 + sq, '#ff3a2a');
       line(b, bx - 4, by - 1, bx - 5, by, '#c9a052'); line(b, bx + 4, by - 1, bx + 5, by, '#c9a052');
+      break;
+    }
+    case 'squire': { // 従者：小さな歯車人形。刻守の従者は金、中ボスの従者は銅。槍か礫を持つ
+      const main = e.lord === 'boss' ? '#c9a052' : '#a8683a', dark = e.lord === 'boss' ? '#7a5a2a' : '#5a3a22';
+      const tc = e.tell > 0 ? (e.tell > 0.6 ? '#ff4a2a' : '#c0402a') : slowGlow ? '#5aa9e6' : null;
+      const bob = e.state === 'move' && Math.abs(e.vx) > 20 ? Math.floor(t * 10) % 2 : 0;
+      if (tc) rect(b, bx - 4, by - 10 - bob, 9, 10, tc);
+      rect(b, bx - 3, by - 6 - bob, 7, 5, flash ? '#ffffff' : dark); // 胴
+      disc(b, bx, by - 8 - bob, 2, flash ? '#ffffff' : main); pset(b, bx + f, by - 8 - bob, '#ff3a2a'); // 頭（歯車）と目
+      pset(b, bx - 2, by - 11 - bob, main); pset(b, bx + 2, by - 11 - bob, main); pset(b, bx, by - 11 - bob, main);
+      pset(b, bx - 2, by - 1, dark); pset(b, bx + 2, by - 1, dark); // 足
+      if (e.role === 'lance') { const ext = e.state === 'poke' ? 5 : e.state === 'wind' ? -1 : 2; line(b, bx + f * 2, by - 5 - bob, bx + f * (5 + ext), by - 5 - bob, '#d8d0c0'); pset(b, bx + f * (6 + ext), by - 5 - bob, '#ffffff'); }
+      else { const a = e.state === 'aim' ? t * 20 : 0.6; pset(b, bx - f * 2 + Math.round(Math.cos(a) * 3), by - 8 - bob + Math.round(Math.sin(a) * 3), '#d8d0c0'); }
       break;
     }
     case 'mallet': { // 大槌兵：ずんぐりした鉄の体に大槌。振りかぶると槌が後ろへ回り赤く光る

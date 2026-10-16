@@ -930,14 +930,65 @@ export class Warden extends Enemy {
   }
 }
 
-// 鐘楼の衛士（刻守の護衛）：錆兵の弱い仲間。刻守が倒れると崩れ落ちる
-export class BellGuard extends RustSoldier {
-  constructor(x, y) {
-    super(x, y);
-    this.kind = 'guard';
-    this.hp = this.maxHp = 26;
-    this.dmgMul = 0.6;
-    this.cool = 1.2;
+// 従者（小さな護衛）：中ボスに 3 体、刻守に 5 体つき従う、小さな歯車人形。
+// 槍の従者は小さく跳ねて突き、礫の従者は離れて小石を投げる。主のそばを離れすぎない。主が倒れると崩れ落ちる
+export class Squire extends Enemy {
+  constructor(x, y, role = 'lance', leader = null) {
+    super('squire', x + 8, y - 18, 14, 18, 22);
+    this.role = role; this.leader = leader;
+    this.cool = 0.8 + Math.random() * 0.8;
+    this.guard = true;
+    this.setState('move');
+  }
+  think(game, dt) {
+    const p = game.player, map = game.map;
+    const dx = this.dx(p), adx = Math.abs(dx), ady = Math.abs(this.dy(p));
+    if (this.cool > 0) this.cool -= dt;
+    const hop = () => { if (this.onGround && (this.ledgeAhead(map, sign(this.vx) || this.face) || this.wallAhead(map, sign(this.vx) || this.face))) this.vy = -420; };
+    // 主から離れすぎない（主の周り 220 以内）
+    const L = this.leader && this.leader.alive ? this.leader : null;
+    const leash = L && Math.abs(cx(L) - cx(this)) > 220 ? sign(cx(L) - cx(this)) : 0;
+    switch (this.state) {
+      case 'move': {
+        this.facePlayer(p);
+        let want = 0;
+        if (this.role === 'lance') want = adx > 26 ? this.face * 120 : 0;
+        else want = adx < 120 ? -this.face * 100 : adx > 220 ? this.face * 90 : 0;
+        if (leash) want = leash * 110;
+        this.vx = approach(this.vx, want, 900 * dt); hop();
+        if (this.cool <= 0 && p.state !== 'dead') {
+          if (this.role === 'lance' && adx < 60 && ady < 40) { this.setState('wind'); game.sfx.play('tell'); }
+          else if (this.role === 'sling' && adx < 300 && ady < 120) { this.setState('aim'); game.sfx.play('tell'); }
+        }
+        break;
+      }
+      case 'wind': { // 槍：身をかがめて光る → 小さく跳んで突く
+        this.vx = approach(this.vx, 0, 1200 * dt);
+        const wt = 0.42 * this.wmul(game);
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'bite';
+        if (this.stateT >= wt) { this.setState('poke'); this.swing++; this.vx = this.face * 300; this.vy = -160; }
+        break;
+      }
+      case 'poke':
+        this.attacks.push({ ...this.frontBox(16, 12), dmg: 7, key: this.id * 1000 + this.swing });
+        if (this.stateT >= 0.22) { this.cool = 1.4; this.setState('move'); }
+        break;
+      case 'aim': { // 礫：腕を回して光る → 小石を投げる
+        this.vx = approach(this.vx, 0, 1200 * dt); this.facePlayer(p);
+        const wt = 0.5 * this.wmul(game);
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'sling';
+        if (this.stateT >= wt) {
+          const ax = cx(p) - cx(this), ay = cy(p) - 10 - cy(this), d = Math.hypot(ax, ay) || 1;
+          game.spawnProjectile(new Projectile('bolt', cx(this) - 5, this.y + 2, ax / d * 280, ay / d * 280, 7));
+          game.sfx.play('shoot'); this.cool = 1.8; this.setState('move');
+        }
+        break;
+      }
+      case 'flinch':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        if (this.stateT > 0.2) this.setState('move');
+        break;
+    }
   }
 }
 
