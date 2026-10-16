@@ -1520,7 +1520,7 @@ test('常時の術で部屋の敵が一瞬で全滅したら、その夜は常�
   assert.ok(!n.run.passiveResist);
   // 常時の術で 2.5 秒以内に全滅
   const g = enter(61), d = new Driver(g);
-  d.frame(50); // 出てすぐのガードが明ける
+  d.until(() => g.room.enemies.every((e) => !g.spawnGuarded(e)), 120); // 入った時のガードが明ける
   for (const e of g.room.enemies.filter((e) => e.initial)) g.dealDamage(e, { base: 1e6, cat: 'skill', knock: 0, dir: 1, spell: true, passive: true });
   d.frame(3);
   assert.equal(g.run.passiveResist, PASSIVE_WIPE.resist);
@@ -1695,4 +1695,32 @@ test('強化の選択画面の合成の案内：素材なら合成先・相手�
   f = fusionsFor('orbit', [{ id: 'gearwaltz', tier: 1 }]);
   assert.ok(!f.some((x) => x.to === 'gearwaltz'));
   assert.ok(BOONS.lag); assert.equal(fusionsFor('lag', []).length, 0);
+});
+
+test('部屋に入った時の敵も、増援と同じように常時の術とお供の攻撃をガードする（増援の予兆＋0.75 秒ぶん）。自分の攻撃は通る', async () => {
+  const { ENTRY_GUARD, SPAWN_GUARD } = await import('../src/game.js');
+  assert.ok(ENTRY_GUARD > SPAWN_GUARD);
+  for (const type of ['combat', 'trial', 'elite']) {
+    const g = newGame(64); g.startLoop(); g.modal = null;
+    let at = null;
+    g.run.plan.floors.forEach((fl, fi) => fl.forEach((r, ri) => { if (!at && r.type === type) at = [fi, ri]; }));
+    if (!at) continue;
+    g.startTransition({ fi: at[0], ri: at[1] });
+    const d = new Driver(g);
+    d.until(() => !g.transition, 60); g.modal = null;
+    const foes = g.room.enemies.filter((e) => e.alive && !e.boss);
+    assert.ok(foes.length && foes.every((e) => g.spawnGuarded(e)), `${type}: guarded on entry`);
+    const e = foes.find((x) => !x.elite && x.kind !== 'knight') || foes[0]; e.hp = e.maxHp = 1e6;
+    g.dealDamage(e, { base: 50, cat: 'skill', knock: 0, dir: 1, spell: true, passive: true });
+    g.dealDamage(e, { base: 50, cat: 'skill', knock: 0, dir: 1, spell: true, passive: true, companion: true });
+    assert.equal(e.hp, 1e6, `${type}: passive and companion are guarded`);
+    // SPAWN_GUARD を過ぎても、ENTRY_GUARD までは守る
+    while (g.room.t < SPAWN_GUARD + 0.1) { if (g.modal) g.modal = null; d.frame(1); }
+    assert.ok(g.spawnGuarded(e), `${type}: still guarded like a reinforcement`);
+    g.dealDamage(e, { base: 50, cat: 'combo', knock: 0, dir: e.face }); // 背後から
+    assert.ok(e.hp < 1e6, `${type}: own attack goes through (${e.kind})`);
+    while (g.room.t < ENTRY_GUARD + 0.05) { if (g.modal) g.modal = null; d.frame(1); }
+    const h = e.hp; g.dealDamage(e, { base: 50, cat: 'skill', knock: 0, dir: 1, spell: true, passive: true });
+    assert.ok(e.hp < h, `${type}: guard ends`);
+  }
 });

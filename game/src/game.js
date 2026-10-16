@@ -42,6 +42,8 @@ export const SPAWN_AT = { reach: 70, far: 170 };
 export const PARRY_SLOW = { time: 0.35, scale: 0.2 };
 // 出てすぐの敵は、常時の術をしばらく防ぐ（自分の手で斬る余地を残す）
 export const SPAWN_GUARD = 0.75;
+// 部屋に入った時の敵も、増援と同じ間だけ守る（増援の予兆 + 出てすぐのガード）
+export const ENTRY_GUARD = 0.6 + SPAWN_GUARD;
 // 常時の術で部屋の敵が一瞬で全滅するようになったら、その夜の間、常時の術を 7 割防ぐ
 export const PASSIVE_WIPE = { within: 2.5, share: 0.7, resist: 0.7 };
 const GOLD = { summoner: 9, mite: 0, lancer: 7, trapper: 7, clocker: 7, vane: 6, squire: 2, mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
@@ -249,6 +251,12 @@ export class Game {
     }[desc.type];
     const room0 = this.room;
     setup();
+    // 部屋に入った時の敵は、増援と同じ出現の光とともに現れ、同じ間だけ常時の術・お供の攻撃をガードする
+    for (const e of this.room.enemies) {
+      if (e.boss || !e.alive) continue;
+      e.guardEnd = ENTRY_GUARD;
+      this.fx.ring(cx(e), cy(e), '#ff7a5a', 30, 0.5); this.fx.burst(cx(e), cy(e), '#ff7a5a', 10);
+    }
     // 番人たちの対策を、その夜の最初の戦いで知らせる
     if (this.run.mobCounter && !this.run.counterShown && this.room.enemies.some((e) => e.counter)) {
       this.run.counterShown = true;
@@ -498,6 +506,11 @@ export class Game {
     this.fx.twinkle(x, y, ['#ffe14a', '#ffffff'], 8, 40, 0.6);
     this.fx.impact(x, y, '#ffffff', 14);
     this.fx.shake(6, 0.2);
+  }
+  // 出てすぐのガード中か（常時の術・お供の攻撃を受けない）。部屋に入った時の敵は ENTRY_GUARD 秒
+  spawnGuarded(e) {
+    if (!this.room || e.boss || !e.alive) return false;
+    return this.room.t < (e.guardEnd ?? (e.bornT || 0) + SPAWN_GUARD);
   }
   // スティックの外縁に出す、敵のいる方向（ang：右が 0・下が正のラジアン。near：近いほど 1。big：中ボス・刻守）
   enemyBearings() {
@@ -789,7 +802,7 @@ export class Game {
       }
     }
     // 出てすぐ（SPAWN_GUARD 秒）の敵は、常時の術とお供の攻撃（仲間技も）を防ぐ
-    if ((info.passive || info.companion) && !e.boss && this.room && this.room.t - (e.bornT || 0) < SPAWN_GUARD) {
+    if ((info.passive || info.companion) && this.spawnGuarded(e)) {
       if (!e.sgT || this.run.clock - e.sgT > 0.35) { e.sgT = this.run.clock; this.fx.text(cx(e), e.y - 22, 'ガード', '#cfe8ff', 11); this.fx.sparks(cx(e), cy(e), '#cfe8ff', 4, 160); }
       return { silent: true };
     }

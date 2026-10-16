@@ -913,6 +913,13 @@ function drawEnemy(b, game, e) {
   const bx = Math.round(cx(e) / 2), by = Math.round((e.y + e.h) / 2), f = e.face;
   const slowGlow = e.slowed ? 0.7 : 0;
   const flash = e.hitFlash > 0;
+  // 出てすぐのガード中：淡い青の泡が揺らめく（常時の術・お供の攻撃を受けない）
+  if (game.spawnGuarded && game.spawnGuarded(e)) {
+    const r = Math.max(8, Math.round(Math.max(e.w, e.h) / 2 / 2) + 4), cy0 = Math.round(cy(e) / 2), n = 18;
+    b.globalAlpha = 0.45 + 0.25 * Math.sin(t * 14);
+    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2 + t * 2; if (i % 3 !== 2) pset(b, bx + Math.round(Math.cos(a) * r), cy0 + Math.round(Math.sin(a) * r), '#cfe8ff'); }
+    b.globalAlpha = 1;
+  }
   const body = (group, frame, tell, duel) => {
     if (tell > 0) outlined(b, group, frame, bx, by, f, 0.3 + tell * 0.7, 'red', duel);
     else outlined(b, group, frame, bx, by, f, slowGlow, 'blue', duel);
