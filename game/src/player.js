@@ -293,9 +293,12 @@ export class Player {
     let best = null, bd = 420;
     for (const e of game.room.enemies) {
       if (!e.alive || (e.boss && (e.defeated || e.invuln))) continue;
+      // 枠の外の敵や、横に降り立てる空きの無い敵には飛び込まない（戻って来られなくなる）
+      if (cx(e) < 0 || cx(e) > game.map.pxW || cy(e) < 0 || cy(e) > game.map.pxH) continue;
       const dd = Math.hypot(cx(e) - this.x - this.w / 2, cy(e) - this.y - this.h / 2);
       if (dd < bd) { bd = dd; best = e; }
     }
+    if (best && this.autoDashGoal(game.map, best, Math.sign(this.x + this.w / 2 - cx(best)) || -this.face).blocked) return null;
     return best;
   }
   inReach(e) {
@@ -322,6 +325,8 @@ export class Player {
   }
   // めちゃ簡単の飛び込み：壁や床とは当たらない（すり抜ける）。間に壁があれば、弧を描いて回り込むように飛ぶ
   boxFree(map, x, y) {
+    // 画面の枠の外（天井より上・左右の外・床より下）は空いていない扱い（戻って来られなくなるので）
+    if (y < 0 || x < 0 || x + this.w > map.pxW || y + this.h > map.pxH) return false;
     const l = Math.floor(x / TILE), r = Math.floor((x + this.w - 0.01) / TILE), t = Math.floor(y / TILE), b = Math.floor((y + this.h - 0.01) / TILE);
     for (let ty = t; ty <= b; ty++) for (let tx = l; tx <= r; tx++) if (map.get(tx, ty) === SOLID) return false;
     return true;
@@ -332,7 +337,7 @@ export class Player {
     const at = (sd) => cx(e) + sd * (e.w / 2 + this.w / 2 + 14) - this.w / 2;
     for (const sd of [side, -side]) if (this.boxFree(map, at(sd), ty)) return { x: at(sd), y: ty };
     for (let up = 8; up <= 64; up += 8) if (this.boxFree(map, at(side), ty - up)) return { x: at(side), y: ty - up };
-    return { x: at(side), y: ty };
+    return { x: at(side), y: ty, blocked: true };
   }
   // まっすぐ飛ぶと壁を通るなら、上（だめなら下）へ弧を描いて回り込む高さを決める
   autoDashArc(map, x0, y0, g) {
@@ -374,13 +379,16 @@ export class Player {
         const dir = a.arc < 0 ? -1 : 1;
         for (let add = 8; add <= 96; add += 8) if (this.boxFree(game.map, px, py(a.arc + dir * add))) { a.arc += dir * add; break; }
       }
-      this.x = px; this.y = py(a.arc);
+      // 枠の外へは出ない（天井より上・左右の外）
+      this.x = Math.max(0, Math.min(game.map.pxW - this.w, px)); this.y = Math.max(0, py(a.arc));
     }
     this.vx = 0; this.vy = 0;
     if (Math.floor(a.t / 0.05) !== Math.floor((a.t - dt) / 0.05)) game.fx.afterimage(this);
     if (!e.alive || k >= 1) {
       // 着いた所が壁の中なら、上の空いた所へ出す
       for (let up = 0; up <= 96 && !this.boxFree(game.map, this.x, this.y); up += 4) this.y -= 4;
+      // それでも枠の外や壁の中なら、飛び込む前の所へ戻す
+      if (!this.boxFree(game.map, this.x, this.y)) { this.x = a.x0; this.y = a.y0; }
       this.state = 'normal'; this.stateT = 0; this.flipT = 0;
       if (!e.alive) return;
       this.face = (cx(e) >= this.x + this.w / 2) ? 1 : -1;

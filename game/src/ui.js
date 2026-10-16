@@ -377,7 +377,7 @@ function drawCompanionPick(ctx, game, m) {
 function drawForge(ctx, game, m) {
   // 鍛えると何がどう変わるかを、選ぶ前に数字で見せる（例：35%→50%）
   const items = m.list.map((b) => { const d = BOONS[b.id], nt = (b.tier || 1) + 1, f = forgeDiff(b.id, b.tier || 1); return { label: d.name, right: d.max ? `Lv${b.tier} → ${nt}` : '→ II', rightColor: '#ffe14a', desc: f.diff ? '鍛えると：' + f.diff : `今：${f.now}／鍛えると：${f.next}` }; });
-  drawLightbox(ctx, game, { title: 'グレンの鍛冶 ― どれを鍛える？', items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? items[m.sel].desc : '' });
+  drawLightbox(ctx, game, { title: m.hourglass ? '砂時計 ― 時を進めて、どれを鍛える？' : 'グレンの鍛冶 ― どれを鍛える？', items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: m.hourglass ? (game.touch ? '項目をタップで選択、もう一度タップで鍛える' : '↑↓ 選ぶ　Z 鍛える') : undefined });
 }
 
 function drawCode(ctx, game, m) {

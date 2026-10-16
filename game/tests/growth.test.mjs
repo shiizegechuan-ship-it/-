@@ -382,8 +382,15 @@ test('回復の扉：夜の最初の扉と、HP 満タンのときは出ない�
   const g = newGame(3);
   // 計画上の報酬に回復を混ぜておく
   for (const f of g.run.plan.floors) for (const r of f) if (r.type === 'combat') r.rewardChoices = ['heal', 'boon'];
+  // 鍛えられる強化が無ければ、砂時計も出ない（金貨に替わる）
+  g.player.setBoons([]);
   g.room.doorsOpen = false; g.room.items = g.room.items.filter((i) => i.kind !== 'door'); g.openDoors();
   let doors = g.room.items.filter((i) => i.kind === 'door' && i.reward);
+  assert.ok(doors.length && !doors.some((d) => d.reward === 'heal' || d.reward === 'hourglass'), 'first door, no boons: no heal / hourglass');
+  assert.ok(doors.some((d) => d.reward === 'gold'));
+  g.player.setBoons([{ id: 'edge', tier: 1 }]);
+  g.room.doorsOpen = false; g.room.items = g.room.items.filter((i) => i.kind !== 'door'); g.openDoors();
+  doors = g.room.items.filter((i) => i.kind === 'door' && i.reward);
   assert.ok(doors.length && !doors.some((d) => d.reward === 'heal'), 'first door: no heal');
   assert.ok(doors.some((d) => d.reward === 'hourglass'));
   // 2 回目以降：満タンなら出ない、減っていれば出る
@@ -1304,4 +1311,103 @@ test('めちゃ簡単：飛び込みの間に壁があれば弧を描いて回�
     if (!full) { assert.equal(overlapped, false, 'arcs over a low wall without touching it'); assert.ok(top < 9 * 30 - p.h, 'goes up and over'); }
     else assert.ok(overlapped, 'passes through a wall that cannot be avoided');
   }
+});
+
+test('砂時計：回復はせず、持っている強化を 1 つ選んで鍛える（Lv+1）。必ずどれかを鍛え、鍛えたら扉が開く', () => {
+  const g = newGame(5);
+  g.enterRoom(0, 1); g.modal = null;
+  const d = new Driver(g), p = g.player;
+  p.setBoons([{ id: 'edge', tier: 1 }, { id: 'crit', tier: 2 }]);
+  p.hp = 10; g.room.doorsOpen = false;
+  const hp = p.hp, maxHp = p.maxHp;
+  g.takeReward('hourglass');
+  assert.equal(p.hp, hp, 'no healing'); assert.equal(p.maxHp, maxHp, 'no max HP');
+  assert.equal(g.modal.type, 'forge'); assert.ok(g.modal.hourglass);
+  assert.deepEqual(g.modal.list.map((b) => b.id), ['edge', 'crit']);
+  d.frame(20); d.frame(1, ['dodge']);
+  assert.ok(g.modal && g.modal.type === 'forge', 'cannot back out');
+  g.modal.sel = 1; d.frame(1, ['confirm']); d.frame(1);
+  assert.equal(g.modal, null);
+  assert.equal(p.boons.find((b) => b.id === 'crit').tier, 3);
+  assert.equal(p.boons.find((b) => b.id === 'edge').tier, 1);
+  assert.ok(g.room.doorsOpen, 'doors open');
+  assert.ok(!g.run.forged, 'Glen can still forge');
+  // 鍛えられる強化が無ければ金貨
+  const g2 = newGame(6); g2.enterRoom(0, 1); g2.modal = null; g2.player.setBoons([]);
+  let gold = 0; g2.dropGold = (n) => { gold += n; };
+  g2.takeReward('hourglass');
+  assert.equal(g2.modal, null); assert.ok(gold > 0);
+});
+
+test('めちゃ簡単：飛び込みは画面の枠の外（天井より上・左右の外）へ出ない。枠の外の敵には飛び込まない', () => {
+  // 床から天井までの壁：上を回り込もうとすると枠の外に出てしまう
+  const rows = FLAT.map((r, y) => (y >= 1 && y <= 14 ? r.slice(0, 12) + '##' + r.slice(14) : r));
+  const g = sandbox(rows); const d = new Driver(g);
+  d.frame(2);
+  g.run.diff = { ...g.run.diff, id: 'veryeasy', autoAim: true };
+  const e = new RustSoldier(16 * 30, 450 - 60);
+  g.addEnemy(e); e.hp = e.maxHp = 1e5; e.cool = 99; g.room.cleared = true;
+  g.player.hp = g.player.maxHp = 1e6;
+  g.player.x = 6 * 30; d.frame(40);
+  const p = g.player;
+  d.frame(1, ['attack']);
+  assert.equal(p.state, 'autodash');
+  let minY = p.y;
+  for (let i = 0; i < 60; i++) { d.frame(1); minY = Math.min(minY, p.y); }
+  assert.ok(minY >= 0, `stays below the top of the frame (${minY})`);
+  assert.ok(p.y > 0 && p.y < g.map.pxH && p.boxFree(g.map, p.x, p.y), 'inside the room');
+  // 枠の外（天井より上）にいる敵は狙わない
+  e.alive = false;
+  const bat = new PendulumBat(10 * 30, -80);
+  g.addEnemy(bat); bat.cool = 99;
+  bat.x = 10 * 30; bat.y = -80;
+  assert.equal(p.autoTarget(g), null);
+});
+
+test('めちゃ簡単：実際の塔の戦闘部屋で、どこから飛び込んでも枠の外へ出ず、壁の中で止まらない', () => {
+  let n = 0;
+  for (const seed of [13, 26, 39]) {
+    const g = newGame(seed); g.meta.difficulty = 'veryeasy'; g.startLoop(); g.modal = null;
+    g.run.plan.floors.forEach((fl, fi) => fl.forEach((r, ri) => {
+      if (r.type !== 'combat') return;
+      g.enterRoom(fi, ri); g.modal = null; g.player.hp = g.player.maxHp = 1e9;
+      const d = new Driver(g), p = g.player;
+      for (const m of g.map.markers.filter((m) => 'Pga'.includes(m.c)).slice(0, 3)) {
+        for (const e of g.room.enemies) { e.hp = e.maxHp = 1e7; e.cool = 99; }
+        p.x = m.x + 7; p.y = m.y + 30 - p.h; p.state = 'normal'; p.vx = p.vy = 0;
+        d.frame(3);
+        const t = p.autoTarget(g); if (!t || p.inReach(t)) continue;
+        d.frame(1, ['attack']); if (p.state !== 'autodash') continue;
+        n++;
+        for (let i = 0; i < 40 && p.state === 'autodash'; i++) { d.frame(1); assert.ok(p.y >= 0 && p.x >= 0 && p.x + p.w <= g.map.pxW, 'inside the frame'); }
+        d.frame(10);
+        assert.ok(p.boxFree(g.map, p.x, p.y), 'not inside a wall');
+      }
+    }));
+  }
+  assert.ok(n >= 20, `dashes: ${n}`);
+});
+
+test('めちゃ簡単：板（すり抜け床）の上にも敵が出る。普通では板の上の出現位置は使わない', async () => {
+  const { ONEWAY } = await import('../src/tilemap.js');
+  const count = (diff) => {
+    let onPlat = 0, spots = 0;
+    for (const seed of [7, 14, 21]) {
+      const g = newGame(seed); g.meta.difficulty = diff; g.startLoop(); g.modal = null;
+      g.run.plan.floors.forEach((fl, fi) => fl.forEach((r, ri) => {
+        if (r.type !== 'combat') return;
+        g.enterRoom(fi, ri); g.modal = null;
+        spots += g.platformSpots().length;
+        for (const e of g.room.enemies) {
+          const tx = Math.floor((e.x + e.w / 2) / 30), ty = Math.floor((e.y + e.h + 2) / 30);
+          // 出た所の真下が板
+          if (g.map.get(tx, ty) === ONEWAY || g.map.get(Math.floor(e.x / 30), Math.floor(e.y / 30) + 1) === ONEWAY) onPlat++;
+        }
+      }));
+    }
+    return { onPlat, spots };
+  };
+  const ve = count('veryeasy'), nm = count('normal');
+  assert.ok(ve.spots > 0 && ve.onPlat >= 5, `veryeasy: ${JSON.stringify(ve)}`);
+  assert.equal(nm.spots, 0);
 });

@@ -1,7 +1,7 @@
 // ゲーム本体。シミュレーションのみで DOM に触れない（テストからも動かせる）。
 import { DT, TILE, VIEW_W, VIEW_H, ZOOM, PLAYER as PC, DIFFICULTY } from './config.js';
 import { overlap, cx, cy, clamp, lerp, makeRng, sign } from './util.js';
-import { TileMap } from './tilemap.js';
+import { TileMap, ONEWAY, EMPTY } from './tilemap.js';
 import { Player } from './player.js';
 import { makeEnemy, RustSoldier, GearKnight, Warden, Squire, Projectile } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
@@ -26,7 +26,7 @@ const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
 const MELEE_IDS = ['edge', 'crit', 'critdmg', 'comboheat', 'heavyart', 'fourth', 'execute', 'aerial', 'momentum', 'opener'];
 // 脅威 1 段あたりの上がり幅（常時の術 3 つごとに 1 段）
 export const THREAT = { free: 3, per: 3, hp: 0.45, dmg: 0.08, bossHp: 0.65, extraCap: 3, growCap: 2 }; // 最初の 3 つ（Lv の合計）は数えない
-const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourglass: '砂時計', gold: '金貨', artifact: 'アーティファクト' };
+const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourglass: '砂時計：強化を鍛える', gold: '金貨', artifact: 'アーティファクト' };
 // 敵ごとの金貨（夜が深いほど多い）
 // 小さな護衛の数：中ボスに 3 体、刻守に 5 体（第二楽章の増援は難易度による）
 export const GUARDS = { elite: 3, boss: 5 };
@@ -280,7 +280,7 @@ export class Game {
     const types = extraEnemyTypes(this.run.fi, this.run.scale.level);
     const P = this.marker('P');
     const used = new Set(desc.enemies.map((e) => e.x + ',' + e.y));
-    const slots = this.map.markers.filter((m) => (m.c === 'g' || m.c === 'a') && Math.abs(m.tx - P.tx) > 5);
+    const slots = [...this.map.markers.filter((m) => m.c === 'g' || m.c === 'a'), ...this.platformSpots()].filter((m) => Math.abs(m.tx - P.tx) > 5);
     const free = rng.shuffle(slots.filter((m) => !used.has(m.tx + ',' + m.ty)));
     const pool = free.length ? free : rng.shuffle(slots);
     for (let i = 0; i < n && pool.length; i++) {
@@ -296,7 +296,7 @@ export class Game {
     const vw = VIEW_W / ZOOM, vh = VIEW_H / ZOOM;
     const X = this.marker('X');
     const taken = [...room.enemies.filter((e) => e.alive), ...(room.incoming || [])];
-    const scored = this.map.markers.filter((m) => m.c === 'g' || m.c === 'a').map((m) => {
+    const scored = [...this.map.markers.filter((m) => m.c === 'g' || m.c === 'a'), ...this.platformSpots()].map((m) => {
       const mx = m.x + TILE / 2, my = m.y + TILE / 2;
       const off = mx < this.cam.x - 8 || mx > this.cam.x + vw + 8 || my < this.cam.y - 8 || my > this.cam.y + vh + 8;
       const far = Math.hypot(mx - cx(p), my - cy(p));
@@ -383,6 +383,19 @@ export class Game {
     if (!style && diff.strategy === 'always') style = this.run.fi % 2 === 0 ? 'melee' : 'aoe';
     this.room.formation = style;
     if (diff.extra < 0 && list.length > 2) list = list.slice(0, list.length - 1);
+    // めちゃ簡単：地上の敵の一部（4 割ほど）を板の上へ
+    const plats = this.platformSpots();
+    if (plats.length) {
+      const rng = makeRng((this.run.plan.offerSeed ^ (this.run.fi * 53 + this.run.ri * 29 + 3)) >>> 0);
+      const free = rng.shuffle(plats.slice());
+      list = list.map((e) => {
+        const m = this.map.markers.find((k) => k.tx === e.x && k.ty === e.y);
+        if (!m || m.c !== 'g' || !free.length || rng.next() >= 0.4) return e;
+        const s = free.shift();
+        for (let i = free.length - 1; i >= 0; i--) if (Math.abs(free[i].tx - s.tx) <= 2 && free[i].ty === s.ty) free.splice(i, 1); // 同じ板に重ならない
+        return { ...e, x: s.tx, y: s.ty, plat: true };
+      });
+    }
     if (!style) return list;
     const fi = this.run.fi, P = this.marker('P');
     const GROUND = 'SRALENJFHYUO';
@@ -421,6 +434,20 @@ export class Game {
   }
   spawnProjectile(p) { p.dmg = Math.round(p.dmg * this.enemyDmgMul() * ((this.updatingEnemy && this.updatingEnemy.dmgMul) || 1)); this.room.projectiles.push(p); }
   marker(c) { return this.map.markers.find((m) => m.c === c); }
+  // 板（すり抜け床）の上の出現位置。めちゃ簡単は自動の飛び込みで届くので、板の上にも敵が出る
+  platformSpots() {
+    const map = this.map, out = [];
+    if (!(this.run.diff && this.run.diff.platforms)) return out;
+    const P = this.marker('P');
+    for (let ty = 2; ty < map.h; ty++) for (let tx = 1; tx < map.w - 1; tx++) {
+      if (map.get(tx, ty) !== ONEWAY || map.get(tx, ty - 1) !== EMPTY || map.get(tx, ty - 2) !== EMPTY) continue;
+      // 板の端は避ける（両隣も板）
+      if (map.get(tx - 1, ty) !== ONEWAY || map.get(tx + 1, ty) !== ONEWAY) continue;
+      if (P && Math.abs(tx - P.tx) <= 3 && Math.abs(ty - 1 - P.ty) <= 3) continue;
+      out.push({ c: 'g', tx, ty: ty - 1, x: tx * TILE, y: (ty - 1) * TILE, plat: true });
+    }
+    return out;
+  }
   addItem(it) { this.room.items.push({ w: 24, h: 40, ...it }); return it; }
   addSign(m) {
     const texts = this.touch ? [
@@ -1435,6 +1462,9 @@ export class Game {
       const p = this.player, noHeal = !this.run.firstDoorDone || p.hp >= p.maxHp;
       const choices = [];
       for (const rw of next.desc.rewardChoices) choices.push(rw === 'heal' && noHeal ? (choices.includes('hourglass') || next.desc.rewardChoices.includes('hourglass') ? 'gold' : 'hourglass') : rw);
+      // 砂時計（強化を 1 つ鍛える）は、鍛えられる強化が無ければ金貨（すでにあれば強化）に替える
+      const canHg = p.boons.some(canForge);
+      for (let i = 0; i < choices.length; i++) if (choices[i] === 'hourglass' && !canHg) choices[i] = choices.includes('gold') ? 'boon' : 'gold';
       choices.forEach((rw) => this.addItem({ kind: 'door', x: X.x + dir * (n++) * 90 - 6, y: doorY, w: 36, h: 50, to: next, reward: rw }));
     } else {
       n++;
@@ -1478,9 +1508,11 @@ export class Game {
     } else if (kind === 'artifact') {
       this.openArtifactPick('normal', 2, true);
     } else if (kind === 'hourglass') {
-      p.baseMaxHp += 18; p.setBoons(p.boons); p.hp = Math.min(p.maxHp, p.hp + 30);
-      this.sfx.play('heal'); this.fx.text(cx(p), p.y - 20, '最大HP+18', '#f2c14e', 15);
-      this.openDoors();
+      // 砂時計：時を進めて、持っている強化を 1 つ鍛える（Lv+1）。回復はしない
+      const list = p.boons.filter(canForge);
+      if (!list.length) { this.takeReward('gold'); return; }
+      this.modal = { type: 'forge', list, sel: 0, t: 0, hourglass: true };
+      this.sfx.play('pickup');
     } else {
       this.openBoonPick(kind === 'boon2' ? 2 : 1, null);
     }
@@ -2198,7 +2230,7 @@ export class Game {
       case 'companion':
       case 'forge': {
         const i = lbRowAt(m.list.length, m.sel, x, y, m);
-        if (i === -2) { this.modal = null; return false; }
+        if (i === -2) { if (!m.hourglass) this.modal = null; return false; }
         if (i < 0) return false;
         if (i === m.sel) return true;
         m.sel = i; this.sfx.play('select'); return false;
@@ -2358,12 +2390,12 @@ export class Game {
       case 'forge': {
         if (input.pressed('up')) { m.sel = (m.sel + m.list.length - 1) % m.list.length; this.sfx.play('select'); }
         if (input.pressed('down')) { m.sel = (m.sel + 1) % m.list.length; this.sfx.play('select'); }
-        if (back) { this.modal = null; return; }
+        if (back && !m.hourglass) { this.modal = null; return; } // 砂時計は必ずどれかを鍛える
         if (ok && m.t > 0.15) {
           const b = m.list[m.sel];
           const boons = this.player.boons.map((x) => (x.id === b.id ? { ...x, tier: Math.min(boonMax(x.id), x.tier + 1) } : x));
           this.player.setBoons(boons);
-          this.run.forged = true;
+          if (m.hourglass) this.openDoors(); else this.run.forged = true;
           this.modal = null;
           this.sfx.play('wedge');
           const nt = Math.min(boonMax(b.id), b.tier + 1);

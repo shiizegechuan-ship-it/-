@@ -11,6 +11,7 @@ function clearAndAdvance(g, d, pickDoor = 0) {
     if (g.modal) {
       if (g.modal.type === 'boon' || g.modal.type === 'artifact') { d.frame(20); d.frame(1, ['confirm']); d.frame(1); continue; }
       if (g.modal.type === 'shop') { g.modal = null; continue; }
+      if (g.modal.type === 'forge') { d.frame(20); d.frame(1, ['confirm']); d.frame(1); continue; }
       if (g.modal.type === 'dialog') { d.frame(10); d.frame(1, ['confirm']); d.frame(1); continue; }
     }
     if (g.transition) { d.frame(1); continue; }
