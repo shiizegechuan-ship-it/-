@@ -81,6 +81,7 @@ export function newMeta(seed = (Date.now() & 0x7fffffff)) {
     shards: 0, // 時の欠片（恒久強化の通貨）
     upgrades: {}, // 刻印（恒久強化）の Lv
     inherit: [], // 次の夜に持ち越す強化（巻き戻り画面で選ぶ）
+    artifacts: [], // 手に入れたアーティファクト（すべて持ち越す）
     lastLoop: null,
     flags: { bossBeaten: false, diaryRead: false, archiveOpened: false, ending: false, seenRewind: false },
     stats: { deaths: 0, falseWins: 0, bestFloor: 0 },
@@ -126,7 +127,7 @@ export function autoInherit(m, boons) {
 
 // 古いセーブに新しい項目を足す
 function migrate(m) {
-  m.shards ??= 0; m.upgrades ??= {}; m.inherit ??= [];
+  m.shards ??= 0; m.upgrades ??= {}; m.inherit ??= []; m.artifacts ??= [];
   for (const k of ['power', 'arts']) if (!m.unlocked.includes(k)) m.unlocked.push(k);
   return m;
 }
@@ -212,7 +213,11 @@ export function endLoop(m, run) {
   const lostBoons = (run.boons || []).filter((b) => !wedgedBoonIds.has(b.id) && !inheritedIds.has(b.id));
   if (lostBoons.length) report.reset.push({ text: `強化 ${lostBoons.length} 個`, sub: lostBoons.map((b) => BOONS[b.id].name).join('・') });
   report.reset.push({ text: 'HP・秒針ゲージ', sub: '' });
-  if ((run.artifacts || []).length) report.reset.push({ text: `アーティファクト ${run.artifacts.length} 個`, sub: run.artifacts.map((id) => ARTIFACTS[id].name).join('・') });
+  // アーティファクトはすべて持ち越す
+  const before = new Set(m.artifacts || []);
+  m.artifacts = [...new Set([...(m.artifacts || []), ...(run.artifacts || [])])];
+  const gained = m.artifacts.filter((id) => !before.has(id));
+  if (m.artifacts.length) report.kept.push({ text: `アーティファクト ${m.artifacts.length} 個${gained.length ? `（新たに ${gained.length}）` : ''}`, sub: m.artifacts.map((id) => ARTIFACTS[id].name).join('・') });
   if (run.gold) report.reset.push({ text: `金貨 ${run.gold}`, sub: '金貨はその夜だけ。店で使い切ろう' });
   if ((run.level || 1) > 1) report.reset.push({ text: `レベル（Lv${run.level} → Lv1）`, sub: '経験値とレベルはその夜だけ' });
   report.reset.push({ text: '部屋の並び・敵・報酬', sub: '夜ごとに揺らぐ' });

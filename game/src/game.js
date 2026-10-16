@@ -5,7 +5,7 @@ import { TileMap } from './tilemap.js';
 import { Player } from './player.js';
 import { makeEnemy, RustSoldier, GearKnight, Warden, BellGuard, Projectile } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
-import { castArt, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell, MELEE } from './arts.js';
+import { castArt, castWarpSlash, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell, MELEE } from './arts.js';
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
 import { Fx } from './fx.js';
 import { NullSfx } from './audio.js';
@@ -123,6 +123,7 @@ export class Game {
     this.player = new Player(0, 0);
     this.player.baseMaxHp = PC.maxHp + 15 * upLv(meta, 'hp');
     this.player.metaAtk = 1 + 0.1 * upLv(meta, 'atk');
+    this.player.artifacts = [...(meta.artifacts || [])]; // 持ち越したアーティファクト
     this.player.setBoons(wedgedBoons);
     this.player.hp = this.player.maxHp;
     this.player.gauge = Math.min(PC.gaugeMax, 20 * upLv(meta, 'gauge'));
@@ -142,7 +143,7 @@ export class Game {
       { who: '', text: '夜の終わりに師が鐘を鳴らすと、時は夜のはじめに戻る。それを覚えていられるのは、師から「時の楔」を習ったあなただけ。' },
       { who: '', text: '時戻しの鐘は禁忌の技。鳴らすたびに、鳴らした者の命を一夜ぶん削る。このままでは、師は朝を待たずに尽きてしまう。' },
       { who: '', text: '目的は「夜明けを迎える」こと。師を倒して鐘を止めても、夜は戻る。師が命を削ってまで夜を止める理由を探そう。', note: '進み具合は 記録帳（Tab）の「夜明け」で確認できる' },
-      { who: '', text: '攻撃を当てると秒針ゲージがたまる。V（術ボタン）でゲージを消費して、装着した術を放つ。術がまだなければ「時歪」――周りの時を遅くする。', note: '術は強化の「術」系統で手に入る' },
+      { who: '', text: '攻撃を当てると秒針ゲージがたまる。V（術ボタン）でゲージを消費して、装着した術を放つ。術がまだなければ「時歪・刻閃」――身をかわして時を止め、敵の数だけ白い斬撃を走らせる。', note: '術は強化の「術」系統で手に入る' },
       { who: '', text: '倒れても、知ったことと、楔を打ったものは次の夜に残る。' },
     ]);
     this.save();
@@ -184,7 +185,7 @@ export class Game {
       shop: () => this.setupShop(),
       shrine: () => this.setupShrine(),
       elite2: () => this.setupWarden(),
-      trial: () => { room0.wave = 0; for (const e of desc.waves[0]) this.addEnemy(makeEnemy(e.type, e.x * TILE, e.y * TILE)); this.fx.setBanner('試練の間', '2 波を退けると、アーティファクトと金貨', '#ff9a7a', 1.8); },
+      trial: () => { room0.wave = 0; for (const e of desc.waves[0]) this.addEnemy(makeEnemy(e.type, e.x * TILE, e.y * TILE)); this.fx.setBanner('試練の間', '2 波を退けると、アーティファクトか強化と金貨', '#ff9a7a', 1.8); },
       golden: () => this.setupGolden(),
     }[desc.type];
     const room0 = this.room;
@@ -310,10 +311,10 @@ export class Game {
   addSign(m) {
     const texts = this.touch ? [
       '左のスティックで移動。右のボタンで 跳ぶ・攻撃（長押しで重撃）・回避。上下＋攻撃で上攻撃・下攻撃',
-      '術ボタン：攻撃でたまる秒針ゲージを消費して、装着した術を放つ（術がなければ時歪＝周りを遅くする）。光る印の前で「調べる」',
+      '術ボタン：攻撃でたまる秒針ゲージを消費して、装着した術を放つ（術がなければ時歪・刻閃＝敵の数だけ斬撃が走る必殺技）。光る印の前で「調べる」',
     ] : [
       '←→ 移動　Z ジャンプ（空中でもう一度）　X 攻撃（長押しで重撃、↑↓＋Xで上・下攻撃）　C 回避',
-      'V 術：攻撃でたまる秒針ゲージを消費して、装着した術を放つ（術がなければ時歪＝周りを遅くする）　↑/E 調べる　Tab 記録帳',
+      'V 術：攻撃でたまる秒針ゲージを消費して、装着した術を放つ（術がなければ時歪・刻閃＝敵の数だけ斬撃が走る必殺技）　↑/E 調べる　Tab 記録帳',
     ];
     const i = this.map.markers.filter((x) => x.c === 'Q').indexOf(m);
     this.addItem({ kind: 'sign', x: m.x, y: m.y + TILE - 40, text: texts[i] || texts[0] });
@@ -813,9 +814,9 @@ export class Game {
     for (const id of rollOffer(rng, this.player.boons, this.meta.unlocked, 2)) stock.push({ kind: 'boon', id, price: price(60 + 20 * f) });
     stock.push({ kind: 'potion', size: 0.3, price: price(25) });
     stock.push({ kind: 'potion', size: 0.7, price: price(50) });
-    const art = rollArtifacts(rng, this.player.artifacts, 'normal', 1)[0];
+    const art = rng.next() < 0.35 ? rollArtifacts(rng, this.player.artifacts, 'normal', 1)[0] : null; // 店に並ぶのは 3 回に 1 回ほど
     if (art) stock.push({ kind: 'artifact', id: art, price: price(110 + 30 * f) });
-    stock.push({ kind: 'key', price: price(130 + 20 * f) });
+    stock.push({ kind: 'key', price: price(190 + 30 * f) });
     run.shops[key] = stock;
     return stock;
   }
@@ -1074,6 +1075,15 @@ export class Game {
     const cost = PC.skillCost * p.stats.skillCostMul;
     if (p.gauge < cost) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 14, 'ゲージ不足', '#9a8fa6', 11); return false; }
     p.gauge -= cost;
+    // 刻閃：後ろへ身をかわし（クールタイムを使わない）、斬撃が終わるまで無敵
+    const cd = p.dodgeCd, air = p.airDodgeUsed;
+    p.dodgeCd = 0; p.airDodgeUsed = false;
+    const back = -p.face;
+    p.startDodge(this, back);
+    p.dodgeCd = cd; p.airDodgeUsed = air;
+    const ws = castWarpSlash(this);
+    p.iframeT = Math.max(p.iframeT, ws.life);
+    this.fx.text(cx(p), p.y - 26, '刻閃', '#e8f4ff', 18);
     const t = PC.skillTime + p.stats.skillTimeAdd;
     for (const e of this.room.enemies) if (e.alive && Math.hypot(cx(e) - cx(p), cy(e) - cy(p)) < PC.skillRadius) {
       e.warp = e.boss && e.counter === 'skill' ? t / 2 : t;
@@ -1135,7 +1145,7 @@ export class Game {
     if (t === 'combat') reward = this.run.nextReward || 'boon';
     if (t === 'elite' && !room.desc.knightWedged) reward = 'boon2';
     if (t === 'elite2') reward = 'boon2';
-    if (t === 'trial') { reward = 'artifact'; this.dropGold(Math.round(60 * (1 + 0.25 * this.run.scale.level)), cx(this.player), this.player.y - 10, 1.4); }
+    if (t === 'trial') { reward = this.run.rareRng.next() < 0.5 ? 'artifact' : 'boon2'; this.dropGold(Math.round(60 * (1 + 0.25 * this.run.scale.level)), cx(this.player), this.player.y - 10, 1.4); }
     if (!quiet) {
       this.addShards(3 + this.run.scale.level);
       this.fx.setBanner('制圧', '', '#f2c14e', 1.0);
@@ -1171,7 +1181,7 @@ export class Game {
       // 夜の最初の扉と、HP が満タンのときは「回復」を出さない（アーティファクトか金貨に替える）
       const p = this.player, noHeal = !this.run.firstDoorDone || p.hp >= p.maxHp;
       const choices = [];
-      for (const rw of next.desc.rewardChoices) choices.push(rw === 'heal' && noHeal ? (choices.includes('artifact') || next.desc.rewardChoices.includes('artifact') ? 'gold' : 'artifact') : rw);
+      for (const rw of next.desc.rewardChoices) choices.push(rw === 'heal' && noHeal ? (choices.includes('hourglass') || next.desc.rewardChoices.includes('hourglass') ? 'gold' : 'hourglass') : rw);
       choices.forEach((rw) => this.addItem({ kind: 'door', x: X.x + dir * (n++) * 90 - 6, y: doorY, w: 36, h: 50, to: next, reward: rw }));
     } else {
       n++;

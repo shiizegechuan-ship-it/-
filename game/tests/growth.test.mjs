@@ -4,7 +4,7 @@ import { sandbox, Driver, FLAT, newGame } from './helpers.mjs';
 import { RustSoldier, GearRoller, ClockArcher, Phantom, BellRinger, PendulumBat, ClockTurret, GearKnight, Beamer, ChainReaper, GearRat, Hopper, Mallet, Warden } from '../src/enemies.js';
 import { newMeta, buyUpgrade, upLv, enemyScale, endLoop, inheritCount, UPGRADES } from '../src/meta.js';
 import { computeStats, rollOffer, BOONS, canForge, forgeDiff } from '../src/boons.js';
-import { makeRng, cx } from '../src/util.js';
+import { makeRng, cx, cy } from '../src/util.js';
 import { ARTIFACTS } from '../src/artifacts.js';
 import { Spell } from '../src/arts.js';
 import { Game } from '../src/game.js';
@@ -377,14 +377,14 @@ test('常時の術は敵を怯ませない（積んでも敵が攻撃してく�
   assert.ok(!flinched, 'never flinches from passives');
 });
 
-test('回復の扉：夜の最初の扉と、HP 満タンのときは出ない（アーティファクトか金貨に替わる）', () => {
+test('回復の扉：夜の最初の扉と、HP 満タンのときは出ない（砂時計か金貨に替わる）', () => {
   const g = newGame(3);
   // 計画上の報酬に回復を混ぜておく
   for (const f of g.run.plan.floors) for (const r of f) if (r.type === 'combat') r.rewardChoices = ['heal', 'boon'];
   g.room.doorsOpen = false; g.room.items = g.room.items.filter((i) => i.kind !== 'door'); g.openDoors();
   let doors = g.room.items.filter((i) => i.kind === 'door' && i.reward);
   assert.ok(doors.length && !doors.some((d) => d.reward === 'heal'), 'first door: no heal');
-  assert.ok(doors.some((d) => d.reward === 'artifact'));
+  assert.ok(doors.some((d) => d.reward === 'hourglass'));
   // 2 回目以降：満タンなら出ない、減っていれば出る
   g.enterRoom(0, 1); g.modal = null;
   for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
@@ -906,4 +906,45 @@ test('鍛冶：鍛えても変わらない強化（稀少など）は並ばず�
   g.player.setBoons([{ id: 'crown', tier: 1 }]);
   g.openForge();
   assert.notEqual(g.modal && g.modal.type, 'forge', 'nothing to forge');
+});
+
+test('アーティファクトは夜が戻ってもすべて持ち越す（そのかわり出にくい）', () => {
+  const g = newGame(31);
+  g.player.addArtifact('whetstone'); g.player.addArtifact('kingsword');
+  g.endRun('death');
+  assert.deepEqual(g.meta.artifacts.sort(), ['kingsword', 'whetstone']);
+  assert.ok(g.rewind.report.kept.some((k) => k.text.startsWith('アーティファクト 2 個')));
+  g.startLoop(); g.modal = null;
+  assert.deepEqual(g.player.artifacts.sort(), ['kingsword', 'whetstone']);
+  assert.ok(g.player.stats.dmgMul > 1.5, 'effects apply on the next night');
+  // 出現頻度：扉の報酬に占めるアーティファクトは 5% 未満
+  let art = 0, all = 0;
+  for (let s = 1; s <= 40; s++) { const h = newGame(s * 13); for (const f of h.run.plan.floors) for (const r of f) if (r.rewardChoices) { all += r.rewardChoices.length; art += r.rewardChoices.filter((x) => x === 'artifact').length; } }
+  assert.ok(art / all < 0.05, `artifact share ${(art / all * 100).toFixed(1)}%`);
+});
+
+test('時歪「刻閃」：後ろへ身をかわし、敵の数と同じ本数の画面外まで届く白い直線が続けて走り、線上の敵すべてに当たる。最後に砕けてもう一度斬れる', () => {
+  const g = newGame(32); g.enterRoom(0, 1); g.modal = null;
+  const p = g.player; p.hp = p.maxHp = 1e6;
+  const foes = g.room.enemies.filter((e) => e.alive);
+  for (const e of foes) { e.hp = e.maxHp = 1e6; e.cool = 99; }
+  // ずっと遠くの敵にも届く
+  foes[0].x = p.x + 900; foes[0].gravity = false; foes[0].vy = 0;
+  p.gauge = 100; const x0 = p.x, face = p.face;
+  assert.ok(g.useSkill());
+  const sp = g.room.spells.find((s) => s.kind === 'warpslash');
+  assert.ok(sp && sp.lines.length === Math.max(3, foes.length), 'one line per enemy');
+  assert.equal(p.state, 'dodge', 'dodges first');
+  const d = new Driver(g);
+  d.frame(10);
+  assert.ok(Math.sign(p.x - x0) === -face, 'moved backward');
+  assert.ok(foes.every((e) => e.hp === e.maxHp), 'no cut before the dodge ends');
+  d.until(() => sp.lines.every((l) => l.done), 120);
+  assert.ok(foes.every((e) => e.hp < e.maxHp), 'every enemy is cut, even far away');
+  const afterLines = foes.map((e) => e.hp);
+  assert.ok(p.invulnerable, 'invulnerable during the finisher');
+  d.until(() => sp.shattered, 120);
+  d.frame(1);
+  assert.ok(foes.every((e, i) => e.hp < afterLines[i]), 'shatter cuts again');
+  assert.ok(foes.every((e) => !e.alive || e.warp > 0 || Math.hypot(cx(e) - cx(p), cy(e) - cy(p)) >= 280), 'still slows time nearby');
 });

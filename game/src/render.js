@@ -491,6 +491,31 @@ function drawImpact(b, im) {
 function drawSpell(b, sp, t) {
   const x = Math.round(sp.x / 2), y = Math.round(sp.y / 2);
   switch (sp.kind) {
+    case 'warpslash': { // 刻閃：暗転した時の中を、白い直線が画面の端から端まで走る
+      const first = sp.lines[0].at, lastAt = sp.lines[sp.lines.length - 1].at;
+      const dark = sp.t < first ? sp.t / first : sp.shattered ? Math.max(0, 1 - (sp.t - sp.shatterT) / 0.35) : 1;
+      b.save(); b.setTransform(1, 0, 0, 1, 0, 0);
+      b.globalAlpha = 0.55 * dark; b.fillStyle = '#05040c'; b.fillRect(0, 0, b.canvas.width, b.canvas.height);
+      b.globalAlpha = 0.18 * dark; b.fillStyle = '#5aa9e6'; b.fillRect(0, 0, b.canvas.width, b.canvas.height);
+      b.restore(); b.globalAlpha = 1;
+      for (const ln of sp.lines) {
+        if (sp.t < ln.at) continue;
+        const age = sp.t - ln.at;
+        const x1 = ln.x1 / 2, y1 = ln.y1 / 2, x2 = ln.x2 / 2, y2 = ln.y2 / 2;
+        // 走る瞬間：太く白く光り、すぐ細い残光になる。納刀で全ての線がもう一度強く光って消える
+        let w, a;
+        if (sp.shattered) { const k = (sp.t - sp.shatterT) / 0.3; w = 3; a = Math.max(0, 1 - k); }
+        else { w = age < 0.05 ? 3 : 1; a = age < 0.05 ? 1 : 0.75; }
+        if (a <= 0) continue;
+        // 画面の端から端まで続く長い線なので、ここは滑らかな線で描く（点を打つより速い）
+        const stroke = (col, lw, al, add) => { b.save(); if (add) b.globalCompositeOperation = 'lighter'; b.globalAlpha = al; b.strokeStyle = col; b.lineWidth = lw; b.lineCap = 'round'; b.beginPath(); b.moveTo(x1, y1); b.lineTo(x2, y2); b.stroke(); b.restore(); };
+        stroke('#7fc8ff', w + 5, a * 0.3, true);
+        stroke('#cfe8ff', w + 2, a * 0.6, true);
+        stroke('#ffffff', w, a, false);
+      }
+      if (sp.shattered) { const k = (sp.t - sp.shatterT) / 0.3; if (k < 1) for (const ln of sp.lines) { b.globalAlpha = 1 - k; const mx = (ln.x1 + ln.x2) / 4, my = (ln.y1 + ln.y2) / 4; circle(b, mx, my, Math.round(4 + k * 18), '#ffffff'); } b.globalAlpha = 1; }
+      break;
+    }
     case 'flamering': {
       const r = Math.round(sp.r / 2);
       if (r < 2) break;

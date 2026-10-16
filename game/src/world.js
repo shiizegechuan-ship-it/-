@@ -343,7 +343,7 @@ function fillEnemies(layoutName, floor, rng, nl) {
 // 扉の報酬：強化・回復・砂時計・金貨袋・アーティファクト
 function rollReward(rng) {
   const r = rng.next();
-  return r < 0.46 ? 'boon' : r < 0.64 ? 'heal' : r < 0.74 ? 'hourglass' : r < 0.88 ? 'gold' : 'artifact';
+  return r < 0.46 ? 'boon' : r < 0.64 ? 'heal' : r < 0.76 ? 'hourglass' : r < 0.96 ? 'gold' : 'artifact'; // アーティファクトは持ち越すので出にくい（4%）
 }
 
 // 周回の塔の構成を作る。seed は揺らぎだけに使い、因果は meta から決める。

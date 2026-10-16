@@ -51,6 +51,30 @@ function strike(game, sp, e, base, extra = {}) {
   game.dealDamage(e, { base, cat: 'skill', knock: extra.knock || 120, dir: extra.dir || sign(cx(e) - sp.x) || 1, spell: true, passive: !!sp.passive, ...extra });
 }
 
+// ───────── 時歪の必殺技「刻閃（こくせん）」 ─────────
+// 回避で身をかわしたあと、部屋の敵の数と同じ本数の白い直線の斬撃を、画面外から画面外へ超高速で続けて走らせる。
+// 線はそれぞれ 1 体の敵を貫く向きに引かれ、線上の敵すべてに当たる。最後に全ての線が砕けて、もう一度斬れる
+export const WARP_SLASH = { start: 0.3, every: 0.055, dmg: 24, shatter: 0.5, len: 1400 };
+export function castWarpSlash(game) {
+  const p = game.player, rng = game.fx;
+  const foes = game.room.enemies.filter((e) => e.alive && !(e.boss && e.defeated) && !e.invuln);
+  const st = p.stats || {};
+  const mul = 1 + 0.25 * ((st.skillTimeAdd || 0) / 0.5); // 長い一秒で少し伸びる
+  const lines = [];
+  const n = Math.max(foes.length, 3);
+  for (let i = 0; i < n; i++) {
+    const e = foes.length ? foes[i % foes.length] : null;
+    const ax = e ? cx(e) : cx(p) + (rng.rand() - 0.5) * 300, ay = e ? cy(e) : cy(p) + (rng.rand() - 0.5) * 120;
+    // 斜めに交差するよう、角度を交互に振る
+    const a = (i % 2 ? 1 : -1) * (0.15 + rng.rand() * 0.6) + (i % 3 === 2 ? Math.PI / 2 * 0.9 : 0);
+    const L = WARP_SLASH.len;
+    lines.push({ x1: ax - Math.cos(a) * L, y1: ay - Math.sin(a) * L, x2: ax + Math.cos(a) * L, y2: ay + Math.sin(a) * L, at: WARP_SLASH.start + i * WARP_SLASH.every, done: false, real: !!e });
+  }
+  const sp = new Spell('warpslash', cx(p), cy(p), { lines, life: WARP_SLASH.start + n * WARP_SLASH.every + WARP_SLASH.shatter + 0.3, dmg: WARP_SLASH.dmg * mul, shattered: false });
+  game.room.spells.push(sp);
+  return sp;
+}
+
 // ───────── 発動 ─────────
 export function castArt(game, art) {
   const p = game.player, lv = art.tier || 1, f = p.face;
@@ -202,6 +226,31 @@ export function updateSpells(game, dt) {
   for (const sp of room.spells) {
     sp.t += dt;
     switch (sp.kind) {
+      case 'warpslash': {
+        for (const ln of sp.lines) {
+          if (ln.done || sp.t < ln.at) continue;
+          ln.done = true;
+          for (const e of enemiesOnSegment(game, ln.x1, ln.y1, ln.x2, ln.y2, 6)) {
+            strike(game, sp, e, sp.dmg, { knock: 40, dir: sign(ln.x2 - ln.x1) || 1 });
+            (sp.cut ||= new Map()).set(e, (sp.cut.get(e) || 0) + 1);
+            game.fx.sparks(cx(e), cy(e), '#ffffff', 8, 320);
+          }
+          game.sfx.play('swing'); game.fx.shake(3, 0.06);
+          game.hitstop = Math.max(game.hitstop, 2 / 60);
+        }
+        const last = sp.lines[sp.lines.length - 1].at;
+        if (!sp.shattered && sp.t >= last + WARP_SLASH.shatter) {
+          // 納刀：全ての線が一度に砕け、斬られた敵はもう一度（斬られた本数ぶん強く）斬れる
+          sp.shattered = true; sp.shatterT = sp.t;
+          for (const [e, k] of sp.cut || []) {
+            if (!e.alive) continue; strike(game, sp, e, sp.dmg * 0.6 * Math.min(k, 3), { knock: 160 }); game.fx.burst(cx(e), cy(e), '#e8f4ff', 16);
+          }
+          game.fx.screenFlash('#ffffff', 0.45); game.fx.shake(12, 0.4); game.sfx.play('guardBreak'); game.sfx.play('heavyHit');
+          game.hitstop = Math.max(game.hitstop, 8 / 60);
+        }
+        if (sp.t > sp.life) sp.alive = false;
+        break;
+      }
       case 'flamering': {
         const pt = sp.t - sp.pulse * 0.35;
         sp.r = clamp(pt / 0.25, 0, 1) * sp.maxR;

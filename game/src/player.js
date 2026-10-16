@@ -28,7 +28,7 @@ export class Player {
     this.holdT = 0; // 攻撃ボタンを押し続けている時間
     this.charged = false;
     this.boons = [];
-    this.artifacts = []; // その夜だけのアーティファクト
+    this.artifacts = []; // アーティファクト（夜をまたいで持ち越す）
     this.stats = applyArtifacts(computeStats([]), []);
     this.baseMaxHp = P.maxHp;
     this.maxHp = P.maxHp;

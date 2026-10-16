@@ -152,7 +152,7 @@ export function drawHud(ctx, game) {
   // 時の欠片
   text(ctx, `◆ 欠片 ${meta.shards + (run.shards || 0)}`, 22, 98, { size: 12, color: '#9fd0ff' });
   if (run.killStacks > 0) text(ctx, `血の秒針 +${Math.round(run.killStacks * 100)}%`, 120, 98, { size: 11, color: '#ff9a3c' });
-  // 金貨・鍵・アーティファクト（その夜だけ）
+  // 金貨・鍵（その夜だけ）・アーティファクト（持ち越し）
   const gp = game.hudPop ? game.hudPop.gold : 0;
   text(ctx, `● 金貨 ${run.gold || 0}` + (run.keys ? `　黄金の鍵 ×${run.keys}` : ''), 22, 116, { size: 12 + Math.round(gp * 4), color: gp > 0 ? '#fff6c0' : '#ffd84a' });
   (p.artifacts || []).forEach((id, i) => { const a = ARTIFACTS[id]; text(ctx, '◆ ' + a.name, 22, 134 + i * 15, { size: 11, color: ARTIFACT_COLOR[a.rarity] }); });
@@ -326,7 +326,7 @@ function drawFusion(ctx, game, m) {
 function drawArtifactPick(ctx, game, m) {
   const gold = m.rarity === 'gold';
   text(ctx, gold ? '黄金の宝箱 ― アーティファクトを 1 つ選ぶ' : 'アーティファクトを 1 つ選ぶ', VIEW_W / 2, 92, { size: 22, align: 'center', color: gold ? '#ffd84a' : '#7fe0d0' });
-  text(ctx, 'アーティファクトはその夜だけ有効', VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });
+  text(ctx, 'アーティファクトは夜が戻っても失われない', VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });
   const cw = 250, ch = 240, gap = 18, total = m.offer.length * cw + (m.offer.length - 1) * gap;
   m.offer.forEach((id, i) => {
     const a = ARTIFACTS[id], col = ARTIFACT_COLOR[a.rarity];
