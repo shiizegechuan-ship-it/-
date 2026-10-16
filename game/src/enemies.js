@@ -1402,6 +1402,92 @@ Projectile.prototype.explode = function (game) {
   game.spawnProjectile(r); r.dmg = this.dmg;
 };
 
+// 召喚師：距離を取りながら杖を掲げ、紫の陣から小さな「ちび歯車」を何体も呼び出す。本体は打たれ弱い。倒すと呼ばれた者も崩れる
+export const SUMMON = { warn: 0.8, per: 3, cap: 6, cool: 3.6 };
+export class Summoner extends Enemy {
+  constructor(x, y) {
+    super('summoner', x + 3, y - 30, 24, 30, 55);
+    this.cool = 1.2;
+    this.setState('idle');
+  }
+  minions(game) { return game.room.enemies.filter((e) => e.alive && e.summoner === this); }
+  think(game, dt) {
+    const p = game.player, map = game.map;
+    const dx = this.dx(p), adx = Math.abs(dx);
+    if (this.cool > 0) this.cool -= dt;
+    switch (this.state) {
+      case 'idle': {
+        this.facePlayer(p);
+        // 近すぎれば下がり、遠すぎれば寄る（150〜260 の間合いを保つ）
+        const dir = adx < 150 ? -this.face : adx > 260 ? this.face : 0;
+        const ok = dir && !this.ledgeAhead(map, dir) && !this.wallAhead(map, dir);
+        this.vx = approach(this.vx, ok ? dir * 60 : 0, 400 * dt);
+        if (this.cool <= 0 && p.state !== 'dead' && this.minions(game).length < SUMMON.cap) { this.setState('cast'); game.sfx.play('tellBig'); }
+        break;
+      }
+      case 'cast': {
+        this.vx = approach(this.vx, 0, 600 * dt);
+        const wt = SUMMON.warn * this.wmul(game);
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'summon';
+        if (this.stateT >= wt) {
+          const n = Math.min(SUMMON.per + (this.tier >= 2 ? 1 : 0), SUMMON.cap - this.minions(game).length);
+          for (let i = 0; i < n; i++) {
+            const ox = (i - (n - 1) / 2) * 16;
+            const m = new Mite(cx(this) + ox - 6, this.y + this.h);
+            m.summoner = this; m.minion = true; m.face = this.face; m.vy = -160 - i * 30; m.vx = ox * 4;
+            game.addEnemy(m);
+            game.fx.ring(cx(m), cy(m), '#b67cf0', 14, 0.3);
+          }
+          game.fx.burst(cx(this), this.y + this.h - 4, '#b67cf0', 12);
+          game.sfx.play('skill');
+          this.setState('recover');
+        }
+        break;
+      }
+      case 'recover':
+        this.vx = approach(this.vx, 0, 600 * dt);
+        if (this.stateT > 0.8) { this.cool = SUMMON.cool; this.setState('idle'); }
+        break;
+      case 'flinch':
+        this.vx = approach(this.vx, 0, 600 * dt);
+        if (this.stateT > 0.25) { this.cool = Math.max(this.cool, 0.6); this.setState('idle'); }
+        break;
+    }
+  }
+}
+// ちび歯車：召喚師が呼ぶ小さくて弱い雑魚。ちょこちょこ駆け寄って、軽くかじる
+export class Mite extends Enemy {
+  constructor(x, y) {
+    super('mite', x, y - 10, 12, 10, 7);
+    this.cool = 0.4;
+    this.setState('run');
+  }
+  think(game, dt) {
+    const p = game.player, map = game.map;
+    const dx = this.dx(p), adx = Math.abs(dx), ady = Math.abs(this.dy(p));
+    if (this.cool > 0) this.cool -= dt;
+    switch (this.state) {
+      case 'run':
+        this.facePlayer(p);
+        this.vx = approach(this.vx, this.face * (130 + (this.id % 5) * 12), 900 * dt);
+        if (this.onGround && this.wallAhead(map, this.face)) this.vy = -360;
+        if (this.cool <= 0 && adx < 26 && ady < 24 && p.state !== 'dead') this.setState('nip');
+        break;
+      case 'nip': {
+        this.vx = approach(this.vx, 0, 1200 * dt);
+        const wt = 0.18 * this.wmul(game);
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'bite';
+        if (this.stateT >= wt) { this.attacks.push({ ...this.frontBox(10, 10), dmg: 4, key: this.id * 1000 + (++this.swing) }); this.vx = this.face * 160; this.vy = -90; this.cool = 0.9; this.setState('run'); }
+        break;
+      }
+      case 'flinch':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        if (this.stateT > 0.15) this.setState('run');
+        break;
+    }
+  }
+}
+
 export function makeEnemy(c, x, y) {
   switch (c) {
     case 'S': return new RustSoldier(x + 5, y + TILE);
@@ -1421,6 +1507,7 @@ export function makeEnemy(c, x, y) {
     case 'U': return new Trapper(x, y + TILE);
     case 'O': return new Clocker(x, y + TILE);
     case 'G': return new Vane(x + 3, y + 6);
+    case 'M': return new Summoner(x, y + TILE);
   }
   return null;
 }

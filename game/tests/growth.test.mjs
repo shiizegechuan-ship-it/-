@@ -1485,3 +1485,142 @@ test('伝説の攻撃の術（星喰らい・刻の支配者）は、金・桃�
   const { castWarpSlash } = await import('../src/arts.js');
   assert.ok(!castWarpSlash(g).legend);
 });
+
+test('出てすぐ（0.75 秒）の敵は、常時の術をガードする。自分の攻撃は通り、0.75 秒を過ぎれば術も通る', async () => {
+  const { SPAWN_GUARD } = await import('../src/game.js');
+  const { g, d, e } = arena(RustSoldier, 40);
+  d.frame(1);
+  const e2 = new RustSoldier(e.x + 20, e.y); g.addEnemy(e2); e2.hp = e2.maxHp = 1e5; e2.cool = 99;
+  const hit = () => g.dealDamage(e2, { base: 20, cat: 'skill', knock: 0, dir: 1, spell: true, passive: true });
+  const h0 = e2.hp; hit();
+  assert.equal(e2.hp, h0, 'passive is guarded right after spawning');
+  g.dealDamage(e2, { base: 20, cat: 'combo', knock: 0, dir: 1 });
+  assert.ok(e2.hp < h0, 'own attack goes through');
+  d.until(() => g.room.t - e2.bornT >= SPAWN_GUARD, 120);
+  const h1 = e2.hp; hit();
+  assert.ok(e2.hp < h1, 'passive goes through after the guard');
+});
+
+test('常時の術で部屋の敵が一瞬で全滅したら、その夜は常時の術を 7 割防ぐ（自分の攻撃での全滅では起きない）', async () => {
+  const { PASSIVE_WIPE } = await import('../src/game.js');
+  const enter = (seed) => {
+    const g = newGame(seed); g.startLoop(); g.modal = null;
+    const ri = g.run.plan.floors[0].findIndex((r) => r.type === 'combat');
+    g.enterRoom(0, ri); g.modal = null;
+    return g;
+  };
+  // 自分の攻撃で一瞬で倒しても起きない
+  const n = enter(61), dn = new Driver(n);
+  dn.frame(50);
+  for (const e of n.room.enemies.filter((e) => e.initial)) { n.dealDamage(e, { base: 1e6, cat: 'combo', knock: 0, dir: 1 }); }
+  dn.frame(3);
+  assert.ok(!n.run.passiveResist);
+  // 常時の術で 2.5 秒以内に全滅
+  const g = enter(61), d = new Driver(g);
+  d.frame(50); // 出てすぐのガードが明ける
+  for (const e of g.room.enemies.filter((e) => e.initial)) g.dealDamage(e, { base: 1e6, cat: 'skill', knock: 0, dir: 1, spell: true, passive: true });
+  d.frame(3);
+  assert.equal(g.run.passiveResist, PASSIVE_WIPE.resist);
+  assert.ok(g.room.t <= PASSIVE_WIPE.within);
+  // 以後、常時の術は 3 割しか通らない（自分の攻撃はそのまま）
+  const e = new RustSoldier(g.player.x + 60, g.player.y); g.addEnemy(e); e.hp = e.maxHp = 1e6; e.bornT = -99;
+  const p0 = e.hp; g.dealDamage(e, { base: 100, cat: 'skill', knock: 0, dir: 1, spell: true, passive: true }); const pd = p0 - e.hp;
+  const n2 = enter(62); const e3 = new RustSoldier(n2.player.x + 60, n2.player.y); n2.addEnemy(e3); e3.hp = e3.maxHp = 1e6; e3.bornT = -99;
+  n2.combo.n = g.combo.n = 0; n2.run.critRng = g.run.critRng = { next: () => 1 };
+  const q0 = e3.hp; n2.dealDamage(e3, { base: 100, cat: 'skill', knock: 0, dir: 1, spell: true, passive: true }); const qd = q0 - e3.hp;
+  assert.ok(Math.abs(pd / qd - 0.3) < 0.08, `passive ${pd} vs ${qd}`);
+  // 次の夜には戻る
+  g.endRun('death'); g.startLoop(); g.modal = null;
+  assert.ok(!g.run.passiveResist);
+});
+
+test('めちゃ簡単の自動の飛び込みは画面全体：画面に映っていれば遠くの敵にも飛び込み、画面の外の敵は狙わない', () => {
+  const rows = FLAT.map((r) => r + '#'.repeat(0));
+  const g = sandbox(rows); const d = new Driver(g); d.frame(2);
+  g.run.diff = { ...g.run.diff, id: 'veryeasy', autoAim: true };
+  const p = g.player;
+  p.x = 60; d.frame(30);
+  const far = new RustSoldier(p.x + 480, 450 - 60); g.addEnemy(far); far.cool = 99; far.hp = far.maxHp = 1e5;
+  d.frame(40); far.vx = 0;
+  assert.ok(cx(far) > g.cam.x && cx(far) < g.cam.x + 640, 'on screen');
+  assert.ok(Math.abs(cx(far) - cx(p)) > 430, 'farther than the old 420 reach');
+  assert.equal(p.autoTarget(g), far, 'far but on screen');
+  d.frame(1, ['attack']); assert.equal(p.state, 'autodash');
+  d.until(() => far.hp < far.maxHp, 90);
+  assert.ok(far.hp < far.maxHp);
+  // 画面の外へ置くと狙わない
+  d.frame(30); p.state = 'normal'; p.x = 60; d.frame(30);
+  far.x = g.cam.x + 640 + 200; far.vx = 0;
+  assert.ok(cx(far) > g.cam.x + 640 + 10); assert.equal(p.autoTarget(g), null);
+});
+
+test('戦闘部屋に入った時、画面の中の主人公から離れた所に必ず 1 体いる（すべての難易度・すべての戦闘部屋）', async () => {
+  const { SPAWN_AT } = await import('../src/game.js');
+  let rooms = 0;
+  for (const diff of ['veryeasy', 'normal', 'nightmare']) for (const seed of [3, 17, 29]) {
+    const g = newGame(seed); g.meta.difficulty = diff; g.startLoop(); g.modal = null;
+    g.run.plan.floors.forEach((fl, fi) => fl.forEach((r, ri) => {
+      if (r.type !== 'combat') return;
+      g.enterRoom(fi, ri); g.modal = null; rooms++;
+      const p = g.player;
+      const ok = g.room.enemies.some((e) => e.alive && cx(e) > g.cam.x && cx(e) < g.cam.x + 640 && cy(e) > g.cam.y && cy(e) < g.cam.y + 360 && Math.hypot(cx(e) - cx(p), cy(e) - cy(p)) >= SPAWN_AT.far - 20);
+      assert.ok(ok, `${diff} ${fi}-${ri} ${r.layout}`);
+    }));
+  }
+  assert.ok(rooms > 50);
+});
+
+test('増援は、画面の外のすぐ近くか、画面の中で主人公から離れた所に湧く（遠すぎる画面外より優先）', async () => {
+  const { SPAWN_AT } = await import('../src/game.js');
+  let n = 0, good = 0;
+  for (const seed of [5, 9, 23]) {
+    const g = newGame(seed); g.startLoop(); g.modal = null;
+    g.run.plan.floors.forEach((fl, fi) => fl.forEach((r, ri) => {
+      if (r.type !== 'combat') return;
+      g.enterRoom(fi, ri); g.modal = null;
+      const spot = g.reinforceSpot(); if (!spot) return;
+      const m = spot.m, mx = m.x + 15, my = m.y + 15, p = g.player;
+      const ox = Math.max(g.cam.x - mx, mx - (g.cam.x + 640), 0), oy = Math.max(g.cam.y - my, my - (g.cam.y + 360), 0), out = Math.hypot(ox, oy);
+      const okSpot = out > 0 ? out <= SPAWN_AT.reach : Math.hypot(mx - cx(p), my - cy(p)) >= SPAWN_AT.far;
+      // そういう場所が部屋にあるなら、必ずそこを選ぶ
+      const exists = [...g.map.markers.filter((k) => k.c === 'g' || k.c === 'a'), ...g.platformSpots()].some((k) => { const kx = k.x + 15, ky = k.y + 15; const o = Math.hypot(Math.max(g.cam.x - kx, kx - (g.cam.x + 640), 0), Math.max(g.cam.y - ky, ky - (g.cam.y + 360), 0)); return o > 0 ? o <= SPAWN_AT.reach : Math.hypot(kx - cx(p), ky - cy(p)) >= SPAWN_AT.far; });
+      if (!exists) return;
+      n++; if (okSpot) good++;
+    }));
+  }
+  assert.ok(n > 20 && good >= n * 0.95, `${good}/${n}`);
+});
+
+test('召喚師：予兆（紫の陣）のあと、小さくて弱いちび歯車を何体も呼ぶ。上限あり、本体を倒すと崩れ、ちび歯車は金貨を落とさず増援も呼ばない', async () => {
+  const { Summoner, Mite, SUMMON } = await import('../src/enemies.js');
+  const { g, d, e } = arena(Summoner, 220);
+  e.hp = e.maxHp = 1e5; e.cool = 0;
+  d.until(() => e.state === 'cast', 60);
+  assert.equal(e.state, 'cast');
+  d.frame(10); assert.ok(e.tell > 0 && e.tellKind === 'summon', 'telegraph');
+  d.until(() => g.room.enemies.some((o) => o.kind === 'mite'), 120);
+  const mites = () => g.room.enemies.filter((o) => o.alive && o.kind === 'mite');
+  assert.ok(mites().length >= SUMMON.per, `summoned ${mites().length}`);
+  for (const m of mites()) { assert.ok(m.w <= 12 && m.h <= 10, 'small'); assert.ok(m.maxHp < 30, 'weak'); assert.ok(m.minion && m.summoner === e); }
+  // 何度も呼ぶが、上限を超えない
+  for (let i = 0; i < 4; i++) { e.cool = 0; d.frame(100); }
+  assert.ok(mites().length <= SUMMON.cap, `cap ${mites().length}`);
+  // ちび歯車は主人公をかじる
+  const hp0 = g.player.hp; d.until(() => g.player.hp < hp0, 400); assert.ok(g.player.hp < hp0, 'bites');
+  // ちび歯車は金貨を落とさない
+  let gold = 0; const dg = g.dropGold.bind(g); g.dropGold = (nn, ...a) => { gold += nn; return dg(nn, ...a); };
+  const m0 = mites()[0]; m0.hp = 0; m0.alive = false; d.until(() => m0.handled, 30); // ヒットストップの間は進まない
+  assert.ok(m0.handled); assert.equal(gold, 0);
+  // 本体を倒すと崩れる
+  e.hp = 0; e.alive = false; d.until(() => e.handled, 30);
+  assert.equal(mites().length, 0);
+  assert.ok(gold > 0, 'summoner drops gold');
+});
+
+test('召喚師は戦闘部屋に出る（各階の敵の種類に入っている）が、増援としては出ない', async () => {
+  const { extraEnemyTypes } = await import('../src/world.js');
+  let found = false;
+  for (const seed of [1, 2, 3, 4, 5, 6]) { const g = newGame(seed); g.startLoop(); for (const fl of g.run.plan.floors) for (const r of fl) if (r.type === 'combat' && r.enemies.some((x) => x.type === 'M')) found = true; }
+  assert.ok(found);
+  for (const f of [0, 1, 2]) assert.ok(!extraEnemyTypes(f, 2).g.includes('M'));
+});

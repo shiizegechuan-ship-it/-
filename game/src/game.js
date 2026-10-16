@@ -34,9 +34,15 @@ export const GUARDS = { elite: 3, boss: 5 };
 export const MIN_FIGHT = 15;
 // warn：予兆の秒数、cap：場に同時にいる敵（湧く予定を含む）の上限、hp・dmg：増援の体力と攻撃の倍率
 const REINF = { warn: 0.6, cap: 4, hp: 0.6, dmg: 0.6 };
+// 出現位置：画面の外なら端から reach 以内、画面の中なら主人公から far 以上
+export const SPAWN_AT = { reach: 70, far: 170 };
 // パリィの瞬間のスロー：この秒数（ゲーム内の時間で）だけ、全ての速さをこの倍率に
 export const PARRY_SLOW = { time: 0.35, scale: 0.2 };
-const GOLD = { lancer: 7, trapper: 7, clocker: 7, vane: 6, squire: 2, mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
+// 出てすぐの敵は、常時の術をしばらく防ぐ（自分の手で斬る余地を残す）
+export const SPAWN_GUARD = 0.75;
+// 常時の術で部屋の敵が一瞬で全滅するようになったら、その夜の間、常時の術を 7 割防ぐ
+export const PASSIVE_WIPE = { within: 2.5, share: 0.7, resist: 0.7 };
+const GOLD = { summoner: 9, mite: 0, lancer: 7, trapper: 7, clocker: 7, vane: 6, squire: 2, mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
 
 export class Game {
   constructor(opts = {}) {
@@ -221,7 +227,7 @@ export class Game {
     }
     const setup = {
       entry: () => this.setupEntry(),
-      combat: () => { this.run.combats = (this.run.combats || 0) + 1; for (const e of this.formation(desc.enemies)) this.addEnemy(makeEnemy(e.type, e.x * TILE, e.y * TILE)); this.spawnThreatExtras(desc); this.room.incoming = []; this.initRoomBudget(); },
+      combat: () => { this.run.combats = (this.run.combats || 0) + 1; for (const e of this.formation(desc.enemies)) this.addEnemy(makeEnemy(e.type, e.x * TILE, e.y * TILE)); this.spawnThreatExtras(desc); this.ensureVisibleFoe(); this.room.incoming = []; this.initRoomBudget(); for (const e of this.room.enemies) e.initial = true; this.room.initCount = this.room.enemies.length; },
       forge: () => this.setupForge(),
       elite: () => this.setupElite(),
       archive: () => this.setupArchive(),
@@ -293,24 +299,56 @@ export class Game {
   }
   // 増援：戦闘部屋で MIN_FIGHT 秒たつまでは、1 体倒すごとに別の場所へ 1 体湧く。
   // 場所は主人公からなるべく遠く（できれば画面の外）、そして出口の扉の側
+  // 出現位置の点数：画面の外のすぐ近く（端から REACH 以内）か、画面の中で主人公から離れた所（FAR 以上）が高い
+  spawnScore(m, taken) {
+    const p = this.player, vw = VIEW_W / ZOOM, vh = VIEW_H / ZOOM, X = this.marker('X');
+    const mx = m.x + TILE / 2, my = m.y + TILE / 2;
+    const ox = Math.max(this.cam.x - mx, mx - (this.cam.x + vw), 0), oy = Math.max(this.cam.y - my, my - (this.cam.y + vh), 0);
+    const out = Math.hypot(ox, oy); // 画面の外にどれだけ離れているか（中なら 0）
+    const far = Math.hypot(mx - cx(p), my - cy(p));
+    const door = X ? Math.hypot(mx - X.x, my - X.y) : 0;
+    const crowd = taken.filter((o) => Math.hypot((o.x + 10) - mx, (o.y + 10) - my) < 28).length;
+    let sc;
+    if (out > 0) sc = out <= SPAWN_AT.reach ? 1000 + (SPAWN_AT.reach - out) : 700 - out * 2; // 画面外ギリギリが一番
+    else sc = far >= SPAWN_AT.far ? 1000 + Math.min(far, 360) * 0.3 : far; // 画面の中なら、主人公から離れた所
+    return sc - door * 0.08 - crowd * 400;
+  }
   reinforceSpot() {
-    const room = this.room, p = this.player;
-    const vw = VIEW_W / ZOOM, vh = VIEW_H / ZOOM;
-    const X = this.marker('X');
+    const room = this.room;
     const taken = [...room.enemies.filter((e) => e.alive), ...(room.incoming || [])];
-    const scored = [...this.map.markers.filter((m) => m.c === 'g' || m.c === 'a'), ...this.platformSpots()].map((m) => {
-      const mx = m.x + TILE / 2, my = m.y + TILE / 2;
-      const off = mx < this.cam.x - 8 || mx > this.cam.x + vw + 8 || my < this.cam.y - 8 || my > this.cam.y + vh + 8;
-      const far = Math.hypot(mx - cx(p), my - cy(p));
-      const door = X ? Math.hypot(mx - X.x, my - X.y) : 0;
-      const crowd = taken.filter((o) => Math.hypot((o.x + 10) - mx, (o.y + 10) - my) < 28).length;
-      return { m, score: (off ? 2000 : 0) + (far > 5 * TILE ? 600 : 0) + far * 0.4 - door * 0.8 - crowd * 400 };
-    }).sort((a, b) => b.score - a.score);
+    const scored = [...this.map.markers.filter((m) => m.c === 'g' || m.c === 'a'), ...this.platformSpots()].map((m) => ({ m, score: this.spawnScore(m, taken) })).sort((a, b) => b.score - a.score);
     if (!scored.length) return null;
     const rng = (room.reinfRng ||= makeRng((this.run.plan.offerSeed ^ (this.run.fi * 131 + this.run.ri * 17 + 7)) >>> 0));
     // 上位の候補から少し揺らして選ぶ（毎回同じ一点に湧かないように）
     const top = scored.filter((c) => c.score >= scored[0].score - 150).slice(0, 3);
     return { m: rng.pick(top).m, rng };
+  }
+  // 戦闘部屋に入った時、画面の中の、主人公から離れた所に必ず 1 体はいるようにする
+  ensureVisibleFoe() {
+    const p = this.player, vw = VIEW_W / ZOOM, vh = VIEW_H / ZOOM, cam = this.cam;
+    const inView = (x, y, mg = 16) => x > cam.x + mg && x < cam.x + vw - mg && y > cam.y + mg && y < cam.y + vh - mg;
+    const farOk = (x, y) => Math.hypot(x - cx(p), y - cy(p)) >= SPAWN_AT.far;
+    const foes = this.room.enemies.filter((e) => e.alive && !e.boss);
+    if (foes.some((e) => inView(cx(e), cy(e)) && farOk(cx(e), cy(e)))) return;
+    const spots = [...this.map.markers.filter((m) => m.c === 'g' || m.c === 'a'), ...this.platformSpots()]
+      .filter((m) => inView(m.x + TILE / 2, m.y + TILE / 2) && farOk(m.x + TILE / 2, m.y + TILE / 2))
+      .filter((m) => !foes.some((e) => Math.hypot(cx(e) - (m.x + TILE / 2), cy(e) - (m.y + TILE / 2)) < 24))
+      .sort((a, b) => Math.hypot(a.x - cx(p), a.y - cy(p)) - Math.hypot(b.x - cx(p), b.y - cy(p)));
+    const m = spots[0];
+    if (!m) return;
+    // 画面の外の敵を 1 体連れてくる（空の場所には飛ぶ敵、地上には歩く敵）。合う敵がいなければ新しく 1 体
+    const air = m.c === 'a' && !m.plat;
+    const pick = foes.filter((e) => !inView(cx(e), cy(e), 0) && !e.elite && (air ? e.gravity === false : e.gravity !== false))
+      .sort((a, b) => Math.hypot(cx(b) - cx(p), cy(b) - cy(p)) - Math.hypot(cx(a) - cx(p), cy(a) - cy(p)))[0];
+    if (pick) {
+      pick.x = m.x + (TILE - pick.w) / 2;
+      pick.y = air ? m.y + 6 : m.y + TILE - pick.h;
+      pick.vx = pick.vy = 0;
+      return;
+    }
+    const types = extraEnemyTypes(this.run.fi, this.run.scale.level);
+    const rng = makeRng((this.run.plan.offerSeed ^ (this.run.fi * 71 + this.run.ri * 37 + 11)) >>> 0);
+    this.addEnemy(makeEnemy(this.easyType(rng.pick(types[air ? 'a' : 'g'])), m.x, m.y));
   }
   queueReinforcement() {
     const spot = this.reinforceSpot();
@@ -347,6 +385,7 @@ export class Game {
     room.budget.avg = foes.length ? room.budget.gold / foes.length : 1;
   }
   killValue(e) {
+    if (e.minion) return { gold: 0, exp: 1, shard: 0 }; // 呼ばれた雑魚はほとんど何も落とさない
     return { gold: (GOLD[e.kind] || 5) * (1 + 0.25 * this.run.scale.level), exp: expFor(e, this.run.scale), shard: (e.elite ? 12 : 2) + Math.floor(this.run.scale.level / 2) };
   }
   // この 1 体で渡す割合（残りの総量のうち）
@@ -420,6 +459,7 @@ export class Game {
   }
   addEnemy(e) {
     if (!e) return;
+    e.bornT = this.room ? this.room.t : 0;
     // 夜の深さで強くなる（HP・攻撃・攻撃パターンの段階）＋脅威
     const sc = this.run.scale;
     e.maxHp = e.hp = Math.round(e.maxHp * sc.hp * (e.boss ? 1 + THREAT.bossHp * this.threatStep() : this.threatHp()));
@@ -430,7 +470,7 @@ export class Game {
     const st = this.run.diff ? this.run.diff.strategy : true;
     if (st === 'always' || (st && (this.run.aoeTendency || this.player.boons.filter((b) => PASSIVE_IDS.includes(b.id)).reduce((a, b) => a + passiveWeight(b), 0) >= 6))) e.aoeDodge = true;
     this.room.enemies.push(e);
-    const tellKey = { lancer: 'tell_lancer', trapper: 'tell_trapper', clocker: 'tell_clocker', vane: 'tell_vane', squire: 'tell_squire', mallet: 'tell_mallet', beamer: 'tell_beamer', chain: 'tell_chain', rat: 'tell_rat', hopper: 'tell_hopper', warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
+    const tellKey = { summoner: 'tell_summoner', mite: 'tell_summoner', lancer: 'tell_lancer', trapper: 'tell_trapper', clocker: 'tell_clocker', vane: 'tell_vane', squire: 'tell_squire', mallet: 'tell_mallet', beamer: 'tell_beamer', chain: 'tell_chain', rat: 'tell_rat', hopper: 'tell_hopper', warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
     if (tellKey) e.tellKey = tellKey;
     return e;
   }
@@ -714,6 +754,9 @@ export class Game {
     let dmg = (p.rallyT > 0 && !info.companion ? 1 + (p.rallyMul || 0) : 1) * info.base * st.dmgMul * st.edgeMul * (p.metaAtk || 1) * (1 + run.killStacks) * levelBonus(run.level || 1).atk;
     // コンボ加算：つないだ数だけ与ダメージが増える
     dmg *= 1 + this.combo.n * st.comboPer;
+    // 番人たちが常時の術に慣れた夜は、常時の術が 7 割防がれる
+    if (info.passive && run.passiveResist && !e.boss) dmg *= 1 - run.passiveResist;
+    e.lastPassive = !!info.passive;
     if (info.heavy) dmg *= st.heavyMul;
     if (info.cat === 'air') dmg *= st.airMul;
     if (e.hp <= e.maxHp * 0.35) dmg *= st.executeMul;
@@ -736,6 +779,11 @@ export class Game {
         }
         return { silent: true };
       }
+    }
+    // 出てすぐ（SPAWN_GUARD 秒）の敵は、常時の術を防ぐ
+    if (info.passive && !e.boss && this.room && this.room.t - (e.bornT || 0) < SPAWN_GUARD) {
+      if (!e.sgT || this.run.clock - e.sgT > 0.35) { e.sgT = this.run.clock; this.fx.text(cx(e), e.y - 22, 'ガード', '#cfe8ff', 11); this.fx.sparks(cx(e), cy(e), '#cfe8ff', 4, 160); }
+      return { silent: true };
     }
     // 範囲攻撃を躱している最中は術が当たらない
     if (info.spell && e.dodgeI > 0) { if (!e.missT || this.run.clock - e.missT > 0.4) { e.missT = this.run.clock; this.fx.text(cx(e), e.y - 22, 'MISS', '#9fd0ff', 11); } return { silent: true }; }
@@ -1400,9 +1448,11 @@ export class Game {
       }
       // 敵 1 体ごとの取り分（戦闘部屋は部屋の総量を分ける）
       const gmul = p.stats.goldMul * ((this.run.diff && this.run.diff.goldMul) || 1);
+      if (e.kind === 'summoner') this.clearMinions(e);
       let v = this.killValue(e);
       v.gold *= gmul;
-      if (room.budget) {
+      if (room.budget && !e.minion) {
+        if (e.initial) { room.initKills = (room.initKills || 0) + 1; if (e.lastPassive) room.initPassive = (room.initPassive || 0) + 1; }
         const B = room.budget, k = this.killShare(e), take = (key) => { const n = B[key] * k; B[key] -= n; return n; };
         v = { gold: take('gold') * gmul, exp: take('exp'), shard: take('shard') };
         B.kills++;
@@ -1410,7 +1460,7 @@ export class Game {
         B.carry ||= { gold: 0, exp: 0, shard: 0 };
         for (const key of ['gold', 'exp', 'shard']) { const n = v[key] + B.carry[key]; v[key] = Math.floor(n); B.carry[key] = n - v[key]; }
         // 増援は場の敵（湧く予定を含む）が上限を下回っている時だけ。最初から多い部屋は、減ってから湧き始める
-        if (room.t < MIN_FIGHT && !room.cleared && room.enemies.filter((o) => o.alive && !o.boss).length + room.incoming.length < REINF.cap) this.queueReinforcement();
+        if (room.t < MIN_FIGHT && !room.cleared && room.enemies.filter((o) => o.alive && !o.boss && !o.minion).length + room.incoming.length < REINF.cap) this.queueReinforcement();
       }
       this.addShards(v.shard, cx(e), e.y - 20);
       if (v.exp > 0) this.dropExp(v.exp, cx(e), cy(e));
@@ -1430,6 +1480,7 @@ export class Game {
       if (e.kind === 'knight') this.onKnightDown(e);
     }
     room.enemies = room.enemies.filter((e) => e.alive || e.boss);
+    this.checkPassiveWipe();
     const living = room.enemies.filter((e) => e.alive && !e.boss).length;
     const t = room.desc.type;
     // 試練の間：1 波目を倒すと 2 波目
@@ -1912,6 +1963,22 @@ export class Game {
       g.lord = b.boss ? 'boss' : 'elite';
       if (this.run.diff && (this.run.diff.id === 'easy' || this.run.diff.id === 'veryeasy')) { g.maxHp = g.hp = Math.round(g.maxHp * 0.7); }
       this.fx.burst(gx, b.y + b.h - 10, b.boss ? '#f2c14e' : '#c98a52', 10);
+    }
+  }
+  // 召喚師が倒れると、呼ばれた雑魚も崩れる
+  clearMinions(summoner) {
+    for (const e of this.room.enemies) if (e.minion && e.alive && e.summoner === summoner) { e.alive = false; e.hp = 0; e.handled = true; this.fx.burst(cx(e), cy(e), '#b67cf0', 6); }
+  }
+  // 常時の術で部屋の敵が一瞬（PASSIVE_WIPE.within 秒以内）で全滅したら、その夜は常時の術を 7 割防ぐ
+  checkPassiveWipe() {
+    const room = this.room, run = this.run;
+    if (run.passiveResist || room.desc.type !== 'combat' || room.wipeChecked || !room.initCount) return;
+    if ((room.initKills || 0) < room.initCount) return;
+    room.wipeChecked = true;
+    if (room.t <= PASSIVE_WIPE.within && (room.initPassive || 0) >= room.initCount * PASSIVE_WIPE.share) {
+      run.passiveResist = PASSIVE_WIPE.resist;
+      this.fx.setBanner('番人たちが術に慣れた', '常時の術のダメージ −70%（この夜の間）', '#9fd0ff', 2.4);
+      this.sfx.play('tellBig');
     }
   }
   clearGuards(leader) {

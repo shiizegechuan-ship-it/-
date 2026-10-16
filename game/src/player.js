@@ -290,11 +290,14 @@ export class Player {
   autoTarget(game) {
     const d = game.run && game.run.diff;
     if (!d || !d.autoAim || !game.room) return null;
-    let best = null, bd = 420;
+    let best = null, bd = Infinity;
+    // 画面に映っている敵なら、どれだけ離れていても飛び込む（画面全体）
+    const cam = game.cam || { x: cx(this) - 320, y: cy(this) - 180 }, vw = 640, vh = 360;
     for (const e of game.room.enemies) {
       if (!e.alive || (e.boss && (e.defeated || e.invuln))) continue;
       // 枠の外の敵や、横に降り立てる空きの無い敵には飛び込まない（戻って来られなくなる）
       if (cx(e) < 0 || cx(e) > game.map.pxW || cy(e) < 0 || cy(e) > game.map.pxH) continue;
+      if (cx(e) < cam.x - 4 || cx(e) > cam.x + vw + 4 || cy(e) < cam.y - 4 || cy(e) > cam.y + vh + 4) continue;
       const dd = Math.hypot(cx(e) - this.x - this.w / 2, cy(e) - this.y - this.h / 2);
       if (dd < bd) { bd = dd; best = e; }
     }

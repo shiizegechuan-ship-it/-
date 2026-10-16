@@ -1085,6 +1085,31 @@ function drawEnemy(b, game, e) {
       else line(b, bx + f * 4, by - 9, bx + f * 7, by - 13, '#e8eef6');
       break;
     }
+    case 'summoner': { // 召喚師：紫の頭巾に長い杖。唱えると足元に紫の陣が回る
+      if (e.state === 'cast') {
+        const r = 6 + Math.round(e.tell * 10), a0 = t * 4;
+        b.globalAlpha = 0.4 + 0.5 * e.tell; for (let i = 0; i < 20; i++) { const a = i / 20 * Math.PI * 2; pset(b, bx + Math.round(Math.cos(a) * r * 1.6), by + Math.round(Math.sin(a) * r * 0.45), '#b67cf0'); }
+        for (let i = 0; i < 6; i++) { const a = a0 + i * Math.PI / 3; pset(b, bx + Math.round(Math.cos(a) * r * 1.6), by + Math.round(Math.sin(a) * r * 0.45), '#e8c8ff'); }
+        b.globalAlpha = 1;
+      }
+      const tc = e.tell > 0 ? '#b67cf0' : slowGlow ? '#5aa9e6' : null;
+      if (tc) rect(b, bx - 7, by - 16, 14, 16, tc);
+      rect(b, bx - 6, by - 15, 12, 15, flash ? '#ffffff' : '#3a2a4a'); rect(b, bx - 5, by - 16, 10, 5, flash ? '#ffffff' : '#5a3a7a');
+      pset(b, bx + f * 2, by - 13, '#e8c8ff'); pset(b, bx + f * 3, by - 13, '#e8c8ff');
+      const lift = e.state === 'cast' ? Math.round(e.tell * 4) : 0;
+      line(b, bx + f * 7, by - 1, bx + f * 7, by - 19 - lift, '#8a6a4a');
+      rect(b, bx + f * 7 - 1, by - 21 - lift, 3, 3, e.state === 'cast' ? (Math.floor(t * 12) % 2 ? '#ffffff' : '#e8c8ff') : '#b67cf0');
+      break;
+    }
+    case 'mite': { // ちび歯車：小さな歯車に足が生えたもの
+      const tc = e.tell > 0 ? '#ff4a2a' : slowGlow ? '#5aa9e6' : null;
+      if (tc) disc(b, bx, by - 3, 4, tc);
+      disc(b, bx, by - 3, 3, flash ? '#ffffff' : '#9a7ab0');
+      for (let i = 0; i < 4; i++) { const a = t * 10 * f + i * Math.PI / 2; pset(b, bx + Math.round(Math.cos(a) * 4), by - 3 + Math.round(Math.sin(a) * 4), '#c9a052'); }
+      pset(b, bx + f * 1, by - 4, '#ff3a2a');
+      if (Math.floor(t * 18 + e.id) % 2) { pset(b, bx - 2, by, '#3a2a22'); pset(b, bx + 2, by, '#3a2a22'); }
+      break;
+    }
     case 'rat': { // 歯車ネズミ：小さな体に歯車の尻尾。速さで残像が出る
       if (Math.abs(e.vx) > 200) { b.globalAlpha = 0.3; rect(b, bx - 4 - f * 4, by - 5, 8, 4, '#8a7a6a'); b.globalAlpha = 1; }
       const tc = e.tell > 0 ? '#ff4a2a' : slowGlow ? '#5aa9e6' : null;
