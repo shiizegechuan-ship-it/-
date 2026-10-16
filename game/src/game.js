@@ -30,6 +30,9 @@ const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourg
 // 敵ごとの金貨（夜が深いほど多い）
 // 小さな護衛の数：中ボスに 3 体、刻守に 5 体（第二楽章の増援は難易度による）
 export const GUARDS = { elite: 3, boss: 5 };
+// 戦闘部屋の最短の戦い：この秒数に満たないうちは、敵が減ると時間差で増援が湧く（強い術で一瞬で終わらないように）
+export const MIN_FIGHT = 15;
+const REINF = { warn: 0.9, gap: 1.6, gold: 0.5, exp: 0.5 }; // 増援の金貨と粒は半分（長く戦える分で稼ぎすぎないように）
 const GOLD = { lancer: 7, trapper: 7, clocker: 7, vane: 6, squire: 2, mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
 
 export class Game {
@@ -285,6 +288,36 @@ export class Game {
       if (e) { e.extra = true; if (this.room.formation === 'aoe') e.spread = true; }
     }
   }
+  // 増援：戦闘部屋で MIN_FIGHT 秒たつまで、敵が残り 1 体以下になるたびに、少し先の足場へ予兆を出してから 2〜3 体湧かせる
+  updateReinforcements(dt) {
+    const room = this.room, p = this.player;
+    if (room.desc.type !== 'combat' || room.cleared) return;
+    const inc = (room.incoming ||= []);
+    for (const s of inc) {
+      s.t -= dt;
+      if (s.t > 0) { if ((s.pulse = (s.pulse || 0) + dt) > 0.3) { s.pulse = 0; this.fx.ring(s.x + 10, s.y + 10, '#ff7a5a', 18, 0.3); } continue; }
+      const e = this.addEnemy(makeEnemy(s.type, s.x, s.y));
+      if (e) { e.extra = true; e.reinf = true; }
+      this.fx.burst(s.x + 10, s.y + 10, '#ff7a5a', 14);
+    }
+    room.incoming = inc.filter((s) => s.t > 0);
+    room.reinfGap = Math.max(0, (room.reinfGap || 0) - dt);
+    const living = room.enemies.filter((e) => e.alive && !e.boss).length;
+    if (room.t >= MIN_FIGHT || living > 1 || room.incoming.length || room.reinfGap > 0) return;
+    const rng = (room.reinfRng ||= makeRng((this.run.plan.offerSeed ^ (this.run.fi * 131 + this.run.ri * 17 + 7)) >>> 0));
+    const types = extraEnemyTypes(this.run.fi, this.run.scale.level);
+    const ptx = Math.floor(cx(p) / TILE);
+    let slots = this.map.markers.filter((m) => (m.c === 'g' || m.c === 'a') && Math.abs(m.tx - ptx) > 4);
+    if (!slots.length) slots = this.map.markers.filter((m) => m.c === 'g' || m.c === 'a');
+    if (!slots.length) return;
+    const n = Math.min(slots.length, 2 + (this.run.scale.level >= 2 || rng.next() < 0.35 ? 1 : 0));
+    const pick = rng.shuffle(slots.slice()).slice(0, n);
+    pick.forEach((m, i) => { room.incoming.push({ x: m.x, y: m.y, type: this.easyType(rng.pick(types[m.c])), t: REINF.warn + i * 0.25 }); this.fx.ring(m.x + 10, m.y + 10, '#ff7a5a', 30, 0.5); });
+    room.reinfGap = REINF.gap;
+    room.waves = (room.waves || 0) + 1;
+    this.fx.text(cx(p), p.y - 30, '増援', '#ff7a5a', 13);
+    this.sfx.play('tellBig');
+  }
   // 主人公の戦い方（今の強化と前の夜の傾向）
   buildStyle() {
     const bs = this.player.boons;
@@ -514,6 +547,7 @@ export class Game {
     updateSpells(this, dt);
     if (p.onGround) p.airHits = 0;
     this.updateEchoes(dt);
+    this.updateReinforcements(dt);
     this.handleDeaths();
     this.updatePickups(dt);
     this.updateQuake(dt);
@@ -1271,9 +1305,9 @@ export class Game {
         if (near.length) this.fx.ring(cx(e), cy(e), '#ff7ae0', 36, 0.3);
       }
       this.addShards((e.elite ? 12 : 2) + Math.floor(this.run.scale.level / 2), cx(e), e.y - 20);
-      this.dropExp(expFor(e, this.run.scale), cx(e), cy(e));
+      this.dropExp(Math.max(1, Math.round(expFor(e, this.run.scale) * (e.reinf ? REINF.exp : 1))), cx(e), cy(e));
       // 敵 1 体ごとの金貨：めちゃ簡単 ×3、簡単 ×2、普通〜激ムズ ×1.25
-      this.dropGold(Math.round((GOLD[e.kind] || 5) * (1 + 0.25 * this.run.scale.level) * p.stats.goldMul * ((this.run.diff && this.run.diff.goldMul) || 1)), cx(e), cy(e));
+      this.dropGold(Math.round((GOLD[e.kind] || 5) * (1 + 0.25 * this.run.scale.level) * p.stats.goldMul * ((this.run.diff && this.run.diff.goldMul) || 1) * (e.reinf ? REINF.gold : 1)), cx(e), cy(e));
       this.sfx.play('kill');
       this.fx.burst(cx(e), cy(e), e.elite ? '#f2c14e' : '#e8dcc4', e.elite ? 30 : 16);
       this.hitstop = Math.max(this.hitstop, (e.elite ? 10 : 4) / 60);
@@ -1296,6 +1330,8 @@ export class Game {
       this.fx.setBanner('第二波', '', '#ff9a7a', 1.0); this.sfx.play('tellBig');
       return;
     }
+    // 戦闘部屋は MIN_FIGHT 秒たつまで終わらない（増援が湧き続ける）
+    if (t === 'combat' && (room.t < MIN_FIGHT || (room.incoming && room.incoming.length))) return;
     if (!room.cleared && living === 0 && (t === 'combat' || t === 'elite' || t === 'elite2' || t === 'trial' || (t === 'forge' && this.run.glen === 'attacked'))) {
       if (t === 'forge') this.onGlenSaved();
       else this.clearRoom(false);

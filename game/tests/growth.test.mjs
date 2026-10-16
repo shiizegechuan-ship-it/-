@@ -7,7 +7,7 @@ import { computeStats, rollOffer, BOONS, canForge, forgeDiff } from '../src/boon
 import { makeRng, cx, cy } from '../src/util.js';
 import { ARTIFACTS } from '../src/artifacts.js';
 import { Spell } from '../src/arts.js';
-import { Game } from '../src/game.js';
+import { Game, MIN_FIGHT } from '../src/game.js';
 import { Input } from '../src/input.js';
 import { nightLook } from '../src/nightlook.js';
 
@@ -399,6 +399,7 @@ test('回復の扉：夜の最初の扉と、HP 満タンのときは出ない�
 test('金貨：敵を倒すと貯まる。店で強化・回復薬・アーティファクト・黄金の鍵を買える', () => {
   const g = newGame(4);
   g.enterRoom(0, 1); g.modal = null;
+  g.room.t = MIN_FIGHT; // 最短の戦いは済んだことにする
   for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
   new Driver(g).frame(240); // 制圧すると金貨が集まってくる
   assert.ok(g.run.gold > 0, 'gold from kills');

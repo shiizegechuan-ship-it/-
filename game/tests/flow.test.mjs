@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { cx } from '../src/util.js';
 import { newGame, Driver } from './helpers.mjs';
 import { addWedge, learn } from '../src/meta.js';
+import { MIN_FIGHT } from '../src/game.js';
 
 // 部屋を「攻略」して次へ進む（敵は直接倒し、報酬を取り、扉に入る）
 function clearAndAdvance(g, d, pickDoor = 0) {
@@ -14,7 +15,7 @@ function clearAndAdvance(g, d, pickDoor = 0) {
     }
     if (g.transition) { d.frame(1); continue; }
     const live = g.room.enemies.filter((e) => e.alive && !e.boss);
-    if (live.length) { for (const e of live) { e.hp = 0; e.alive = false; } d.frame(2); continue; }
+    if (live.length) { g.room.t = Math.max(g.room.t, MIN_FIGHT); for (const e of live) { e.hp = 0; e.alive = false; } d.frame(2); continue; }
     const rw = g.room.items.find((i) => i.kind === 'reward');
     if (rw) { g.player.x = rw.x; g.player.y = rw.y; d.frame(2); continue; }
     const doors = g.room.items.filter((i) => i.kind === 'door');
@@ -251,6 +252,7 @@ test('部屋を終えたら、跳ぶボタンで扉の横までくるくる回�
   const ri = g.run.plan.floors[0].findIndex((r) => r.type === 'combat');
   g.enterRoom(0, ri); g.modal = null;
   const d = new Driver(g), p = g.player;
+  g.room.t = MIN_FIGHT; // 最短の戦いは済んだことにする
   for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
   d.frame(5);
   // 報酬が残っている間は動かない
@@ -270,4 +272,61 @@ test('部屋を終えたら、跳ぶボタンで扉の横までくるくる回�
   assert.ok(p.onGround, 'standing on the floor');
   // 扉の前ではそのまま跳ぶボタンで入れる
   assert.equal(g.nearestInteractable() && g.nearestInteractable().kind, 'door');
+});
+
+test('戦闘部屋は最低15秒続く：敵を一瞬で倒しても、時間差で増援が湧き続ける', () => {
+  const g = newGame(31); g.startLoop(); g.modal = null;
+  const ri = g.run.plan.floors[0].findIndex((r) => r.type === 'combat');
+  g.enterRoom(0, ri); g.modal = null;
+  const d = new Driver(g);
+  let killed = 0, clearedAt = null;
+  const reinfKinds = new Set();
+  for (let f = 0; f < 60 * 25 && clearedAt === null; f++) {
+    if (g.modal) g.modal = null; // 粒で上がった段の選択などは閉じる
+    // 強い術の代わり：出てきた敵はすぐに倒す
+    for (const e of g.room.enemies) if (e.alive && !e.boss) { if (e.reinf) reinfKinds.add(e.kind); e.hp = 0; e.alive = false; killed++; }
+    d.frame(1);
+    if (g.room.cleared) clearedAt = g.room.t;
+  }
+  assert.ok(clearedAt !== null, 'room eventually clears');
+  assert.ok(clearedAt >= MIN_FIGHT, `cleared at ${clearedAt}`);
+  assert.ok(clearedAt < MIN_FIGHT + 3, 'ends soon after the minimum');
+  assert.ok(g.room.waves >= 4, `waves: ${g.room.waves}`);
+  assert.ok(reinfKinds.size >= 1 && killed >= 10, `killed ${killed}`);
+});
+
+test('増援は予兆の後に、主人公から離れた足場へ湧く。15秒を過ぎたら湧かない', () => {
+  const g = newGame(32); g.startLoop(); g.modal = null;
+  const ri = g.run.plan.floors[0].findIndex((r) => r.type === 'combat');
+  g.enterRoom(0, ri); g.modal = null;
+  const d = new Driver(g), p = g.player;
+  for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
+  d.frame(2);
+  assert.ok(g.room.incoming.length >= 2, 'reinforcements are telegraphed');
+  assert.equal(g.room.cleared, false);
+  const before = g.room.enemies.filter((e) => e.alive).length;
+  assert.equal(before, 0, 'not instant');
+  d.until(() => g.room.enemies.some((e) => e.alive && e.reinf), 120);
+  for (const e of g.room.enemies.filter((e) => e.reinf)) assert.ok(Math.abs(cx(e) - cx(p)) > 4 * 16 - 20, 'away from the hero');
+  // 15秒を過ぎて全滅させたら制圧
+  g.room.t = MIN_FIGHT; g.room.incoming = [];
+  for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
+  d.frame(2);
+  assert.ok(g.room.cleared);
+  assert.equal(g.room.incoming.length, 0);
+});
+
+test('増援は戦闘部屋だけ：中ボス部屋は全滅で即制圧のまま', () => {
+  const g = newGame(33); g.startLoop(); g.modal = null;
+  const plan = g.run.plan.floors;
+  let at = null;
+  plan.forEach((fl, fi) => fl.forEach((r, ri) => { if (!at && r.type === 'elite') at = [fi, ri]; }));
+  if (!at) return;
+  g.enterRoom(at[0], at[1]); g.modal = null;
+  const d = new Driver(g);
+  d.until(() => !g.modal, 200);
+  while (g.modal) { g.modal = null; }
+  for (const e of g.room.enemies) if (!e.boss) { e.hp = 0; e.alive = false; }
+  d.frame(3);
+  assert.ok(!g.room.incoming || g.room.incoming.length === 0);
 });
