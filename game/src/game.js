@@ -1,9 +1,9 @@
 // ゲーム本体。シミュレーションのみで DOM に触れない（テストからも動かせる）。
-import { DT, TILE, VIEW_W, VIEW_H, ZOOM, PLAYER as PC } from './config.js';
+import { DT, TILE, VIEW_W, VIEW_H, ZOOM, PLAYER as PC, DIFFICULTY } from './config.js';
 import { overlap, cx, cy, clamp, lerp, makeRng, sign } from './util.js';
 import { TileMap } from './tilemap.js';
 import { Player } from './player.js';
-import { makeEnemy, RustSoldier, GearKnight, Warden } from './enemies.js';
+import { makeEnemy, RustSoldier, GearKnight, Warden, BellGuard } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
 import { castArt, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell, MELEE } from './arts.js';
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
@@ -61,6 +61,7 @@ export class Game {
   // ───────── 進行 ─────────
   newGame(seed) {
     this.meta = newMeta(seed);
+    this.meta.difficulty = this.settings.difficulty || 'normal';
     this.save();
     this.startLoop();
   }
@@ -109,6 +110,12 @@ export class Game {
       aoeTendency: (() => { const a = habitAnalysis(meta.lastLoop); return !!(a && a.total >= 80 && a.shares.skill >= 0.4); })(), // 前の夜は術（範囲攻撃）が多かったか
       scale: enemyScale(meta),
     };
+    // 難易度：敵の HP・攻撃・行動パターンの段階を調整し、簡単では戦略（対策・陣形・回避）を使わない
+    const diff = DIFFICULTY[meta.difficulty] || DIFFICULTY.normal;
+    this.run.diff = diff;
+    const sc = this.run.scale;
+    this.run.scale = { ...sc, hp: sc.hp * diff.hp, dmg: sc.dmg * diff.dmg, tier: Math.max(1, Math.min(3, sc.tier + diff.tierAdd)) };
+    if (!diff.strategy) { this.run.mobCounter = null; this.run.aoeTendency = false; }
     // 発動する術は 1 つだけ（楔と継承で重なったら Lv の高い方）
     const actives = wedgedBoons.filter((b) => BOONS[b.id].active).sort((a, b) => b.tier - a.tier);
     for (const extra of actives.slice(1)) wedgedBoons.splice(wedgedBoons.indexOf(extra), 1);
@@ -200,7 +207,7 @@ export class Game {
   enemyHaste(e) {
     const s = this.threatStep();
     const h = e.boss ? Math.min(1.25, 1 + 0.03 * s) : Math.min(1.4, 1 + 0.05 * s);
-    return h * (e.counter === 'dodge' && !e.boss ? 1.15 : 1);
+    return h * (e.counter === 'dodge' && !e.boss ? 1.15 : 1) * (this.run.diff ? this.run.diff.speed : 1);
   }
   // 中ボス・刻守は、術で一度に削れる量に上限がある（1 秒あたり最大HPの数%。超えた分はごくわずかしか通らない）
   spellGuard(e, dmg) {
@@ -219,7 +226,7 @@ export class Game {
   // 増援：脅威の段に加えて、夜が進む（戦闘部屋を 3 つ越える）ごと・夜が深いほど、だんだん敵が増える
   spawnThreatExtras(desc) {
     const grow = Math.min(THREAT.growCap, Math.floor(((this.run.combats || 1) - 1) / 3) + Math.floor(this.run.scale.level / 2));
-    const n = Math.min(THREAT.extraCap, this.threatStep()) + grow;
+    const n = Math.max(0, Math.min(THREAT.extraCap, this.threatStep()) + grow + (this.run.diff ? this.run.diff.extra : 0));
     if (!n) return;
     const rng = makeRng((this.run.plan.offerSeed ^ (this.run.fi * 97 + this.run.ri * 13)) >>> 0);
     const types = extraEnemyTypes(this.run.fi, this.run.scale.level);
@@ -251,8 +258,12 @@ export class Game {
   //  槍衾（剣の相手）…入口に近い前衛は近接、奥の後衛は遠距離（光線砲手・弓兵）
   //  散開（術の相手）…固まらずに散らばり、足の速いネズミと遠距離が増える
   formation(list) {
-    const style = this.buildStyle();
+    const diff = this.run.diff || DIFFICULTY.normal;
+    // 簡単：陣形を組まず、敵が 1 体少ない。難しい：戦い方に関係なく、階層ごとに陣形を組む
+    let style = diff.strategy ? this.buildStyle() : null;
+    if (!style && diff.strategy === 'always') style = this.run.fi % 2 === 0 ? 'melee' : 'aoe';
     this.room.formation = style;
+    if (diff.extra < 0 && list.length > 2) list = list.slice(0, list.length - 1);
     if (!style) return list;
     const fi = this.run.fi, P = this.marker('P');
     const GROUND = 'SRALENJF';
@@ -282,7 +293,8 @@ export class Game {
     if (!e.boss && this.run.mobCounter) e.counter = this.run.mobCounter;
     if (this.room.formation === 'aoe') e.spread = !e.boss && !e.elite;
     // 範囲攻撃が多い相手には、範囲攻撃を躱す動きを覚える
-    if (this.run.aoeTendency || this.player.boons.filter((b) => PASSIVE_IDS.includes(b.id)).reduce((a, b) => a + passiveWeight(b), 0) >= 6) e.aoeDodge = true;
+    const st = this.run.diff ? this.run.diff.strategy : true;
+    if (st === 'always' || (st && (this.run.aoeTendency || this.player.boons.filter((b) => PASSIVE_IDS.includes(b.id)).reduce((a, b) => a + passiveWeight(b), 0) >= 6))) e.aoeDodge = true;
     this.room.enemies.push(e);
     const tellKey = { beamer: 'tell_beamer', chain: 'tell_chain', rat: 'tell_rat', hopper: 'tell_hopper', warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
     if (tellKey) e.tellKey = tellKey;
@@ -364,9 +376,11 @@ export class Game {
   }
   setupBoss() {
     const M = this.marker('M');
-    const counter = bossCounter(this.meta.lastLoop);
+    const counter = this.run.diff && !this.run.diff.strategy ? null : bossCounter(this.meta.lastLoop);
     const b = this.addEnemy(new Tokimori(M.x, M.y + TILE, { counter, brake: hasWedge(this.meta, 'brake'), rng: this.run.bossRng }));
     b.face = -1;
+    this.room.boss = b;
+    this.spawnGuards((this.run.diff || DIFFICULTY.normal).guards);
     this.room.boss = b;
     const lines = [];
     if (this.meta.flags.bossBeaten) lines.push({ who: '刻守（師）', text: 'また来たか、弟子よ。この命が尽きるまで、鐘は鳴らす。朝は来させん。' });
@@ -544,7 +558,7 @@ export class Game {
     if (info.spell && (e.boss || e.elite)) dmg = this.spellGuard(e, dmg);
     dmg = Math.round(dmg);
     // 刻守は戦いの中でも見切る：HP が 7 割を切った時点で、いちばん受けている種類のダメージを半減する
-    if (e.boss && !e.defeated) {
+    if (e.boss && !e.defeated && (!this.run.diff || this.run.diff.strategy)) {
       const ck = info.echo ? 'echo' : info.spell ? 'skill' : info.cat;
       const tk = (e.taken ||= {}); tk[ck] = (tk[ck] || 0) + dmg;
       if (!e.adapted && e.hp <= e.maxHp * 0.7) {
@@ -882,7 +896,7 @@ export class Game {
     const p = this.player;
     for (const e of this.room.enemies) {
       if (!e.alive) continue;
-      for (const a of e.attacks) this.hitPlayer(a, Math.round(a.dmg * this.enemyDmgMul()), cx(e), a.key);
+      for (const a of e.attacks) this.hitPlayer(a, Math.round(a.dmg * this.enemyDmgMul() * (e.dmgMul || 1)), cx(e), a.key);
     }
   }
   resolveProjectiles() {
@@ -1430,7 +1444,23 @@ export class Game {
   }
 
   // ───────── 刻守 ─────────
+  // 刻守の護衛（鐘楼の衛士）：弱いが数で押してくる。第二楽章で増援。刻守が倒れると崩れ落ちる
+  spawnGuards(n) {
+    const b = this.room.boss;
+    if (!b || n <= 0 || this.room.duel) return;
+    for (let i = 0; i < n; i++) {
+      const side = i % 2 === 0 ? -1 : 1;
+      const gx = clamp(cx(b) + side * (70 + 40 * Math.floor(i / 2)), 60, this.map.pxW - 60);
+      const g = this.addEnemy(new BellGuard(gx - 10, b.y + b.h));
+      g.guard = true;
+      this.fx.burst(gx, b.y + b.h - 16, '#c9a052', 10);
+    }
+  }
+  clearGuards() {
+    for (const e of this.room.enemies) if (e.guard && e.alive) { e.alive = false; e.handled = true; this.fx.burst(cx(e), cy(e), '#c9a052', 12); }
+  }
   onBossPhase(b, phase) {
+    if (phase === 2) { const w = (this.run.diff || DIFFICULTY.normal).guardWave; this.spawnGuards(w); if (w) this.fx.text(cx(b), b.y - 40, '衛士の増援', '#c9a052', 14); }
     this.fx.shake(6, 0.4);
     this.sfx.play('bossBell');
     this.room.projectiles = [];
@@ -1451,6 +1481,7 @@ export class Game {
     }
   }
   beginTrueDuel(b) {
+    this.clearGuards();
     b.trueDuel = true;
     b.brake = true; // 真の決闘では時止めを使わない
     b.setState('phaseShift');
@@ -1463,6 +1494,7 @@ export class Game {
     this.fx.setBanner('夜明けの決闘', '', '#ffd38a', 2.0);
   }
   onBossDefeated(b) {
+    this.clearGuards();
     this.addShards(40 + 10 * this.run.scale.level, cx(b), b.y - 30);
     this.room.projectiles = [];
     this.room.bossOutroT = 0;
@@ -1633,8 +1665,17 @@ export class Game {
     const o = [];
     if (this.meta) o.push({ id: 'continue', label: this.meta.flags.ending ? `終わらない夜へ（第 ${this.meta.loop} 夜）` : `続きから（第 ${this.meta.loop} 夜）` });
     o.push({ id: 'new', label: this.meta ? 'はじめから（記録を消す）' : 'はじめる' });
+    o.push({ id: 'diff', label: `難易度：${this.difficulty().name}（決定で切り替え）` });
     o.push({ id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}` });
     return o;
+  }
+  difficulty() { return DIFFICULTY[(this.meta && this.meta.difficulty) || this.settings.difficulty || 'normal'] || DIFFICULTY.normal; }
+  // 難易度を切り替える（簡単→普通→難しい。セーブがあれば次の夜から反映）
+  cycleDifficulty() {
+    const order = ['easy', 'normal', 'hard'];
+    const next = order[(order.indexOf(this.difficulty().id) + 1) % order.length];
+    this.settings.difficulty = next;
+    if (this.meta) { this.meta.difficulty = next; this.save(); }
   }
   updateTitle(input) {
     const opts = this.titleOptions();
@@ -1652,6 +1693,7 @@ export class Game {
       if (o.id === 'continue') this.continueGame();
       else if (o.id === 'new') { if (this.meta) this.titleConfirm = true; else this.newGame(); }
       else if (o.id === 'shake') this.settings.shake = !this.settings.shake;
+      else if (o.id === 'diff') this.cycleDifficulty();
     }
   }
 
@@ -1660,7 +1702,7 @@ export class Game {
     const row = (y0, step, n, h = 24) => { for (let i = 0; i < n; i++) if (Math.abs(y - (y0 + i * step - 5)) < h / 2) return i; return -1; };
     if (this.scene === 'title') {
       if (this.titleConfirm) return y > 390 && y < 470;
-      const i = row(410, 28, this.titleOptions().length, 26);
+      const i = row(400, 26, this.titleOptions().length, 24);
       if (i < 0 || Math.abs(x - VIEW_W / 2) > 200) return false;
       this.titleSel = i; return true;
     }
@@ -1913,6 +1955,7 @@ export class Game {
           if (o.id === 'resume') this.modal = null;
           else if (o.id === 'journal') this.openJournal();
           else if (o.id === 'shake') this.settings.shake = !this.settings.shake;
+          else if (o.id === 'diff') this.cycleDifficulty();
           else if (o.id === 'vol') { this.settings.volume = (Math.round(this.settings.volume * 10) + 2) % 12 / 10; this.sfx.setVolume(this.settings.volume); }
           else if (o.id === 'giveup') { this.modal = null; this.player.hp = 0; this.player.state = 'dead'; this.run.deathT = 1.6; this.endRun('death'); }
           input.consume('jump'); input.consume('attack');
@@ -1934,6 +1977,7 @@ export class Game {
     return [
       { id: 'resume', label: '再開' },
       { id: 'journal', label: '記録帳' },
+      { id: 'diff', label: `難易度：${this.difficulty().name}（次の夜から）` },
       { id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}` },
       { id: 'vol', label: `音量：${Math.round(this.settings.volume * 10)}` },
       { id: 'giveup', label: 'この夜をあきらめる（巻き戻る）' },

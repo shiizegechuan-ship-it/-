@@ -7,6 +7,7 @@ import { computeStats, rollOffer, BOONS } from '../src/boons.js';
 import { makeRng } from '../src/util.js';
 import { ARTIFACTS } from '../src/artifacts.js';
 import { Spell } from '../src/arts.js';
+import { Game } from '../src/game.js';
 
 function arena(E, dx = 120, tier = 1) {
   const g = sandbox(FLAT); const d = new Driver(g);
@@ -717,4 +718,51 @@ test('部屋全体を攻める術：刻震は部屋じゅうの敵に当たり�
   const before = dealt([{ id: 'tolling', tier: 2 }, { id: 'starfield', tier: 2 }]);
   const after = dealt([{ id: 'celestial', tier: 1 }]);
   assert.ok(before > 0 && after > before, `${after} > ${before}`);
+});
+
+test('難易度：簡単→普通→難しい の順に、敵の強さ・行動の段階・戦略・数が増える', () => {
+  const room = (diff) => {
+    const g = newGame(61);
+    g.meta.difficulty = diff; g.meta.loop = 3;
+    g.meta.lastLoop = { dmgByCat: { skill: 900, combo: 50 }, boons: [], clock: 120, dodges: 2 };
+    g.startLoop(); g.modal = null;
+    g.enterRoom(1, 0); g.modal = null;
+    return { g, n: g.room.enemies.length, hp: g.run.scale.hp, tier: g.run.scale.tier, form: g.room.formation, counter: g.run.mobCounter, dodge: g.room.enemies.some((e) => e.aoeDodge) };
+  };
+  const e = room('easy'), n = room('normal'), h = room('hard');
+  assert.ok(e.hp < n.hp && n.hp < h.hp);
+  assert.ok(e.tier <= n.tier && n.tier <= h.tier && e.tier < h.tier);
+  assert.ok(e.n < h.n, `${e.n} < ${h.n}`);
+  assert.equal(e.counter, null); assert.equal(e.form, null); assert.equal(e.dodge, false);
+  assert.equal(n.counter, 'skill');
+  assert.ok(h.form, 'hard always forms up'); assert.ok(h.dodge);
+  // 予備動作は簡単ほど長い
+  const se = e.g.room.enemies[0], sh = h.g.room.enemies[0];
+  assert.ok(se.wmul(e.g) > sh.wmul(h.g));
+});
+
+test('難易度はタイトルで切り替えられ、新しく始めた記録に反映される', () => {
+  const g = new Game({ deterministicFx: true });
+  assert.equal(g.difficulty().id, 'normal');
+  g.cycleDifficulty(); assert.equal(g.difficulty().id, 'hard');
+  g.cycleDifficulty(); assert.equal(g.difficulty().id, 'easy');
+  g.newGame(5); g.modal = null;
+  assert.equal(g.meta.difficulty, 'easy'); assert.equal(g.run.diff.id, 'easy');
+});
+
+test('刻守の護衛：鐘楼の衛士が現れ（数は難易度しだい）、第二楽章で増援、刻守が倒れると崩れ落ちる', () => {
+  for (const [diff, n0] of [['easy', 1], ['normal', 2], ['hard', 3]]) {
+    const g = newGame(62); g.meta.difficulty = diff; g.startLoop(); g.modal = null;
+    const bi = g.run.plan.floors[2].findIndex((r) => r.type === 'boss');
+    g.enterRoom(2, bi); g.modal = null;
+    const guards = () => g.room.enemies.filter((e) => e.guard && e.alive);
+    assert.equal(guards().length, n0, diff);
+    assert.ok(guards().every((e) => e.maxHp < g.room.boss.maxHp * 0.2), 'guards are weak');
+    const b = g.room.boss;
+    b.hp = b.maxHp * 0.59; b.checkPhase(g);
+    if (diff !== 'easy') assert.ok(guards().length > n0, 'reinforcements at phase 2');
+    b.hp = 1; b.state = 'idle'; b.takeHit(g, { dmg: 5, dir: 1, knock: 0, cat: 'combo' });
+    assert.ok(b.defeated);
+    assert.equal(guards().length, 0);
+  }
 });

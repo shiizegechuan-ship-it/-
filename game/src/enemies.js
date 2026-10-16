@@ -29,7 +29,8 @@ export class Enemy {
   }
   get timeScale() { return this.warp > 0 ? 0.35 : this.lag > 0 ? 0.6 : 1; }
   get slowed() { return this.warp > 0 || this.lag > 0; }
-  wmul(game) { return this.slowed ? game.player.stats.slowWindupMul : 1; }
+  // 予備動作の長さの倍率（遅い敵・難易度）
+  wmul(game) { return (this.slowed ? game.player.stats.slowWindupMul : 1) * (game.run && game.run.diff ? game.run.diff.windup : 1); }
   setState(s) { this.state = s; this.stateT = 0; this.tell = 0; }
   facePlayer(p) { this.face = cx(p) < cx(this) ? -1 : 1; }
   dx(p) { return cx(p) - cx(this); }
@@ -759,6 +760,17 @@ export class Warden extends Enemy {
     if (this.hp <= 0) this.alive = false;
     if (info.breaks && this.state === 'recover') { this.setState('stagger'); return { blocked: false, flinched: true, guardBreak: true }; }
     return { blocked: false, flinched: false };
+  }
+}
+
+// 鐘楼の衛士（刻守の護衛）：錆兵の弱い仲間。刻守が倒れると崩れ落ちる
+export class BellGuard extends RustSoldier {
+  constructor(x, y) {
+    super(x, y);
+    this.kind = 'guard';
+    this.hp = this.maxHp = 26;
+    this.dmgMul = 0.6;
+    this.cool = 1.2;
   }
 }
 

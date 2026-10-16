@@ -104,7 +104,7 @@ export function drawHud(ctx, game) {
   // 中央：夜の時刻・階層・部屋の進み
   const fi = run.fi;
   text(ctx, `夜 ${fmtClock(run.clock)}`, VIEW_W / 2, 26, { size: 15, align: 'center', bold: true, color: '#efe6d2' });
-  text(ctx, `第${meta.loop}夜　${FLOOR_NAMES[fi]}　深さLv${run.scale ? run.scale.level : 0}` + (threat ? `　脅威${threat}` : ''), VIEW_W / 2, 42, { size: 11, align: 'center', color: threat ? '#ff9a7a' : C.muted });
+  text(ctx, `${run.diff ? run.diff.name + '　' : ''}第${meta.loop}夜　${FLOOR_NAMES[fi]}　深さLv${run.scale ? run.scale.level : 0}` + (threat ? `　脅威${threat}` : ''), VIEW_W / 2, 42, { size: 11, align: 'center', color: threat ? '#ff9a7a' : C.muted });
   const rooms = run.plan.floors[fi];
   const dotW = 14, sx = VIEW_W / 2 - (rooms.length * dotW) / 2 + dotW / 2;
   rooms.forEach((r, i) => {
@@ -448,10 +448,10 @@ export function drawTitle(ctx, game) {
     return;
   }
   const opts = game.titleOptions();
-  opts.forEach((o, i) => text(ctx, (i === game.titleSel ? '▶ ' : '') + o.label, VIEW_W / 2, 410 + i * 28, { size: 16, align: 'center', color: i === game.titleSel ? C.gold : '#bbb' }));
-  text(ctx, game.touch ? 'タップで選ぶ' : '↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　時歪 V　調べる ↑', VIEW_W / 2, VIEW_H - 18, { size: 11, align: 'center', color: C.muted });
-  if (game.meta && game.meta.flags.ending) text(ctx, '★ クリア済み ― 夜明けを迎えた', VIEW_W / 2, 498, { size: 12, align: 'center', color: '#ffd38a' });
-  else if (game.meta) drawDawnStrip(ctx, game, 498);
+  opts.forEach((o, i) => text(ctx, (i === game.titleSel ? '▶ ' : '') + o.label, VIEW_W / 2, 400 + i * 26, { size: 16, align: 'center', color: i === game.titleSel ? (o.id === 'diff' ? game.difficulty().color : C.gold) : o.id === 'diff' ? game.difficulty().color : '#bbb' }));
+  text(ctx, game.touch ? 'タップで選ぶ' : '↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　術 V　調べる ↑', VIEW_W / 2, VIEW_H - 18, { size: 11, align: 'center', color: C.muted });
+  if (game.meta && game.meta.flags.ending) text(ctx, '★ クリア済み ― 夜明けを迎えた', VIEW_W / 2, 506, { size: 12, align: 'center', color: '#ffd38a' });
+  else if (game.meta) drawDawnStrip(ctx, game, 506);
 }
 
 // ───────── 巻き戻り ─────────

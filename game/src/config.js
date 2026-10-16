@@ -65,6 +65,14 @@ export const ATTACKS = {
   heavy: { startup: 6 * F, active: 5 * F, recovery: 20 * F, cancel: 18 * F, dmg: 40, w: 62, h: 40, ox: 4, oy: -6, knock: 380, stop: 7 * F, lunge: 150, cat: 'heavy', shake: 6, breaks: true },
 };
 
+// 難易度。普通がこれまでの調整。上がるほど敵の行動パターン（段階）・戦略（陣形・対策・回避）・数が増える
+export const DIFFICULTY = {
+  easy: { id: 'easy', name: '簡単', hp: 0.8, dmg: 0.7, tierAdd: -1, windup: 1.3, speed: 0.92, extra: -1, strategy: false, guards: 1, guardWave: 0, color: '#8fe0a0' },
+  normal: { id: 'normal', name: '普通', hp: 1, dmg: 1, tierAdd: 0, windup: 1, speed: 1, extra: 0, strategy: true, guards: 2, guardWave: 1, color: '#efe6d2' },
+  hard: { id: 'hard', name: '難しい', hp: 1.15, dmg: 1.15, tierAdd: 1, windup: 0.9, speed: 1.06, extra: 1, strategy: 'always', guards: 3, guardWave: 2, color: '#ff8a6a' },
+};
+export const DIFF_ORDER = ['easy', 'normal', 'hard'];
+
 export const COLORS = {
   bg0: '#0d0b14',
   bg1: '#17131f',

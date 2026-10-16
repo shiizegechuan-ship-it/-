@@ -81,6 +81,8 @@ function renderPlay(ctx, game) {
   for (const g of fx.ghosts) { b.globalAlpha = 0.45 * (1 - g.t / g.life); drawSprite(b, spr('hero', 'dodge', 'ghost'), (g.x + g.w / 2) / 2, (g.y + g.h) / 2, g.face); }
   b.globalAlpha = 1;
   for (const e of game.room.enemies) drawEnemy(b, game, e);
+  // 鐘楼の衛士：兜の金の飾り
+  for (const e of game.room.enemies) if (e.kind === 'guard' && e.alive) { const x = Math.round(cx(e) / 2), y = Math.round(e.y / 2); rect(b, x - 1, y - 3, 3, 2, '#f2c14e'); pset(b, x, y - 4, '#fff2b0'); }
   // 対策をしてきた敵：頭上に小さな赤い目
   for (const e of game.room.enemies) if (e.counter && e.alive && !e.boss) { const x = Math.round(cx(e) / 2), y = Math.round(e.y / 2) - 4; pset(b, x - 1, y, '#ff4a2a'); pset(b, x + 1, y, '#ff4a2a'); pset(b, x, y - 1, '#ffb0a0'); }
   drawPlayer(b, game, game.player);
@@ -608,7 +610,7 @@ function drawEnemy(b, game, e) {
     else outlined(b, group, frame, bx, by, f, slowGlow, 'blue', duel);
     drawSprite(b, spr(group, frame, flash ? 'white' : null, duel), bx, by, f);
   };
-  switch (e.kind) {
+  switch (e.kind === 'guard' ? 'soldier' : e.kind) { // 衛士は錆兵の姿（金の飾り付き）
     case 'soldier': {
       const winding = e.state === 'windup' || e.state === 'windup2' || e.state === 'thrustWind';
       const frame = winding ? 'crouch' : Math.abs(e.vx) > 10 ? (Math.floor(t * 8) % 2 ? 'walk0' : 'walk1') : 'stand';
