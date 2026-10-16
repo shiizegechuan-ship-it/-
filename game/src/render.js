@@ -933,6 +933,26 @@ function drawEnemy(b, game, e) {
       line(b, bx - 4, by - 1, bx - 5, by, '#c9a052'); line(b, bx + 4, by - 1, bx + 5, by, '#c9a052');
       break;
     }
+    case 'mallet': { // 大槌兵：ずんぐりした鉄の体に大槌。振りかぶると槌が後ろへ回り赤く光る
+      const tc = e.tell > 0 ? (e.tell > 0.6 ? '#ff4a2a' : '#c0402a') : slowGlow ? '#5aa9e6' : null;
+      if (tc) rect(b, bx - 7, by - 18, 14, 18, tc);
+      rect(b, bx - 6, by - 17, 12, 16, flash ? '#ffffff' : '#4a4038'); rect(b, bx - 5, by - 16, 10, 5, flash ? '#ffffff' : '#6a5a48');
+      rect(b, bx - 4, by - 12, 8, 1, '#c9a052'); pset(b, bx + f * 3, by - 14, '#ff3a2a');
+      rect(b, bx - 5, by - 2, 4, 2, '#2a221c'); rect(b, bx + 1, by - 2, 4, 2, '#2a221c');
+      // 槌の角度：構え → 振りかぶり（後ろ） → 振り抜き（前）
+      let a = -0.6;
+      if (e.state === 'wind') a = -0.6 - e.tell * 2.0;
+      else if (e.state === 'swing') a = -2.6 + Math.min(1, e.stateT / 0.1) * 3.4;
+      else if (e.state === 'recover') a = 0.9;
+      const hx = bx + f * 3, hy = by - 10, len = 13;
+      const ang = f > 0 ? a : Math.PI - a;
+      const tx = hx + Math.round(Math.cos(ang) * len), ty = hy + Math.round(Math.sin(ang) * len);
+      line(b, hx, hy, tx, ty, '#8a6a44', 1);
+      rect(b, tx - 3, ty - 3, 6, 6, e.tell > 0.6 ? '#ff6a4a' : '#7a7a86'); rect(b, tx - 2, ty - 2, 4, 4, flash ? '#ffffff' : '#a8a8b4');
+      if (e.state === 'swing' && e.stateT < 0.16) { arc(b, hx, hy, 15, f > 0 ? -1.4 : Math.PI - 0.8, f > 0 ? 0.8 : Math.PI + 1.4, '#ffd0a0', 2); }
+      if (e.state === 'recover') for (let i = 0; i < 3; i++) pset(b, bx - 3 + i * 3, by - 21 - (Math.floor(t * 6 + i) % 2), '#9a8fa6');
+      break;
+    }
     case 'warden': { // 振り子の番人：大きな柱時計の体・文字盤の顔・胸の振り子
       const x0 = bx - 10, y0 = by - 28;
       const tellCol = e.tell > 0 ? (e.tell > 0.6 ? '#ff4a2a' : '#c0402a') : null;

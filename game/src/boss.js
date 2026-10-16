@@ -72,7 +72,7 @@ export class Tokimori extends Enemy {
         break;
       case 'swing':
         this.vx = approach(this.vx, 0, 1200 * dt);
-        this.attacks.push({ ...this.frontBox(118, 54, -4), dmg: 20, key: this.id * 1000 + this.swing });
+        this.attacks.push({ ...this.frontBox(118, 54, -4), dmg: 20, knock: 480, key: this.id * 1000 + this.swing });
         if (this.stateT >= 0.18) {
           // 第3段階・怒り時は針投げへ連携
           if ((this.phase === 3 || this.enraged) && this.rng.next() < 0.55) { this.setState('handsWind'); this.aimHands(p); game.sfx.play('tellBig'); }
@@ -114,7 +114,7 @@ export class Tokimori extends Enemy {
         }
         break;
       case 'slam':
-        if (this.stateT < 0.1) this.attacks.push({ x: this.x - 34, y: this.y + this.h - 30, w: this.w + 68, h: 30, dmg: 22, key: this.id * 1000 + this.swing });
+        if (this.stateT < 0.1) this.attacks.push({ x: this.x - 34, y: this.y + this.h - 30, w: this.w + 68, h: 30, dmg: 22, knock: 420, key: this.id * 1000 + this.swing });
         if (this.stateT >= 0.1) this.recover(0.6);
         break;
       // 時止め（第2段階以降。歯止めに楔があると使えない）
@@ -144,7 +144,7 @@ export class Tokimori extends Enemy {
         if (this.stateT >= 0.32) { this.setState('punish'); this.swing++; this.vx = this.face * 520; game.sfx.play('heavySwing'); }
         break;
       case 'punish':
-        this.attacks.push({ ...this.frontBox(60, 50), dmg: 20, key: this.id * 1000 + this.swing });
+        this.attacks.push({ ...this.frontBox(60, 50), dmg: 20, knock: 600, key: this.id * 1000 + this.swing });
         this.vx = approach(this.vx, 0, 700 * dt);
         if (this.stateT >= 0.35 || (this.coll && this.coll.hitX)) this.recover(1.1);
         break;

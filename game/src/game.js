@@ -9,7 +9,7 @@ import { castArt, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, S
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
 import { Fx } from './fx.js';
 import { NullSfx } from './audio.js';
-import { BOONS, rollOffer, rollRare, boonMax, PASSIVE_IDS, passiveWeight, readyFusions, countsForThreat } from './boons.js';
+import { BOONS, rollOffer, rollRare, boonMax, canForge, PASSIVE_IDS, passiveWeight, readyFusions, countsForThreat } from './boons.js';
 import { expToNext, expFor, levelBonus, LEVEL } from './level.js';
 import { rewindGrid, lbRowAt } from './layout.js';
 import { nightLook } from './nightlook.js';
@@ -27,7 +27,7 @@ const MELEE_IDS = ['edge', 'crit', 'critdmg', 'comboheat', 'heavyart', 'fourth',
 export const THREAT = { free: 3, per: 3, hp: 0.45, dmg: 0.08, bossHp: 0.65, extraCap: 3, growCap: 2 }; // 最初の 3 つ（Lv の合計）は数えない
 const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourglass: '砂時計', gold: '金貨', artifact: 'アーティファクト' };
 // 敵ごとの金貨（夜が深いほど多い）
-const GOLD = { beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
+const GOLD = { mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
 
 export class Game {
   constructor(opts = {}) {
@@ -300,7 +300,7 @@ export class Game {
     const st = this.run.diff ? this.run.diff.strategy : true;
     if (st === 'always' || (st && (this.run.aoeTendency || this.player.boons.filter((b) => PASSIVE_IDS.includes(b.id)).reduce((a, b) => a + passiveWeight(b), 0) >= 6))) e.aoeDodge = true;
     this.room.enemies.push(e);
-    const tellKey = { beamer: 'tell_beamer', chain: 'tell_chain', rat: 'tell_rat', hopper: 'tell_hopper', warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
+    const tellKey = { mallet: 'tell_mallet', beamer: 'tell_beamer', chain: 'tell_chain', rat: 'tell_rat', hopper: 'tell_hopper', warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
     if (tellKey) e.tellKey = tellKey;
     return e;
   }
@@ -443,6 +443,7 @@ export class Game {
     // 時止め中はプレイヤーだけが遅くなる（完全停止はさせない）
     const pdt = this.timeStopT > 0 ? dt * 0.3 : dt;
     p.update(this, input, pdt);
+    if (p.wallSlam) this.onWallSlam();
     if (p.afterT > 0) p.afterT -= pdt;
 
     if (p.state === 'normal' && p.onGround && (input.pressed('interact') || input.pressed('up'))) this.tryInteract();
@@ -940,7 +941,7 @@ export class Game {
     const p = this.player;
     for (const e of this.room.enemies) {
       if (!e.alive) continue;
-      for (const a of e.attacks) this.hitPlayer(a, Math.round(a.dmg * this.enemyDmgMul() * (e.dmgMul || 1)), cx(e), a.key);
+      for (const a of e.attacks) this.hitPlayer(a, Math.round(a.dmg * this.enemyDmgMul() * (e.dmgMul || 1)), cx(e), a.key, a.knock);
     }
   }
   resolveProjectiles() {
@@ -953,11 +954,11 @@ export class Game {
         if (!pr.hitDone && d <= pr.r + 10 && d >= pr.r - pr.band - 10) { if (this.hitPlayer(p, pr.dmg, pr.x, pr.key)) pr.hitDone = true; }
         continue;
       }
-      if (this.hitPlayer(pr, pr.dmg, pr.x + pr.w / 2, pr.key) && pr.kind !== 'wave') pr.alive = false;
+      if (this.hitPlayer(pr, pr.dmg, pr.x + pr.w / 2, pr.key, pr.knock) && pr.kind !== 'wave') pr.alive = false;
     }
   }
   // 戻り値: 当たったか
-  hitPlayer(box, dmg, fromX, key) {
+  hitPlayer(box, dmg, fromX, key, knock) {
     const p = this.player;
     if (p.state === 'dead') return false;
     // ジャスト回避：回避を始めた位置か今の位置に、回避直後の攻撃が重なれば成立（少し広めに取る）
@@ -968,8 +969,23 @@ export class Game {
     }
     if (!overlap(box, p)) return false;
     if (p.invulnerable) return false;
-    this.damagePlayer(dmg, { fromX });
+    this.damagePlayer(dmg, { fromX, knock });
     return true;
+  }
+
+  // 吹き飛ばされて壁に激突：少し余計に痛い（これだけでは倒れない）
+  onWallSlam() {
+    const p = this.player;
+    p.wallSlam = false;
+    if (p.state === 'dead') return;
+    const extra = Math.round(6 * this.enemyDmgMul() * (p.stats.dmgTaken || 1));
+    p.hp = Math.max(1, p.hp - extra);
+    this.fx.text(cx(p), p.y - 22, `壁に激突！ -${extra}`, '#ff8a5a', 13);
+    this.fx.shake(9, 0.25); this.fx.dust(p.face > 0 ? p.x : p.x + p.w, cy(p), 10);
+    this.fx.ring(cx(p), cy(p), '#ffb07a', 34, 0.25);
+    this.sfx.play('heavyHit');
+    this.hitstop = Math.max(this.hitstop, 6 / 60);
+    this.emit('playerHurt', { dmg: extra, hp: p.hp });
   }
 
   perfectDodge() {
@@ -992,12 +1008,14 @@ export class Game {
     this.emit('perfect');
   }
 
-  damagePlayer(dmg, { fromX, pit } = {}) {
+  damagePlayer(dmg, { fromX, pit, knock } = {}) {
     const p = this.player;
     if (p.state === 'dead') return;
     if (!pit && p.invulnerable) return;
     if (!pit) dmg = Math.max(1, Math.round(dmg * (p.stats.dmgTaken || 1))); // 守りの歯車
-    p.hurt(dmg, fromX ?? cx(p));
+    p.hurt(dmg, fromX ?? cx(p), pit ? 0 : knock);
+    // 吹き飛ばし：白い衝撃の輪と、飛ばされる向きの風切り
+    if (knock && p.state === 'hurt') { this.fx.ring(cx(p), cy(p), '#ffffff', 40, 0.3); this.fx.text(cx(p), p.y - 24, '吹き飛ばされた', '#ffd0a0', 11); this.fx.shake(8, 0.25); }
     // 落下からの復帰では吹き飛ばさない（同じ穴へ落ち続けないように）
     if (pit && p.state !== 'dead') { p.vx = 0; p.vy = 0; }
     if (this.combo.n >= 10) this.fx.text(cx(p), p.y - 26, `${this.combo.n} HIT 途切れた`, '#9a8fa6', 11);
@@ -1865,8 +1883,8 @@ export class Game {
     this.sfx.play('pickup');
   }
   openForge() {
-    const tier1 = this.player.boons.filter((b) => b.tier < boonMax(b.id) && BOONS[b.id].school !== 'risk');
-    if (!tier1.length) { this.openDialog([{ who: 'グレン', text: '鍛えるもんが無ぇじゃねえか。強化を手に入れてから来な。' }]); return; }
+    const tier1 = this.player.boons.filter(canForge);
+    if (!tier1.length) { this.openDialog([{ who: 'グレン', text: '鍛えて伸びるもんが無ぇじゃねえか。数字のある強化を手に入れてから来な。' }]); return; }
     this.modal = { type: 'forge', list: tier1, sel: 0, t: 0 };
   }
   openCode() {

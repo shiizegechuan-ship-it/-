@@ -361,7 +361,8 @@ export class GearKnight extends Enemy {
         if (this.stateT >= 0.42 * wm) { this.setState('bash'); this.swing++; this.vx = this.face * 420; game.sfx.play('heavySwing'); }
         break;
       case 'bash':
-        this.attacks.push({ ...this.frontBox(26, 40), dmg: 20, key: this.id * 1000 + this.swing });
+        // 盾突進は大きく突き飛ばす
+        this.attacks.push({ ...this.frontBox(26, 40), dmg: 20, knock: 520, key: this.id * 1000 + this.swing });
         this.vx = approach(this.vx, 0, 900 * dt);
         if (this.stateT >= 0.25 || (this.coll && this.coll.hitX)) this.setState('recover');
         break;
@@ -712,7 +713,7 @@ export class Warden extends Enemy {
         if (this.stateT >= 0.7 * wm) { this.setState('sweep'); this.swing++; this.vx = this.face * 140; game.sfx.play('heavySwing'); game.fx.shake(4, 0.15); }
         break;
       case 'sweep':
-        if (this.stateT < 0.25) this.attacks.push({ ...this.frontBox(88, 54, -6), dmg: 26, key: this.id * 1000 + this.swing });
+        if (this.stateT < 0.25) this.attacks.push({ ...this.frontBox(88, 54, -6), dmg: 26, knock: 600, key: this.id * 1000 + this.swing });
         this.vx = approach(this.vx, 0, 700 * dt);
         if (this.stateT >= 0.3) {
           // 怒ると振り返ってもう一度薙ぐ
@@ -975,6 +976,54 @@ export class Hopper extends Enemy {
   }
 }
 
+// 大槌兵（吹き飛ばし）：大槌を後ろへ大きく振りかぶり、横薙ぎで遠くへ吹き飛ばす。壁を背にすると激突して余計に痛い。
+// 振ったあとは槌の重さで長い隙。第3夜からは振り抜きに続けて二撃目（逆方向の打ち返し）
+export class Mallet extends Enemy {
+  constructor(x, y) {
+    super('mallet', x + 2, y - 34, 26, 34, 95);
+    this.cool = 1.0; this.poise = 12; this.hits = 0;
+    this.setState('walk');
+  }
+  think(game, dt) {
+    const p = game.player, map = game.map;
+    const dx = this.dx(p), adx = Math.abs(dx), ady = Math.abs(this.dy(p));
+    if (this.cool > 0) this.cool -= dt;
+    switch (this.state) {
+      case 'walk': {
+        this.facePlayer(p);
+        const blocked = this.ledgeAhead(map, this.face) || this.wallAhead(map, this.face);
+        this.vx = approach(this.vx, adx > 50 && !blocked ? this.face * 65 : 0, 500 * dt);
+        if (this.cool <= 0 && adx < 80 && ady < 50 && p.state !== 'dead') { this.hits = this.tier >= 3 ? 2 : 1; this.setState('wind'); game.sfx.play('tellBig'); }
+        break;
+      }
+      case 'wind': {
+        this.vx = approach(this.vx, 0, 900 * dt);
+        const wt = (this.hits === 1 && this.tier >= 3 && this.again ? 0.4 : 0.8) * this.wmul(game);
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'mallet';
+        if (this.stateT >= wt) { this.setState('swing'); this.swing++; this.vx = this.face * 160; game.sfx.play('heavySwing'); }
+        break;
+      }
+      case 'swing':
+        this.vx = approach(this.vx, 0, 800 * dt);
+        if (this.stateT < 0.16) this.attacks.push({ ...this.frontBox(46, 40, -4), dmg: 15, knock: 580, key: this.id * 1000 + this.swing });
+        if (this.stateT >= 0.22) {
+          this.hits--;
+          if (this.hits > 0) { this.again = true; this.face = sign(this.dx(p)) || this.face; this.setState('wind'); }
+          else { this.again = false; this.setState('recover'); }
+        }
+        break;
+      case 'recover':
+        this.vx = approach(this.vx, 0, 700 * dt);
+        if (this.stateT >= 1.0) { this.cool = 1.1; this.setState('walk'); }
+        break;
+      case 'flinch':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        if (this.stateT > 0.22) this.setState('walk');
+        break;
+    }
+  }
+}
+
 // 爆弾：地面で弾けて小さな衝撃波
 Projectile.prototype.explode = function (game) {
   this.alive = false;
@@ -999,6 +1048,7 @@ export function makeEnemy(c, x, y) {
     case 'N': return new ChainReaper(x, y + TILE);
     case 'F': return new GearRat(x, y + TILE);
     case 'J': return new Hopper(x, y + TILE);
+    case 'H': return new Mallet(x, y + TILE);
   }
   return null;
 }

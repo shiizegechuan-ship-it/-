@@ -54,14 +54,14 @@ export const BOONS = {
   judgement: { school: 'power', max: 5, fusion: true, melee: true, name: '断罪', desc: (t) => `[合成・剣] 重撃 ×${(2.5 + 0.5 * (t - 1)).toFixed(1)}。HP25%以下の雑魚は重撃で即断ち、中ボス以上には +100%` },
   thousand: { school: 'power', max: 5, fusion: true, melee: true, name: '千刃', desc: (t) => `[合成・剣] コンボ1ごとの加算 +${2 + t}%。連撃のたびに剣気が 3 本飛ぶ（各${Math.round(16 * (1 + 0.4 * (t - 1)))}）` },
   // 派手な術（V で放つ）
-  thunderstorm: { school: 'arts', max: 5, active: true, name: '雷霆', desc: (t) => `[術・全体] 画面じゅうに雷が降り注ぐ（1 本${Math.round(20 * (1 + 0.4 * (t - 1)))}、約${18 + 2 * t}本）ゲージ${55 - 4 * (t - 1)}` },
+  thunderstorm: { school: 'arts', max: 5, active: true, name: '雷霆', desc: (t) => `[術・全体] 画面じゅうに雷が降り注ぐ（1 本${Math.round(15 * (1 + 0.4 * (t - 1)))}、約${26 + 2 * t}本）ゲージ${55 - 4 * (t - 1)}` },
   heavenblade: { school: 'arts', max: 5, active: true, name: '天剣', desc: (t) => `[術] 手元から伸びる長大な剣が、背中から前へ大きく回って薙ぎ払う（${Math.round(50 * (1 + 0.4 * (t - 1)))}・届く長さ${380 + 20 * t}）ゲージ${45 - 3 * (t - 1)}` },
   prismbeam: { school: 'arts', max: 5, active: true, name: '光芒', desc: (t) => `[術] 前方へ七色の光線を放ち続け、触れた敵を焼き続ける（${Math.round(9 * (1 + 0.4 * (t - 1)))}／0.09秒・約1秒）ゲージ${50 - 3 * (t - 1)}` },
   novaorb: { school: 'arts', max: 5, active: true, name: '星核', desc: (t) => `[術] 大きな光の球をゆっくり放つ。触れた敵を削り、最後に大爆発（${Math.round(8 * (1 + 0.4 * (t - 1)))}／0.15秒＋爆発${Math.round(50 * (1 + 0.4 * (t - 1)))}）ゲージ${45 - 3 * (t - 1)}` },
   // 派手な常時の術
   satellites: { school: 'arts', max: 5, name: '衛星', desc: (t) => `[常時] 光の球が${2 + t}つ、尾を引いて体のまわりを大きく回る（各${Math.round(12 * (1 + 0.4 * (t - 1)))}）` },
-  tornado: { school: 'arts', max: 5, name: '時の竜巻', desc: (t) => `[常時] 6 秒ごとに竜巻が前へ進み、敵を巻き込んで削る（${Math.round(6 * (1 + 0.4 * (t - 1)))}／0.3秒）` },
-  spinblade: { school: 'arts', max: 5, name: '旋剣', desc: (t) => `[常時] 4 秒ごとに、長い光の剣が手元を軸に一回転する（${Math.round(22 * (1 + 0.4 * (t - 1)))}・長さ150）` },
+  tornado: { school: 'arts', max: 5, name: '時の竜巻', desc: (t) => `[常時] 5 秒ごとに竜巻がゆっくり前へ進み、敵を吸い込んで削る（${Math.round(14 * (1 + 0.4 * (t - 1)))}／0.3秒）` },
+  spinblade: { school: 'arts', max: 5, name: '旋剣', desc: (t) => `[常時] 3 秒ごとに、長い光の剣が手元を軸に 2 周する（1 周ごとに${Math.round(26 * (1 + 0.4 * (t - 1)))}・長さ150）` },
   galaxy: { school: 'arts', max: 5, fusion: true, name: '銀河の渦', desc: (t) => `[合成・常時] 大きな星が${5 + t}つ回り（各${Math.round(22 * (1 + 0.4 * (t - 1)))}）、4 秒ごとに足元へ星雲の渦が生まれて敵を吸い込む` },
   clockhand: { school: 'arts', max: 5, fusion: true, name: '時計の長針', desc: (t) => `[合成・常時] 長さ 220 の光の長針が、手元を軸に絶えず回り続ける（${Math.round(26 * (1 + 0.4 * (t - 1)))}）` },
   // 部屋全体を攻める術（威力は低め。合成で強くなる）
@@ -132,7 +132,19 @@ export function readyFusions(boons) {
 }
 export const passiveSynergy = (n) => 1 + 0.15 * Math.max(0, n - 1);
 for (const id of PASSIVE_IDS) { const d = BOONS[id].desc; BOONS[id].desc = (t) => d(t) + '（常時の術が多いほど強化）'; }
-export const boonMax = (id) => BOONS[id].max || 2;
+export const boonMax = (id) => BOONS[id].max || (BOONS[id].school === 'rare' || BOONS[id].school === 'risk' ? 1 : 2);
+// 鍛冶で鍛えられるか：上限に達しておらず、鍛えると効果が実際に変わるものだけ
+export const canForge = (b) => (b.tier || 1) < boonMax(b.id) && BOONS[b.id].desc(b.tier || 1) !== BOONS[b.id].desc((b.tier || 1) + 1);
+// 鍛える前後の違いを「35%→50%」のように数字だけ並べて示す（文の形が違うときは前後の全文）
+export function forgeDiff(id, tier) {
+  const a = BOONS[id].desc(tier), b = BOONS[id].desc(tier + 1);
+  const re = /\d+(?:\.\d+)?/g;
+  const sa = a.split(re), sb = b.split(re), na = a.match(re) || [], nb = b.match(re) || [];
+  if (sa.length !== sb.length || sa.some((x, i) => x !== sb[i])) return { now: a, next: b, diff: null };
+  let out = sa[0];
+  for (let i = 0; i < na.length; i++) out += (na[i] === nb[i] ? na[i] : `${na[i]}→${nb[i]}`) + sa[i + 1];
+  return { now: a, next: b, diff: out };
+}
 
 // 共鳴（同系統2つ）
 export const RESONANCE = {

@@ -304,8 +304,8 @@ export const LAYOUTS = {
 // 階層ごとの敵の出現テーブル（揺らぎ）。夜の深さで種類と数が増える
 // S 錆兵 / A 時計弓兵 / R 歯車転がし / L 鐘撞き / B 振り子蝙蝠 / P 刻の亡霊 / T 時計砲台
 function floorEnemies(floor, nl) {
-  // E 光線砲手 / N 鎖鎌兵 / F 歯車ネズミ / J 跳ね潰し
-  const g = [['S', 'S', 'A', 'F'], ['S', 'R', 'A', 'L', 'N', 'J'], ['S', 'A', 'R', 'L', 'E', 'N', 'J', 'F']][floor].slice();
+  // E 光線砲手 / N 鎖鎌兵 / F 歯車ネズミ / J 跳ね潰し / H 大槌兵
+  const g = [['S', 'S', 'A', 'F', 'H'], ['S', 'R', 'A', 'L', 'N', 'J', 'H'], ['S', 'A', 'R', 'L', 'E', 'N', 'J', 'F', 'H']][floor].slice();
   if (nl >= 1 && floor === 0) g.push('J', 'N');
   if (nl >= 2 && floor <= 1) g.push('E');
   const a = [['B'], ['B', 'P'], ['B', 'P']][floor].slice();

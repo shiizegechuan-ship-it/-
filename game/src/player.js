@@ -98,7 +98,7 @@ export class Player {
       case 'attack': this.updateAttack(game, input, dt, dirX); break;
       case 'charge': this.updateCharge(game, input, dt, dirX); break;
       case 'dodge': this.updateDodge(game, input, dt); break;
-      case 'hurt': this.updateHurt(dt); this.stopAtAbyss(game.map, dt); break;
+      case 'hurt': this.updateHurt(dt); if (this.kbT > 0 && this.kbGround) this.stopAtAbyssAir(game.map, dt); else this.stopAtAbyss(game.map, dt); break;
       case 'channel': this.updateChannel(game, input, dt); break;
       case 'dead': this.vx = approach(this.vx, 0, 900 * dt); break;
       case 'frozen': this.vx = 0; break; // 会話・演出中
@@ -111,8 +111,10 @@ export class Player {
     }
     const wasGround = this.onGround;
     if (!this.onGround) this.fallV = this.vy;
+    const vx0 = this.vx;
     const r = moveBody(this, map, dt, { dropThrough: this.dropT > 0 });
     this.onGround = r.onGround;
+    if (this.state === 'hurt' && this.kbT > 0 && r.hitX && Math.abs(vx0) > 220) { this.wallSlam = true; this.kbT = 0; this.vx = -sign(vx0) * 60; }
     if (this.onGround) {
       this.coyoteT = P.coyote;
       this.airDodgeUsed = false;
@@ -216,6 +218,12 @@ export class Player {
   }
 
   // 足元の先が底なしの穴なら止まる（地上の回避と吹き飛びだけ。空中の回避は止めない）
+  // 地上で吹き飛ばされたときは、空中でも奈落の上へは飛ばさない（理不尽な落下を防ぐ）
+  stopAtAbyssAir(map, dt) {
+    if (this.vx === 0) return;
+    const fx = this.vx > 0 ? this.x + this.w + this.vx * dt + 2 : this.x + this.vx * dt - 2;
+    if (map.groundBelow(fx, this.y + this.h + 1) >= map.pxH) this.vx = 0;
+  }
   stopAtAbyss(map, dt) {
     if (!this.onGround || this.vx === 0) return;
     const fx = this.vx > 0 ? this.x + this.w + this.vx * dt + 2 : this.x + this.vx * dt - 2;
@@ -363,8 +371,9 @@ export class Player {
   }
 
   updateHurt(dt) {
-    this.vx = approach(this.vx, 0, 800 * dt);
-    if (this.stateT >= P.hurtStun) { this.state = 'normal'; this.stateT = 0; }
+    if (this.kbT > 0) this.kbT -= dt;
+    this.vx = approach(this.vx, 0, (this.kbT > 0 ? 350 : 800) * dt);
+    if (this.stateT >= (this.hurtStun || P.hurtStun)) { this.state = 'normal'; this.stateT = 0; this.kbT = 0; }
   }
 
   startChannel(duration, label, onDone, onCancel) {
@@ -383,7 +392,7 @@ export class Player {
     }
   }
 
-  hurt(dmg, fromX) {
+  hurt(dmg, fromX, knock = 0) {
     this.hp = Math.max(0, this.hp - dmg);
     this.atk = null; this.channel = null;
     if (this.hp <= 0) {
@@ -397,5 +406,11 @@ export class Player {
     this.vx = dir * P.hurtKnockX;
     this.vy = P.hurtKnockY;
     this.comboIndex = 0;
+    // 強い吹き飛ばし：低く遠くへ飛ばされ、少し長く動けない。壁に当たると激突（wallSlam）
+    this.kbT = 0; this.hurtStun = P.hurtStun;
+    if (knock) {
+      this.vx = dir * knock; this.vy = -200;
+      this.kbT = 0.4; this.kbGround = this.onGround; this.hurtStun = P.hurtStun + 0.15;
+    }
   }
 }

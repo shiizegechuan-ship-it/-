@@ -1,7 +1,7 @@
 // HUD・メニュー・巻き戻り画面。装飾より可読性を優先する。
 import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC } from './config.js';
 import { clamp } from './util.js';
-import { BOONS, SCHOOLS, RESONANCE, synergyHints, schoolCounts } from './boons.js';
+import { BOONS, forgeDiff, SCHOOLS, RESONANCE, synergyHints, schoolCounts } from './boons.js';
 import { ACTIVE_ARTS } from './arts.js';
 import { ARTIFACTS, ARTIFACT_COLOR } from './artifacts.js';
 import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, openQuestions, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritCount, enemyScale, DAWN_STEPS, dawnProgress } from './meta.js';
@@ -274,7 +274,7 @@ function drawBoonPick(ctx, game, m) {
     if (def.max) text(ctx, own ? `Lv${own.tier} → ${nt}` : 'Lv1', x + cw - 16, y + 28, { size: 13, align: 'right', color: own ? '#ffe14a' : C.muted });
     const curArt = def.active && !own ? p.boons.find((b) => BOONS[b.id].active) : null;
     if (curArt) text(ctx, `持ち替え：${BOONS[curArt.id].name} を外す`, x + 16, y + ch - 32, { size: 11, color: '#ff8ae0' });
-    wrap(ctx, def.desc(nt), cw - 28, 15).forEach((l, j) => text(ctx, l, x + 14, y + 86 + j * 21, { size: 15, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0' }));
+    wrap(ctx, own ? (forgeDiff(id, own.tier).diff || def.desc(nt)) : def.desc(nt), cw - 28, 15).forEach((l, j) => text(ctx, l, x + 14, y + 86 + j * 21, { size: 15, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0' }));
     const hints = synergyHints(id, p.boons);
     let hy = y + 180;
     for (const h of hints) { wrap(ctx, h, cw - 32, 11).forEach((l) => { text(ctx, l, x + 16, hy, { size: 11, color: '#f2c14e' }); hy += 15; }); }
@@ -346,8 +346,9 @@ function drawArtifactPick(ctx, game, m) {
 }
 
 function drawForge(ctx, game, m) {
-  const items = m.list.map((b) => { const d = BOONS[b.id], nt = (b.tier || 1) + 1; return { label: d.name, right: d.max ? `Lv${b.tier} → ${nt}` : '→ II', rightColor: '#ffe14a', desc: d.desc(nt) }; });
-  drawLightbox(ctx, game, { title: 'グレンの鍛冶 ― どれを鍛える？', items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? '鍛えると：' + items[m.sel].desc : '' });
+  // 鍛えると何がどう変わるかを、選ぶ前に数字で見せる（例：35%→50%）
+  const items = m.list.map((b) => { const d = BOONS[b.id], nt = (b.tier || 1) + 1, f = forgeDiff(b.id, b.tier || 1); return { label: d.name, right: d.max ? `Lv${b.tier} → ${nt}` : '→ II', rightColor: '#ffe14a', desc: f.diff ? '鍛えると：' + f.diff : `今：${f.now}／鍛えると：${f.next}` }; });
+  drawLightbox(ctx, game, { title: 'グレンの鍛冶 ― どれを鍛える？', items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? items[m.sel].desc : '' });
 }
 
 function drawCode(ctx, game, m) {

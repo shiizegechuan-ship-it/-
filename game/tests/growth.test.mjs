@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sandbox, Driver, FLAT, newGame } from './helpers.mjs';
-import { RustSoldier, GearRoller, ClockArcher, Phantom, BellRinger, PendulumBat, ClockTurret, GearKnight, Beamer, ChainReaper, GearRat, Hopper } from '../src/enemies.js';
+import { RustSoldier, GearRoller, ClockArcher, Phantom, BellRinger, PendulumBat, ClockTurret, GearKnight, Beamer, ChainReaper, GearRat, Hopper, Mallet, Warden } from '../src/enemies.js';
 import { newMeta, buyUpgrade, upLv, enemyScale, endLoop, inheritCount, UPGRADES } from '../src/meta.js';
-import { computeStats, rollOffer, BOONS } from '../src/boons.js';
-import { makeRng } from '../src/util.js';
+import { computeStats, rollOffer, BOONS, canForge, forgeDiff } from '../src/boons.js';
+import { makeRng, cx } from '../src/util.js';
 import { ARTIFACTS } from '../src/artifacts.js';
 import { Spell } from '../src/arts.js';
 import { Game } from '../src/game.js';
@@ -21,7 +21,7 @@ function arena(E, dx = 120, tier = 1) {
   return { g, d, e };
 }
 
-for (const [name, E] of [['歯車転がし', GearRoller], ['時計弓兵', ClockArcher], ['刻の亡霊', Phantom], ['鐘撞き', BellRinger], ['光線砲手', Beamer], ['鎖鎌兵', ChainReaper], ['歯車ネズミ', GearRat], ['跳ね潰し', Hopper]]) {
+for (const [name, E] of [['歯車転がし', GearRoller], ['時計弓兵', ClockArcher], ['刻の亡霊', Phantom], ['鐘撞き', BellRinger], ['光線砲手', Beamer], ['鎖鎌兵', ChainReaper], ['歯車ネズミ', GearRat], ['跳ね潰し', Hopper], ['大槌兵', Mallet]]) {
   test(`新しい敵「${name}」：予兆を見せてから攻撃し、プレイヤーに当たる`, () => {
     const { g, d, e } = arena(E, E === ClockArcher ? 220 : E === Beamer ? 260 : E === ChainReaper ? 170 : 150);
     let told = false;
@@ -858,4 +858,52 @@ test('夜ごとの様相：夜が進むと天気・色・ひびが変わり、�
   assert.ok(looks[3].cracks > looks[1].cracks);
   const g = newGame(74); g.meta.loop = 4; g.startLoop();
   assert.ok(g.nightNote && g.nightNote.text.length > 0);
+});
+
+test('大槌兵の薙ぎ払いは、ふつうの被弾よりずっと遠くへ吹き飛ばす', () => {
+  const travel = (E, dx) => {
+    const { g, d, e } = arena(E, dx);
+    const p = g.player; p.x += 300; e.x = p.x + dx; e.facePlayer(p);
+    const x0 = cx(p);
+    d.until(() => p.state === 'hurt', 60 * 6);
+    d.until(() => p.state !== 'hurt', 120);
+    return Math.abs(cx(p) - x0);
+  };
+  const far = travel(Mallet, 50), near = travel(RustSoldier, 40);
+  assert.ok(far > near * 2, `mallet ${far} vs soldier ${near}`);
+});
+
+test('壁への激突：吹き飛ばされて壁に当たると追加のダメージ（それだけでは倒れない）', () => {
+  const { g, d } = arena(RustSoldier, 400);
+  const p = g.player; p.x = 40; p.hp = 5;
+  g.damagePlayer(1, { fromX: p.x + 100, knock: 600 });
+  const hp1 = p.hp;
+  d.frame(30);
+  assert.ok(p.hp < hp1, 'wall slam hurts');
+  assert.ok(p.hp >= 1 && p.state !== 'dead');
+});
+
+test('中ボス・刻守の大技は吹き飛ばす（盾突進・大薙ぎ・振り子斬り）', () => {
+  const k = new GearKnight(0, 100); k.setState('bash'); k.think({ player: { x: 0, y: 0, w: 1, h: 1 }, map: { solidAt: () => false } }, 0.01);
+  assert.ok(k.attacks.length && k.attacks[0].knock > 300);
+  const g = newGame(5); g.meta.difficulty = 'normal';
+  const bi = g.run.plan.floors[2].findIndex((r) => r.type === 'boss');
+  g.enterRoom(2, bi); g.modal = null;
+  const b = g.room.boss; b.setState('swing'); b.think(g, 0.01);
+  assert.ok(b.attacks.length && b.attacks[0].knock > 300);
+});
+
+test('鍛冶：鍛えても変わらない強化（稀少など）は並ばず、何がどう上がるかを数字で先に見せる', () => {
+  assert.equal(canForge({ id: 'crown', tier: 1 }), false, 'rare does not scale');
+  assert.equal(canForge({ id: 'sandglass', tier: 1 }), false);
+  assert.equal(canForge({ id: 'edge', tier: 5 }), false, 'maxed');
+  assert.equal(canForge({ id: 'gale', tier: 1 }), true);
+  assert.equal(forgeDiff('gale', 1).diff, '回避の距離 +35→50%、再使用 -30→45%');
+  const g = newGame(6); g.enterRoom(0, 1); g.modal = null;
+  g.player.setBoons([{ id: 'crown', tier: 1 }, { id: 'edge', tier: 2 }, { id: 'goldeye', tier: 1 }]);
+  g.openForge();
+  assert.deepEqual(g.modal.list.map((b) => b.id), ['edge']);
+  g.player.setBoons([{ id: 'crown', tier: 1 }]);
+  g.openForge();
+  assert.notEqual(g.modal && g.modal.type, 'forge', 'nothing to forge');
 });
