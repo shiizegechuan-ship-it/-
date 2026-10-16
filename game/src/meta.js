@@ -222,7 +222,7 @@ export function endLoop(m, run) {
   report.kept.push({ text: `記録帳（${nk}件）`, sub: (run.learned || []).length ? `新たに ${(run.learned || []).length} 件` : '' });
   report.kept.push({ text: `時の欠片 +${run.shards || 0}（所持 ${m.shards}）`, sub: '刻印（恒久強化）に使える' });
   autoInherit(m, run.boons || []);
-  if (m.inherit.length) report.kept.push({ text: `継承：${m.inherit.map((b) => BOONS[b.id].name + (b.tier > 1 ? ' Lv' + b.tier : '')).join('・')}`, sub: `最大 ${inheritLabel(m)} 個（巻き戻り画面で変更できる）` });
+  if (m.inherit.length) report.kept.push({ text: `継承：${m.inherit.map((b) => BOONS[b.id].name + (b.tier > 1 ? ' Lv' + b.tier : '')).join('・')}`, sub: m.difficulty === 'veryeasy' ? '∞（めちゃ簡単：すべて自動で持ち越し、楔も自動で打たれる）' : `最大 ${inheritLabel(m)} 個（巻き戻り画面で変更できる）` });
   const inheritedIds = new Set(m.inherit.map((b) => b.id));
   const wedgedBoonIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
   const carryAll = m.difficulty === 'veryeasy'; // めちゃ簡単：強化はすべて持ち越す

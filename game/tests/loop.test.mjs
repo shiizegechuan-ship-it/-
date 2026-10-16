@@ -370,3 +370,46 @@ test('難易度は、記録を消してはじめからやり直しても（読�
   g.newGame(5);
   assert.equal(g.meta.difficulty, 'hard');
 });
+
+test('めちゃ簡単の巻き戻り画面：継承の刻印は ∞（刻めない）、継承と楔はすべて自動で外せない（楔の枠は使わない）', async () => {
+  const { newGame, Driver } = await import('./helpers.mjs');
+  const g = newGame(43); g.meta.difficulty = 'veryeasy'; g.startLoop(); g.modal = null;
+  const all = [{ id: 'edge', tier: 3 }, { id: 'crit', tier: 2 }, { id: 'satellites', tier: 2 }, { id: 'gale', tier: 1 }];
+  g.player.setBoons(all.map((b) => ({ ...b })));
+  g.endRun('death');
+  const d = new Driver(g);
+  d.until(() => g.scene === 'rewind', 300); d.frame(220);
+  const opts = g.rewindOptions();
+  const inh = opts.find((o) => o.id === 'inherit'), wd = opts.find((o) => o.id === 'wedgeBoon');
+  assert.ok(inh && /すべて自動/.test(inh.label) && /∞/.test(inh.label), inh && inh.label);
+  assert.ok(wd && /自動で打たれている/.test(wd.label), wd && wd.label);
+  assert.equal(g.inheritCandidates().length, all.length);
+  assert.equal(g.wedgeableBoons().length, all.length);
+  const wedges0 = g.meta.wedges.length, inherit0 = JSON.stringify(g.meta.inherit);
+  // 楔の一覧で決定しても、打ち直しも外しもできない
+  g.rewind.sel = opts.indexOf(wd); d.frame(1, ['confirm']); d.frame(1);
+  assert.equal(g.rewind.mode, 'wedgeBoon');
+  d.frame(1, ['confirm']); d.frame(1);
+  assert.equal(g.meta.wedges.length, wedges0, 'no wedge slot used'); assert.ok(g.rewind.lockedT > 0);
+  d.frame(1, ['dodge']); d.frame(1);
+  // 継承の一覧で決定しても外れない
+  g.rewind.sel = g.rewindOptions().findIndex((o) => o.id === 'inherit'); d.frame(1, ['confirm']); d.frame(1);
+  assert.equal(g.rewind.mode, 'inherit');
+  for (let i = 0; i < all.length; i++) { g.rewind.sub = i; d.frame(1, ['confirm']); d.frame(1); }
+  assert.equal(JSON.stringify(g.meta.inherit), inherit0);
+  d.frame(1, ['dodge']); d.frame(1);
+  // 継承の刻印は刻めない（欠片は減らない）
+  g.meta.shards = 9999;
+  g.rewind.sel = g.rewindOptions().findIndex((o) => o.id === 'upgrade'); d.frame(1, ['confirm']); d.frame(1);
+  g.rewind.sub = Object.keys((await import('../src/meta.js')).UPGRADES).indexOf('inherit');
+  d.frame(1, ['confirm']); d.frame(1);
+  assert.equal(g.meta.shards, 9999); assert.equal(g.meta.upgrades.inherit || 0, 0);
+  d.frame(1, ['dodge']); d.frame(1);
+  // 次の夜はすべて持ったまま
+  g.startLoop(); g.modal = null;
+  for (const b of all) assert.ok(g.player.boons.some((x) => x.id === b.id && x.tier === b.tier), b.id);
+  // ふつうの難易度では今までどおり選べる
+  const n = newGame(44); n.meta.difficulty = 'normal'; n.startLoop(); n.modal = null;
+  n.player.setBoons(all.map((b) => ({ ...b }))); n.endRun('death');
+  assert.ok(n.rewindOptions().some((o) => o.label.startsWith('継承する強化を選ぶ')));
+});

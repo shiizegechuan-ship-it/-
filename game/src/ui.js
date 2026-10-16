@@ -550,11 +550,16 @@ export function drawRewind(ctx, game) {
     const pull = r.mode === 'pull';
     const items = pull
       ? meta.wedges.map((w) => ({ label: wedgeLabel(w), desc: w.target === 'boon' ? WEDGE_TARGETS.boon.effect : WEDGE_TARGETS[w.target].effect }))
-      : game.wedgeableBoons().map((b) => { const d = BOONS[b.id]; return { label: d.name + (d.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), right: SCHOOLS[d.school].name, rightColor: SCHOOLS[d.school].color, desc: d.desc(b.tier || 1) }; });
+      : game.carryAll()
+        // めちゃ簡単：すべての強化に、はじめから楔が打たれている（楔の枠は使わない。外せない）
+        ? game.wedgeableBoons().map((b) => { const d = BOONS[b.id]; return { label: '▼ ' + d.name + (d.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: C.gold, right: '楔（自動・外せない）', rightColor: C.gold, desc: d.desc(b.tier || 1) }; })
+        : game.wedgeableBoons().map((b) => { const d = BOONS[b.id]; return { label: d.name + (d.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), right: SCHOOLS[d.school].name, rightColor: SCHOOLS[d.school].color, desc: d.desc(b.tier || 1) }; });
+    const autoW = !pull && game.carryAll();
     drawLightbox(ctx, game, {
-      title: pull ? '楔を抜く ― 抜いた対象は次の夜、元に戻る' : '強化に楔を打つ ― 次の夜も持ったまま始まる',
-      right: `楔 ${meta.wedges.length}/${meta.slots}`,
-      items, sel: r.sub, color: C.gold, desc: items[r.sub] ? items[r.sub].desc : '', st: r,
+      title: pull ? '楔を抜く ― 抜いた対象は次の夜、元に戻る' : autoW ? '強化の楔 ― めちゃ簡単：すべて自動で打たれている' : '強化に楔を打つ ― 次の夜も持ったまま始まる',
+      right: autoW ? `自動 ${items.length}` : `楔 ${meta.wedges.length}/${meta.slots}`,
+      items, sel: r.sub, color: C.gold, desc: autoW && r.lockedT > 0 ? 'めちゃ簡単では、すべての強化に自動で楔が打たれています（外せません。楔の枠は使いません）' : items[r.sub] ? items[r.sub].desc : '', st: r,
+      hint: autoW ? (game.touch ? '枠の外で戻る' : '↑↓ 見る　C 戻る') : undefined,
     });
   }
   if (r.mode === 'upgrade' || r.mode === 'inherit') drawRewindShop(ctx, game, r);
@@ -589,16 +594,20 @@ function drawRewindShop(ctx, game, r) {
   const m = game.meta;
   if (r.mode === 'upgrade') {
     const items = Object.entries(UPGRADES).map(([k, u]) => {
+      // めちゃ簡単：継承は最初から無限（刻印は要らない）
+      if (k === 'inherit' && game.carryAll()) return { label: `${u.name}　∞`, right: '無限', rightColor: C.gold, desc: 'めちゃ簡単：前の夜の強化と術を、すべて Lv ごと持ち越す（刻む必要はない）' };
       const lv = upLv(m, k), maxed = lv >= u.max, c = maxed ? 0 : u.cost(lv);
       return { label: `${u.name}　Lv${lv}/${u.max}`, right: maxed ? '最大' : `欠片 ${c}`, rightColor: maxed ? C.muted : m.shards >= c ? '#9fd0ff' : '#8a6a7a', desc: maxed ? u.desc(lv) : `いま：${lv ? u.desc(lv) : 'なし'}　→　次：${u.desc(lv + 1)}` };
     });
     drawLightbox(ctx, game, { title: '刻印 ― 夜を越えて残る力', right: `時の欠片 ${m.shards}`, items, sel: r.sub, color: '#9fd0ff', desc: items[r.sub] ? items[r.sub].desc : '', st: r });
   } else {
-    const list = game.inheritCandidates();
+    const list = game.inheritCandidates(), auto = game.carryAll();
     const items = list.map((b) => {
-      const def = BOONS[b.id], on = m.inherit.some((x2) => x2.id === b.id);
+      const def = BOONS[b.id], on = auto || m.inherit.some((x2) => x2.id === b.id);
+      if (auto) return { label: '◆ ' + def.name + (def.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: C.gold, right: '自動で持ち越す', rightColor: C.gold, desc: def.desc(b.tier || 1) };
       return { label: (on ? '◆ ' : '◇ ') + def.name + (def.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: on ? C.gold : '#bbb', right: on ? '持ち越す' : SCHOOLS[def.school].name, rightColor: on ? C.gold : SCHOOLS[def.school].color, desc: def.desc(b.tier || 1) };
     });
+    if (auto) { drawLightbox(ctx, game, { title: '継承 ― めちゃ簡単：すべて自動で持ち越す', right: `${list.length} / ∞`, items, sel: r.sub, color: C.gold, st: r, desc: r.lockedT > 0 ? 'めちゃ簡単では、すべての強化を自動で持ち越します（外せません）' : items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? '枠の外で戻る' : '↑↓ 見る　C 戻る' }); return; }
     drawLightbox(ctx, game, { title: `継承 ― 次の夜に持ち越す強化`, right: `${m.inherit.length} / ${inheritLabel(m)}`, items, sel: r.sub, color: C.gold, st: r, desc: items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? 'タップで選択、もう一度タップで ◆持ち越す／◇外す　枠の外で戻る' : '↑↓ 選ぶ　Z ◆持ち越す／◇外す　C 戻る' });
   }
 }

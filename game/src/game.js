@@ -2044,10 +2044,19 @@ export class Game {
     const m = this.meta;
     const opts = [{ id: 'next', label: '次の夜へ' }];
     opts.push({ id: 'upgrade', label: `刻印を刻む（時の欠片 ${m.shards}）` });
-    if (((m.lastLoop && m.lastLoop.boons) || []).length) opts.push({ id: 'inherit', label: `継承する強化を選ぶ（${(m.inherit || []).length}/${inheritLabel(m)}）` });
     const lastBoons = (m.lastLoop && m.lastLoop.boons) || [];
-    const wedgedIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
-    if (freeSlots(m) > 0 && lastBoons.some((b) => !wedgedIds.has(b.id))) opts.push({ id: 'wedgeBoon', label: '最後に掴んだ強化に楔を打つ' });
+    if (this.carryAll()) {
+      // めちゃ簡単：選ばなくても、すべての強化に楔が打たれ、すべて継承される（見るだけ。外せない）
+      const n = this.autoCarried().length;
+      if (n) {
+        opts.push({ id: 'inherit', label: `継承する強化（すべて自動 ${n}/∞）` });
+        opts.push({ id: 'wedgeBoon', label: `強化の楔（すべて自動で打たれている）` });
+      }
+    } else {
+      if (lastBoons.length) opts.push({ id: 'inherit', label: `継承する強化を選ぶ（${(m.inherit || []).length}/${inheritLabel(m)}）` });
+      const wedgedIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
+      if (freeSlots(m) > 0 && lastBoons.some((b) => !wedgedIds.has(b.id))) opts.push({ id: 'wedgeBoon', label: '最後に掴んだ強化に楔を打つ' });
+    }
     if (m.wedges.length) opts.push({ id: 'pull', label: '楔を抜く' });
     opts.push({ id: 'companion', label: `お供を替える（${COMPANIONS[m.companion] ? COMPANIONS[m.companion].name : 'なし'}）` });
     opts.push({ id: 'journal', label: '記録帳' });
@@ -2056,6 +2065,7 @@ export class Game {
   updateRewind(input) {
     const r = this.rewind;
     r.t += DT * (r.fast ? 2.5 : 1);
+    if (r.lockedT > 0) r.lockedT -= DT;
     if (this.modal) { this.updateModal(input); return; }
     const ready = r.t > 3.2;
     if (!ready) { if (input.pressed('confirm') || input.pressed('attack') || input.pressed('jump')) r.t = 3.2; return; }
@@ -2088,6 +2098,7 @@ export class Game {
       if (input.pressed('down')) { r.sub = (r.sub + 1) % list.length; this.sfx.play('select'); }
       if (input.pressed('back') || input.pressed('dodge')) { r.mode = 'view'; this.sfx.play('select'); return; }
       if (input.pressed('confirm') || input.pressed('jump')) {
+        if (r.mode === 'wedgeBoon' && this.carryAll()) { this.sfx.play('deny'); r.lockedT = 1.2; return; } // 自動の楔は外せない・打ち直せない
         if (r.mode === 'pull') {
           const w = removeWedge(this.meta, r.sub);
           this.sfx.play('door');
@@ -2104,8 +2115,12 @@ export class Game {
       }
     }
   }
+  // めちゃ簡単：前の夜の強化・術はすべて自動で持ち越す（継承は無限、楔は自動で打たれていて外せない）
+  carryAll() { return !!(DIFFICULTY[this.meta.difficulty] || {}).carryAll; }
+  autoCarried() { return ((this.meta.lastLoop && this.meta.lastLoop.boons) || []).filter((b) => BOONS[b.id] && BOONS[b.id].school !== 'bond'); }
   // 刻印（恒久強化）と継承の選択
   inheritCandidates() {
+    if (this.carryAll()) return this.autoCarried();
     const m = this.meta;
     const wedgedIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
     return ((m.lastLoop && m.lastLoop.boons) || []).filter((b) => !wedgedIds.has(b.id) && BOONS[b.id].school !== 'bond'); // 絆は自動で持ち越す
@@ -2121,12 +2136,14 @@ export class Game {
     if (!(input.pressed('confirm') || input.pressed('jump'))) return;
     if (r.mode === 'upgrade') {
       const k = list[r.sub];
+      if (k === 'inherit' && this.carryAll()) { this.sfx.play('deny'); r.lockedT = 1.2; return; } // めちゃ簡単は最初から無限
       if (buyUpgrade(m, k)) {
         this.sfx.play('wedge'); r.flash = 0.3;
         r.report.changed.push({ text: `刻印：${UPGRADES[k].name} Lv${upLv(m, k)}（${UPGRADES[k].desc(upLv(m, k))}）`, tone: 'gold' });
         if (k === 'inherit') { const prev = m.inherit.slice(); m.inherit = prev; }
       } else this.sfx.play('deny');
     } else {
+      if (this.carryAll()) { this.sfx.play('deny'); r.lockedT = 1.2; return; } // すべて自動で持ち越す（外せない）
       const b = list[r.sub];
       const i = m.inherit.findIndex((x) => x.id === b.id);
       if (i >= 0) { m.inherit.splice(i, 1); this.sfx.play('door'); }
@@ -2136,6 +2153,7 @@ export class Game {
     this.save();
   }
   wedgeableBoons() {
+    if (this.carryAll()) return this.autoCarried();
     const m = this.meta;
     const wedgedIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
     return ((m.lastLoop && m.lastLoop.boons) || []).filter((b) => !wedgedIds.has(b.id) && BOONS[b.id].school !== 'bond'); // 絆は自動で持ち越す
