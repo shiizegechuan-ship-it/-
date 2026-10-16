@@ -54,6 +54,7 @@ export class Enemy {
     if (!away && !jump) return;
     this.aoeCd = this.boss ? 8 : this.elite ? 4 : 3.5;
     this.dodgeI = 0.4; // この間は術が当たらない
+    if (this.boss) { game.fx.text(ex, this.y - 14, '見切り', '#9fd0ff', 10); return; } // 刻守はその場で見切る（動かない）
     if (this.gravity && this.onGround) this.vy = jump ? -480 : -260;
     else if (!this.gravity) this.vy = -160;
     if (away) this.vx = away * 300;
@@ -76,7 +77,7 @@ export class Enemy {
     if (this.spread && game.room) for (const o of game.room.enemies) if (o !== this && o.alive && Math.abs(cx(o) - cx(this)) < 44 && Math.abs(cy(o) - cy(this)) < 40) this.vx += sign(cx(this) - cx(o)) * 300 * dt;
     // 重撃への対策：溜めを見ると跳び退く
     const p = game.player;
-    if (this.counter === 'heavy' && !this.elite && this.gravity && this.onGround) {
+    if (this.counter === 'heavy' && !this.elite && !this.boss && this.gravity && this.onGround) {
       if (p.state === 'charge' && Math.abs(this.dx(p)) < 140 && !this.hopped) { this.hopped = true; this.vx = -sign(this.dx(p)) * 260; this.vy = -260; game.fx.dust(cx(this), this.y + this.h, 4); }
       if (p.state !== 'charge') this.hopped = false;
     }

@@ -1,5 +1,5 @@
 import test from 'node:test';
-import { cx } from '../src/util.js';
+import { cx, cy } from '../src/util.js';
 import assert from 'node:assert/strict';
 import { newGame, Driver } from './helpers.mjs';
 import { addWedge } from '../src/meta.js';
@@ -152,3 +152,29 @@ for (const [name, E, ranged, homing, air, up] of [['歯車騎士', GK2, 'throwWi
     assert.deepEqual(got2, [up]);
   });
 }
+
+test('刻守は何があってもノックバックしない（範囲攻撃の見切り・反撃の足捌き・外から加わる速さでも横へ動かない）', async () => {
+  const { newGame: ng } = await import('./helpers.mjs');
+  const { Spell } = await import('../src/arts.js');
+  const g = ng(5); g.meta.loop = 6; g.startLoop(); g.modal = null;
+  const bi = g.run.plan.floors[2].findIndex((r) => r.type === 'boss');
+  g.enterRoom(2, bi); g.modal = null;
+  const b = g.room.boss, dt = 1 / 60;
+  // 1) 範囲攻撃の見切り：その場で見切る（跳び退かない）
+  b.aoeCd = 0; b.vx = 0; b.vy = 0;
+  g.room.spells.push(new Spell('flamering', cx(b) + 60, cy(b), { r: 40, maxR: 100, pulses: 3, pulse: 0, dmg: 1 }));
+  b.tryDodgeAoe(g, dt);
+  assert.ok(b.dodgeI > 0, 'still reads the attack');
+  assert.equal(b.vx, 0); assert.equal(b.vy, 0);
+  // 2) 反撃の足捌き：下がらずにその場で斬り返す
+  b.setState('stepWind'); b.stateT = 0.3; b.think(g, dt);
+  assert.equal(b.state, 'step'); assert.equal(b.vx, 0);
+  // 3) 外から加わった横の速さは打ち消される
+  b.think = function () {}; b.setState('idle'); b.ownVx = 0; b.vx = 700;
+  const x0 = b.x; b.update(g, dt);
+  assert.ok(Math.abs(b.x - x0) < 0.01, `moved ${b.x - x0}`);
+  // 4) 重撃の溜めを見ても跳び退かない
+  b.counter = 'heavy'; g.player.state = 'charge'; g.player.x = b.x - 60; b.onGround = true; b.ownVx = 0; b.vx = 0;
+  b.update(g, dt);
+  assert.ok(!b.hopped && Math.abs(b.vx) < 1);
+});

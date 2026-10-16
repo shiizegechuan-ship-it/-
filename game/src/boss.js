@@ -28,6 +28,12 @@ export class Tokimori extends Enemy {
     this.moveHist = [];
     this.setState('intro');
   }
+  // 刻守は何があっても押し戻されない：外から加えられた横の速さは毎フレーム、自分の動きに戻す
+  update(game, dt) {
+    if (this.ownVx != null) this.vx = this.ownVx;
+    super.update(game, dt);
+    this.ownVx = this.vx;
+  }
   get enraged() { return this.brake && this.phase >= 2; }
   get speedMul() { return (this.phase === 3 ? 0.85 : 1) * (this.enraged ? 0.85 : 1) * (this.trueDuel ? 0.9 : 1); }
   get invuln() { return this.state === 'phaseShift' || this.state === 'intro' || this.state === 'defeated' || this.state === 'talk'; }
@@ -164,7 +170,7 @@ export class Tokimori extends Enemy {
         break;
       case 'stepWind':
         this.vx = 0; this.tell = clamp(this.stateT / 0.25, 0, 1); this.tellKind = 'red';
-        if (this.stateT >= 0.25) { this.setState('step'); this.swing++; this.vx = -this.face * 380; this.vy = -260; }
+        if (this.stateT >= 0.25) { this.setState('step'); this.swing++; this.vx = 0; } // その場で斬り返す（下がらない）
         break;
       case 'step':
         this.vx = approach(this.vx, 0, 900 * dt);
