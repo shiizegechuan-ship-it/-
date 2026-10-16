@@ -30,7 +30,7 @@ const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourg
 // 敵ごとの金貨（夜が深いほど多い）
 // 小さな護衛の数：中ボスに 3 体、刻守に 5 体（第二楽章の増援は難易度による）
 export const GUARDS = { elite: 3, boss: 5 };
-const GOLD = { squire: 2, mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
+const GOLD = { lancer: 7, trapper: 7, clocker: 7, vane: 6, squire: 2, mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
 
 export class Game {
   constructor(opts = {}) {
@@ -84,6 +84,11 @@ export class Game {
       const w = wedgedBoons.find((x) => x.id === b.id);
       if (w) w.tier = Math.max(w.tier, b.tier); else wedgedBoons.push({ ...b });
     }
+    // お供の絆の強化は、すべて持ち越す（継承・楔の枠を使わない）
+    for (const b of meta.bonds || []) {
+      const w = wedgedBoons.find((x) => x.id === b.id);
+      if (w) w.tier = Math.max(w.tier, b.tier); else wedgedBoons.push({ ...b });
+    }
     this.run = {
       plan,
       fi: 0, ri: 0,
@@ -127,7 +132,8 @@ export class Game {
     this.player.baseMaxHp = PC.maxHp + 15 * upLv(meta, 'hp');
     this.player.metaAtk = 1 + 0.1 * upLv(meta, 'atk');
     this.player.artifacts = [...(meta.artifacts || [])]; // 持ち越したアーティファクト
-    this.player.compMods = companionMods(meta.companion, 1);
+    const cst = Math.max(1, (meta.compStage || {})[meta.companion] || 1); // お供は前の夜に届いた段階のまま
+    this.player.compMods = companionMods(meta.companion, cst);
     this.player.setBoons(wedgedBoons);
     this.player.hp = this.player.maxHp;
     this.player.gauge = Math.min(PC.gaugeMax, 20 * upLv(meta, 'gauge'));
@@ -137,7 +143,7 @@ export class Game {
     this.fx.clear();
     this.timeStopT = 0; this.slowT = 0; this.hitstop = 0;
     this.enterRoom(0, 0);
-    this.comp = meta.companion && COMPANIONS[meta.companion] ? makeCompanion(meta.companion, this.player, 1) : null;
+    this.comp = meta.companion && COMPANIONS[meta.companion] ? makeCompanion(meta.companion, this.player, cst) : null;
     const pr = dawnProgress(meta);
     // 夜ごとの様相の一言（天気や塔の変化）
     const note = nightLook(meta).note;
@@ -277,7 +283,7 @@ export class Game {
     if (diff.extra < 0 && list.length > 2) list = list.slice(0, list.length - 1);
     if (!style) return list;
     const fi = this.run.fi, P = this.marker('P');
-    const GROUND = 'SRALENJF';
+    const GROUND = 'SRALENJFHYUO';
     const out = list.map((e) => ({ ...e }));
     const ground = out.filter((e) => GROUND.includes(e.type)).sort((a, b) => Math.abs(a.x - P.tx) - Math.abs(b.x - P.tx));
     const ranged = fi >= 1 ? 'E' : 'A';
@@ -307,7 +313,7 @@ export class Game {
     const st = this.run.diff ? this.run.diff.strategy : true;
     if (st === 'always' || (st && (this.run.aoeTendency || this.player.boons.filter((b) => PASSIVE_IDS.includes(b.id)).reduce((a, b) => a + passiveWeight(b), 0) >= 6))) e.aoeDodge = true;
     this.room.enemies.push(e);
-    const tellKey = { squire: 'tell_squire', mallet: 'tell_mallet', beamer: 'tell_beamer', chain: 'tell_chain', rat: 'tell_rat', hopper: 'tell_hopper', warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
+    const tellKey = { lancer: 'tell_lancer', trapper: 'tell_trapper', clocker: 'tell_clocker', vane: 'tell_vane', squire: 'tell_squire', mallet: 'tell_mallet', beamer: 'tell_beamer', chain: 'tell_chain', rat: 'tell_rat', hopper: 'tell_hopper', warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
     if (tellKey) e.tellKey = tellKey;
     return e;
   }
@@ -921,6 +927,7 @@ export class Game {
     c.stage = stage; c.pop = 1.2;
     p.compMods = companionMods(c.id, stage); p.setBoons(p.boons);
     c.announce = stage; // 進化の知らせは、強化を選ぶ画面などが閉じてから
+    (this.meta.compStage ||= {})[c.id] = Math.max(this.meta.compStage[c.id] || 1, stage); // 進化した姿は夜をまたいで残る
     this.emit('companionEvolve', { id: c.id, stage });
   }
   announceEvolution() {
@@ -936,7 +943,7 @@ export class Game {
   setCompanion(id) {
     this.meta.companion = id; this.save();
     if (this.scene === 'play' && this.player && this.run) {
-      const st = stageOf(this.run.level || 1);
+      const st = Math.max(stageOf(this.run.level || 1), (this.meta.compStage || {})[id] || 1);
       this.comp = makeCompanion(id, this.player, st);
       this.player.compMods = companionMods(id, st); this.player.setBoons(this.player.boons);
       this.fx.ring(this.comp.x, this.comp.y, COMPANIONS[id].color, 30, 0.4);
@@ -1012,7 +1019,10 @@ export class Game {
         if (!pr.hitDone && d <= pr.r + 10 && d >= pr.r - pr.band - 10) { if (this.hitPlayer(p, pr.dmg, pr.x, pr.key)) pr.hitDone = true; }
         continue;
       }
-      if (this.hitPlayer(pr, pr.dmg, pr.x + pr.w / 2, pr.key, pr.knock) && pr.kind !== 'wave') pr.alive = false;
+      if (this.hitPlayer(pr, pr.dmg, pr.x + pr.w / 2, pr.key, pr.knock) && pr.kind !== 'wave') {
+        pr.alive = false;
+        if (pr.kind === 'trap') { p.rootT = 0.7; this.fx.text(cx(p), p.y - 30, '罠に挟まれた', '#ff9a5a', 11); this.fx.sparks(pr.x + 10, pr.y + 4, '#c9a052', 10, 200); this.sfx.play('block'); }
+      }
     }
   }
   // 戻り値: 当たったか
@@ -1673,7 +1683,7 @@ export class Game {
     if (this.room) this.flushPickups();
     run.ended = true;
     const report = endLoop(this.meta, {
-      cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock, shards: run.shards, dodges: p.dodgeCount || 0, level: run.level || 1, gold: run.gold || 0, artifacts: p.artifacts || [],
+      cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock, shards: run.shards, dodges: p.dodgeCount || 0, level: run.level || 1, gold: run.gold || 0, artifacts: p.artifacts || [], comp: this.comp ? { id: this.comp.id, stage: this.comp.stage } : null,
     });
     this.save();
     this.sfx.play('rewind');
@@ -1771,7 +1781,7 @@ export class Game {
   inheritCandidates() {
     const m = this.meta;
     const wedgedIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
-    return ((m.lastLoop && m.lastLoop.boons) || []).filter((b) => !wedgedIds.has(b.id));
+    return ((m.lastLoop && m.lastLoop.boons) || []).filter((b) => !wedgedIds.has(b.id) && BOONS[b.id].school !== 'bond'); // 絆は自動で持ち越す
   }
   updateRewindShop(input, r) {
     const m = this.meta;
@@ -1801,7 +1811,7 @@ export class Game {
   wedgeableBoons() {
     const m = this.meta;
     const wedgedIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
-    return ((m.lastLoop && m.lastLoop.boons) || []).filter((b) => !wedgedIds.has(b.id));
+    return ((m.lastLoop && m.lastLoop.boons) || []).filter((b) => !wedgedIds.has(b.id) && BOONS[b.id].school !== 'bond'); // 絆は自動で持ち越す
   }
 
   // ───────── タイトル ─────────

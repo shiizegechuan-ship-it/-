@@ -1038,6 +1038,48 @@ function drawEnemy(b, game, e) {
       line(b, bx - 4, by - 1, bx - 5, by, '#c9a052'); line(b, bx + 4, by - 1, bx + 5, by, '#c9a052');
       break;
     }
+    case 'lancer': { // 投槍兵：細身に羽飾りの兜。振りかぶると槍を後ろへ引く
+      const tc = e.tell > 0 ? (e.tell > 0.6 ? '#ff4a2a' : '#c0402a') : slowGlow ? '#5aa9e6' : null;
+      if (tc) rect(b, bx - 6, by - 17, 12, 17, tc);
+      rect(b, bx - 4, by - 15, 8, 13, flash ? '#ffffff' : '#4a5a3a'); rect(b, bx - 3, by - 16, 6, 4, flash ? '#ffffff' : '#7a8a5a');
+      pset(b, bx + f * 2, by - 14, '#ff3a2a'); pset(b, bx - f * 2, by - 18, '#c9a052'); pset(b, bx - f * 3, by - 19, '#c9a052');
+      rect(b, bx - 3, by - 2, 2, 2, '#2a3022'); rect(b, bx + 1, by - 2, 2, 2, '#2a3022');
+      const pull = e.state === 'wind' ? Math.round(e.tell * 5) : 0;
+      line(b, bx - f * (4 + pull), by - 11, bx + f * (8 - pull), by - 13, '#c8b898'); pset(b, bx + f * (9 - pull), by - 13, '#ffffff');
+      break;
+    }
+    case 'trapper': { // 罠師：背に歯車の罠を背負った小柄な者。置くときにかがむ
+      const tc = e.tell > 0 ? (e.tell > 0.6 ? '#ff4a2a' : '#c0402a') : slowGlow ? '#5aa9e6' : null;
+      const sq = e.state === 'wind' ? Math.round(e.tell * 2) : 0;
+      if (tc) rect(b, bx - 6, by - 14 + sq, 12, 14 - sq, tc);
+      rect(b, bx - 4, by - 12 + sq, 8, 10 - sq, flash ? '#ffffff' : '#5a3a2a'); rect(b, bx - 3, by - 14 + sq, 6, 3, flash ? '#ffffff' : '#3a2a22');
+      pset(b, bx + f * 2, by - 13 + sq, '#ffe14a');
+      disc(b, bx - f * 5, by - 9 + sq, 3, '#7a6a52'); circle(b, bx - f * 5, by - 9 + sq, 3, '#c9a052'); // 背の罠
+      rect(b, bx - 3, by - 2, 2, 2, '#2a1a14'); rect(b, bx + 1, by - 2, 2, 2, '#2a1a14');
+      break;
+    }
+    case 'clocker': { // 時限兵：胸に大きな文字盤。印を刻むとき針が速く回る
+      const tc = e.tell > 0 ? (e.tell > 0.6 ? '#ff4a2a' : '#c0402a') : slowGlow ? '#5aa9e6' : null;
+      if (tc) rect(b, bx - 6, by - 16, 12, 16, tc);
+      rect(b, bx - 5, by - 15, 10, 13, flash ? '#ffffff' : '#3a3a52'); rect(b, bx - 3, by - 17, 6, 3, flash ? '#ffffff' : '#2a2a3e');
+      disc(b, bx, by - 9, 3, '#e8dcc4'); const ha = t * (e.state === 'wind' ? 20 : 2); line(b, bx, by - 9, bx + Math.round(Math.cos(ha) * 3), by - 9 + Math.round(Math.sin(ha) * 3), '#2a1e18');
+      pset(b, bx + f * 2, by - 16, '#ff3a2a');
+      rect(b, bx - 3, by - 2, 2, 2, '#1a1a26'); rect(b, bx + 1, by - 2, 2, 2, '#1a1a26');
+      break;
+    }
+    case 'vane': { // 風見鶏：屋根の風見の鶏。狙う方角に矢印が回る
+      const tc = e.tell > 0 ? (e.tell > 0.6 ? '#ff4a2a' : '#c0402a') : slowGlow ? '#5aa9e6' : null;
+      const yy = by - 5;
+      if (tc) disc(b, bx, yy, 6, tc);
+      rect(b, bx - 4, yy - 2, 8, 4, flash ? '#ffffff' : '#8a6a3a'); rect(b, bx + f * 3 - (f > 0 ? 0 : 1), yy - 4, 2, 3, flash ? '#ffffff' : '#8a6a3a');
+      pset(b, bx + f * 5, yy - 3, '#ffb04a'); pset(b, bx + f * 3, yy - 4, '#ff3a2a'); // くちばしととさか
+      line(b, bx - f * 4, yy - 1, bx - f * 7, yy - 4 - (Math.floor(t * 8) % 2), '#c9a052'); // 尾羽
+      const a = e.state === 'wind' && e.dirA != null ? e.dirA : t * 1.5;
+      const ax = bx + Math.round(Math.cos(a) * 7), ay = yy + 5 + Math.round(Math.sin(a) * 4);
+      line(b, bx, yy + 5, ax, ay, e.state === 'wind' ? '#ff4a2a' : '#c8c0b0'); pset(b, ax, ay, '#ffffff');
+      if (e.state === 'wind' && e.dirA != null && e.tell > 0.3) { b.globalAlpha = 0.25 + 0.4 * e.tell; dashLine(b, bx, yy, bx + Math.round(Math.cos(e.dirA) * 60), yy + Math.round(Math.sin(e.dirA) * 60), '#ff4a2a', 1, 2); b.globalAlpha = 1; }
+      break;
+    }
     case 'squire': { // 従者：小さな歯車人形。刻守の従者は金、中ボスの従者は銅。槍か礫を持つ
       const main = e.lord === 'boss' ? '#c9a052' : '#a8683a', dark = e.lord === 'boss' ? '#7a5a2a' : '#5a3a22';
       const tc = e.tell > 0 ? (e.tell > 0.6 ? '#ff4a2a' : '#c0402a') : slowGlow ? '#5aa9e6' : null;
@@ -1202,6 +1244,37 @@ function drawProjectile(b, pr, t) {
     b.globalAlpha = 1 - k * 0.6;
     for (let i = 0; i < Math.max(1, Math.round(pr.band / 4)); i++) circle(b, pr.x / 2, pr.y / 2, Math.max(1, pr.r / 2 - i * 2), i % 2 ? '#c9a052' : '#ffe6a0');
     b.globalAlpha = 1;
+  } else if (pr.kind === 'javelin') { // 投げ槍：飛ぶ向きに傾く
+    const d = Math.hypot(pr.vx, pr.vy) || 1, ux = pr.vx / d, uy = pr.vy / d;
+    line(b, x - ux * 7, y - uy * 7, x + ux * 5, y + uy * 5, '#c8b898'); pset(b, x + ux * 6, y + uy * 6, '#ffffff'); pset(b, x + ux * 5 - uy, y + uy * 5 + ux, '#e8e0d0');
+  } else if (pr.kind === 'trap') { // 歯車の罠：置かれた直後は点滅、準備ができると歯が開く
+    const gy = Math.round((pr.y + pr.h) / 2), armed = pr.delay <= 0;
+    if (armed) glow(b, x, gy - 2, 6, '#ff6a3a', 0.25 + 0.15 * Math.sin(t * 8));
+    rect(b, x - 6, gy - 2, 12, 2, '#3a2a1e'); rect(b, x - 6, gy - 3, 12, 1, '#c9a052'); disc(b, x, gy - 2, 1, '#7a6a52');
+    for (let i = 0; i < 6; i++) { const tx = x - 5 + i * 2; rect(b, tx, gy - (armed ? 6 : 4), 1, armed ? 3 : 1, armed ? '#f0e8d8' : '#9a9a9a'); }
+    if (armed) { pset(b, x - 7, gy - 4, '#ff4a2a'); pset(b, x + 6, gy - 4, '#ff4a2a'); }
+    if (pr.delay > 0 && pr.from && pr.t < 0.3) { const k = pr.t / 0.3; disc(b, Math.round((pr.from.x / 2) * (1 - k) + x * k), Math.round((pr.from.y / 2) * (1 - k) + gy * k - Math.sin(k * Math.PI) * 10), 2, '#c9a052'); }
+  } else if (pr.kind === 'mark') { // 時計の印 → 光の柱
+    const gy = Math.round(pr.gy / 2);
+    if (pr.delay > 0) {
+      const total = pr.life - 0.25, k = clamp(1 - pr.delay / total, 0, 1);
+      b.globalAlpha = 1;
+      circle(b, x, gy - 2, 8, k > 0.75 ? '#ff4a2a' : '#c9a052');
+      for (let i = 0; i < 12; i++) { const a = -Math.PI / 2 + i / 12 * Math.PI * 2; if (i / 12 <= k) pset(b, x + Math.round(Math.cos(a) * 8), gy - 2 + Math.round(Math.sin(a) * 3), '#ffe14a'); }
+      const ha = -Math.PI / 2 + k * Math.PI * 2; line(b, x, gy - 2, x + Math.round(Math.cos(ha) * 7), gy - 2 + Math.round(Math.sin(ha) * 3), '#ffffff');
+      if (k > 0.75) { b.globalAlpha = 0.25; rect(b, x - 9, gy - 48, 18, 46, '#ff4a2a'); b.globalAlpha = 1; }
+    } else {
+      glow(b, x, gy - 24, 14, '#ffe6a0', 0.6);
+      rect(b, x - 8, gy - 48, 16, 48, '#ffe6a0'); rect(b, x - 4, gy - 48, 8, 48, '#ffffff');
+    }
+  } else if (pr.kind === 'needle') { // 指向性の針：止まると向き直る線が出る
+    if (!pr.turned && pr.t > pr.turnAt && pr.aimA != null) {
+      b.globalAlpha = 0.5; dashLine(b, x, y, x + Math.round(Math.cos(pr.aimA) * 80), y + Math.round(Math.sin(pr.aimA) * 80), '#ff4a2a', 1, 2); b.globalAlpha = 1;
+      disc(b, x, y, 2, '#ffffff');
+    } else {
+      const d = Math.hypot(pr.vx, pr.vy) || 1, ux = pr.vx / d, uy = pr.vy / d;
+      line(b, x - ux * 4, y - uy * 4, x + ux * 3, y + uy * 3, '#e8e8ff'); pset(b, x + ux * 4, y + uy * 4, '#ffffff');
+    }
   } else if (pr.kind === 'biggear') { // 戻ってくる大歯車
     const a = pr.spin || 0;
     glow(b, x, y, 9, '#ffb04a', 0.35);

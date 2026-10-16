@@ -36,6 +36,10 @@ export const KNOWLEDGE = {
   tell_beamer: { cat: '敵', title: '光線砲手', text: () => '遠くから照準線を引き、部屋を貫く光線を撃つ。線は最後の一瞬で固定される――その瞬間に跳ぶか、線の高さから外れる。近づくと下がる。' },
   tell_chain: { cat: '敵', title: '鎖鎌兵', text: () => '少し離れた距離を保ち、鎖を振りかぶってまっすぐ伸ばす（届くのは約 6 歩）。振りかぶりを見たら跳ぶか、鎖の外へ。' },
   tell_rat: { cat: '敵', title: '歯車ネズミ', text: () => 'すばしっこく駆け寄り、身をかがめたら噛みつきの突進。噛んだらすぐ逃げる。体力は低い――逃げる背中を斬れ。' },
+  tell_lancer: { cat: '敵', title: '投槍兵', text: () => '距離を取って、放物線を描く投げ槍を足元へ投げてくる。槍を引いたら走るか跳ぶ。第2夜からは動く先を読んだ二投目。近づけば脆い。' },
+  tell_trapper: { cat: '敵', title: '罠師', text: () => '進む先の床に歯車の罠を置く。置かれて少しすると噛みつく準備ができ、踏むと挟まれて一瞬動けない。罠は斬れば壊せる。' },
+  tell_clocker: { cat: '敵', title: '時限兵', text: () => '足元に時計の印を刻む。針が一周すると光の柱が立つ――印から離れろ。第3夜からは 3 つ並べて順に立てる。' },
+  tell_vane: { cat: '敵', title: '風見鶏', text: () => '空から主人公の方角を 8 方位で読んで針を放つ。針は一度だけ止まって向き直る。止まった針から伸びる線の上から外れれば当たらない。' },
   tell_squire: { cat: '敵', title: '従者', text: () => '中ボスに 3 体、刻守に 5 体つき従う小さな歯車人形。槍の従者は身をかがめて光ってから跳んで突き、礫の従者は腕を回して光ってから小石を投げる。弱いが数で押してくる。主が倒れると崩れ落ちる。' },
   tell_mallet: { cat: '敵', title: '大槌兵', text: () => '大槌を後ろへ大きく振りかぶってから横に薙ぎ、遠くへ吹き飛ばす。壁を背にしていると激突して余計に痛い。振ったあとは長い隙。' },
   tell_hopper: { cat: '敵', title: '跳ね潰し', text: () => '身をかがめると着地点に影が落ち、そこへ跳びかかる。影から離れれば当たらない。着地のあとは隙だらけ。' },
@@ -84,6 +88,8 @@ export function newMeta(seed = (Date.now() & 0x7fffffff)) {
     upgrades: {}, // 刻印（恒久強化）の Lv
     inherit: [], // 次の夜に持ち越す強化（巻き戻り画面で選ぶ）
     artifacts: [], // 手に入れたアーティファクト（すべて持ち越す）
+    compStage: {}, // お供ごとの届いた段階（持ち越す）
+    bonds: [], // 絆の強化（すべて持ち越す）
     lastLoop: null,
     flags: { bossBeaten: false, diaryRead: false, archiveOpened: false, ending: false, seenRewind: false },
     stats: { deaths: 0, falseWins: 0, bestFloor: 0 },
@@ -123,13 +129,13 @@ export function enemyScale(m) {
 // 巻き戻りのとき、持ち越す強化を自動で選んでおく（Lv の高い順、火力優先）
 export function autoInherit(m, boons) {
   const wedged = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
-  const cand = boons.filter((b) => !wedged.has(b.id)).slice().sort((a, b) => (b.tier || 1) - (a.tier || 1) || (BOONS[b.id].school === 'power') - (BOONS[a.id].school === 'power'));
+  const cand = boons.filter((b) => !wedged.has(b.id) && BOONS[b.id].school !== 'bond').slice() // 絆は別に持ち越すので継承の枠を使わない.sort((a, b) => (b.tier || 1) - (a.tier || 1) || (BOONS[b.id].school === 'power') - (BOONS[a.id].school === 'power'));
   m.inherit = cand.slice(0, inheritCount(m)).map((b) => ({ ...b }));
 }
 
 // 古いセーブに新しい項目を足す
 function migrate(m) {
-  m.shards ??= 0; m.upgrades ??= {}; m.inherit ??= []; m.artifacts ??= [];
+  m.shards ??= 0; m.upgrades ??= {}; m.inherit ??= []; m.artifacts ??= []; m.compStage ??= {}; m.bonds ??= [];
   for (const k of ['power', 'arts', 'bond']) if (!m.unlocked.includes(k)) m.unlocked.push(k);
   m.companion ??= 'hotaru';
   return m;
@@ -213,9 +219,20 @@ export function endLoop(m, run) {
   if (m.inherit.length) report.kept.push({ text: `継承：${m.inherit.map((b) => BOONS[b.id].name + (b.tier > 1 ? ' Lv' + b.tier : '')).join('・')}`, sub: `最大 ${inheritCount(m)} 個（巻き戻り画面で変更できる）` });
   const inheritedIds = new Set(m.inherit.map((b) => b.id));
   const wedgedBoonIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
-  const lostBoons = (run.boons || []).filter((b) => !wedgedBoonIds.has(b.id) && !inheritedIds.has(b.id));
+  const lostBoons = (run.boons || []).filter((b) => !wedgedBoonIds.has(b.id) && !inheritedIds.has(b.id) && BOONS[b.id].school !== 'bond');
   if (lostBoons.length) report.reset.push({ text: `強化 ${lostBoons.length} 個`, sub: lostBoons.map((b) => BOONS[b.id].name).join('・') });
   report.reset.push({ text: 'HP・秒針ゲージ', sub: '' });
+  // お供：届いた段階と絆の強化はすべて持ち越す
+  if (run.comp) m.compStage[run.comp.id] = Math.max(m.compStage[run.comp.id] || 1, run.comp.stage);
+  for (const b of (run.boons || []).filter((x) => BOONS[x.id] && BOONS[x.id].school === 'bond')) {
+    const o = m.bonds.find((x) => x.id === b.id);
+    if (o) o.tier = Math.max(o.tier, b.tier); else m.bonds.push({ id: b.id, tier: b.tier });
+  }
+  if (run.comp || m.bonds.length) {
+    const nm = { hotaru: 'ホタル', neji: 'ネジ', chiku: 'チク' };
+    const st = Object.entries(m.compStage).map(([id, s]) => `${nm[id] || id}${'★'.repeat(s)}`).join('・');
+    report.kept.push({ text: `お供の成長${st ? '：' + st : ''}`, sub: m.bonds.length ? '絆：' + m.bonds.map((b) => BOONS[b.id].name + (b.tier > 1 ? ' Lv' + b.tier : '')).join('・') : '' });
+  }
   // アーティファクトはすべて持ち越す
   const before = new Set(m.artifacts || []);
   m.artifacts = [...new Set([...(m.artifacts || []), ...(run.artifacts || [])])];

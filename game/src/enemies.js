@@ -513,13 +513,13 @@ export class Projectile {
   constructor(kind, x, y, vx, vy, dmg) {
     this.kind = kind;
     this.x = x; this.y = y; this.vx = vx; this.vy = vy;
-    this.w = kind === 'wave' ? 16 : kind === 'hand' ? 12 : kind === 'arrow' ? 14 : kind === 'biggear' ? 22 : kind === 'blade' ? 24 : kind === 'note' ? 12 : 10;
-    this.h = kind === 'wave' ? 18 : kind === 'hand' ? 12 : kind === 'arrow' ? 6 : kind === 'biggear' ? 22 : kind === 'blade' ? 12 : kind === 'note' ? 12 : 10;
+    this.w = kind === 'wave' ? 16 : kind === 'hand' ? 12 : kind === 'arrow' ? 14 : kind === 'biggear' ? 22 : kind === 'blade' ? 24 : kind === 'note' ? 12 : kind === 'javelin' ? 16 : kind === 'trap' ? 20 : kind === 'mark' ? 36 : kind === 'needle' ? 10 : 10;
+    this.h = kind === 'wave' ? 18 : kind === 'hand' ? 12 : kind === 'arrow' ? 6 : kind === 'biggear' ? 22 : kind === 'blade' ? 12 : kind === 'note' ? 12 : kind === 'javelin' ? 6 : kind === 'trap' ? 8 : kind === 'mark' ? 96 : kind === 'needle' ? 6 : 10;
     this.dmg = dmg;
     this.alive = true;
     this.t = 0;
     this.life = kind === 'wave' ? 1.6 : 3.5;
-    this.destroyable = kind !== 'wave' && kind !== 'ring' && kind !== 'biggear';
+    this.destroyable = kind !== 'wave' && kind !== 'ring' && kind !== 'biggear' && kind !== 'mark';
     this.key = 'p' + nextId++;
     this.delay = 0; // 時止め中に置かれた刃は遅れて動く
   }
@@ -528,6 +528,15 @@ export class Projectile {
     if (this.delay > 0) { this.delay -= dt; return; }
     if (this.kind === 'bomb') { this.vy += 900 * dt; if (game.map.solidAt(this.x + 5, this.y + 11)) { this.explode(game); return; } }
     if (this.kind === 'arrow') this.vy += 120 * dt;
+    if (this.kind === 'javelin') this.vy += 600 * dt; // 放物線を描く投げ槍
+    if (this.kind === 'trap' || this.kind === 'mark') { if (this.t > this.life) this.alive = false; return; } // 置かれたまま動かない
+    // 指向性の針：まっすぐ飛び、一度だけ止まって主人公の方へ向き直る（追い続けはしない）
+    if (this.kind === 'needle') {
+      if (!this.turned && this.t > this.turnAt) {
+        if (this.t < this.turnAt + 0.22) { this.vx = 0; this.vy = 0; const p = game.player; this.aimA = Math.atan2(cy(p) - (this.y + 3), cx(p) - (this.x + 5)); return; }
+        this.turned = true; this.vx = Math.cos(this.aimA) * 430; this.vy = Math.sin(this.aimA) * 430;
+      }
+    }
     if (this.kind === 'ring') { this.r += this.speed * dt; if (this.r > this.maxR) this.alive = false; return; }
     // 追尾：しばらくのあいだプレイヤーの方へ少しずつ曲がる
     if (this.seek && this.t < this.seek.time) {
@@ -930,6 +939,157 @@ export class Warden extends Enemy {
   }
 }
 
+// 投槍兵（中〜長距離）：距離を取り、放物線を描く投げ槍を相手の足元へ投げる。第2夜からは動きを読んだ二投目、第3夜からは三本同時
+export class Lancer extends Enemy {
+  constructor(x, y) { super('lancer', x + 5, y - 32, 20, 32, 60); this.cool = 1.2; this.setState('idle'); }
+  think(game, dt) {
+    const p = game.player, map = game.map, dx = this.dx(p), adx = Math.abs(dx);
+    if (this.cool > 0) this.cool -= dt;
+    switch (this.state) {
+      case 'idle': {
+        this.facePlayer(p);
+        let want = adx < 150 ? -this.face * 90 : adx > 320 ? this.face * 70 : 0;
+        if (want && (this.ledgeAhead(map, sign(want)) || this.wallAhead(map, sign(want)))) want = 0;
+        this.vx = approach(this.vx, want, 600 * dt);
+        if (this.cool <= 0 && adx > 90 && adx < 420 && p.state !== 'dead') { this.setState('wind'); this.throws = this.tier >= 2 ? 2 : 1; game.sfx.play('tell'); }
+        break;
+      }
+      case 'wind': {
+        this.vx = approach(this.vx, 0, 900 * dt); this.facePlayer(p);
+        const wt = (this.throws === 1 && this.tier >= 2 ? 0.3 : 0.6) * this.wmul(game);
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'throw';
+        if (this.stateT >= wt) {
+          const lead = this.throws === 1 && this.tier >= 2 ? p.vx * 0.6 : 0; // 二投目は動く先を読む
+          const tx = cx(p) + lead, ty = p.y + p.h - 4, sx = cx(this), sy = this.y + 6;
+          const T = clamp(Math.abs(tx - sx) / 330, 0.45, 1.2), vx = (tx - sx) / T, vy = (ty - sy - 0.5 * 600 * T * T) / T;
+          const n = this.tier >= 3 && this.throws === 2 ? 3 : 1;
+          for (let i = 0; i < n; i++) game.spawnProjectile(new Projectile('javelin', sx - 8, sy, vx * (1 + (i - (n - 1) / 2) * 0.18), vy, 16));
+          game.sfx.play('swing'); this.throws--;
+          if (this.throws > 0) this.setState('wind'); else { this.cool = 2.2; this.setState('recover'); }
+        }
+        break;
+      }
+      case 'recover': this.vx = approach(this.vx, 0, 700 * dt); if (this.stateT > 0.5) this.setState('idle'); break;
+      case 'flinch': this.vx = approach(this.vx, 0, 800 * dt); if (this.stateT > 0.25) this.setState('idle'); break;
+    }
+  }
+}
+
+// 罠師（罠設置）：相手の進む先の床へ歯車の罠を置く。罠は置かれて少しすると噛みつく準備ができ、踏むと挟まれて一瞬動けない。
+// 罠は攻撃で壊せる。置ける罠は 3 つまで。第2夜からは左右に 2 つ置く
+export class Trapper extends Enemy {
+  constructor(x, y) { super('trapper', x + 6, y - 26, 18, 26, 50); this.cool = 1.4; this.traps = []; this.setState('idle'); }
+  think(game, dt) {
+    const p = game.player, map = game.map, dx = this.dx(p), adx = Math.abs(dx);
+    if (this.cool > 0) this.cool -= dt;
+    this.traps = this.traps.filter((t) => t.alive);
+    switch (this.state) {
+      case 'idle': {
+        this.facePlayer(p);
+        let want = adx < 110 ? -this.face * 110 : adx > 240 ? this.face * 80 : 0;
+        if (want && (this.ledgeAhead(map, sign(want)) || this.wallAhead(map, sign(want)))) want = 0;
+        this.vx = approach(this.vx, want, 700 * dt);
+        if (this.cool <= 0 && adx < 360 && this.traps.length < 3 && p.state !== 'dead') { this.setState('wind'); game.sfx.play('tell'); }
+        break;
+      }
+      case 'wind': {
+        this.vx = approach(this.vx, 0, 900 * dt);
+        const wt = 0.5 * this.wmul(game);
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'trap';
+        if (this.stateT >= wt) {
+          const ahead = clamp(p.vx * 0.7, -120, 120);
+          const spots = this.tier >= 2 ? [cx(p) + ahead - 50, cx(p) + ahead + 50] : [cx(p) + ahead];
+          for (const x of spots) {
+            if (this.traps.length >= 3) break;
+            const gy = map.groundBelow(x, p.y);
+            if (gy >= map.pxH) continue;
+            const t = new Projectile('trap', x - 10, gy - 8, 0, 0, 15); t.delay = 0.7; t.life = 9; t.from = { x: cx(this), y: this.y };
+            game.spawnProjectile(t); this.traps.push(t);
+          }
+          game.sfx.play('tick'); this.cool = 2.8; this.setState('recover');
+        }
+        break;
+      }
+      case 'recover': this.vx = approach(this.vx, 0, 700 * dt); if (this.stateT > 0.6) this.setState('idle'); break;
+      case 'flinch': this.vx = approach(this.vx, 0, 800 * dt); if (this.stateT > 0.25) this.setState('idle'); break;
+    }
+  }
+}
+
+// 時限兵（時間差攻撃）：相手の足元に時計の印を刻み、針が一周すると光の柱が立つ。印から離れれば当たらない。
+// 第2夜からは動く先にもう 1 つ、第3夜からは 3 つ並べて順に立てる
+export class Clocker extends Enemy {
+  constructor(x, y) { super('clocker', x + 5, y - 30, 20, 30, 55); this.cool = 1.6; this.setState('idle'); }
+  think(game, dt) {
+    const p = game.player, map = game.map, dx = this.dx(p), adx = Math.abs(dx);
+    if (this.cool > 0) this.cool -= dt;
+    switch (this.state) {
+      case 'idle': {
+        this.facePlayer(p);
+        let want = adx < 160 ? -this.face * 70 : adx > 300 ? this.face * 60 : 0;
+        if (want && (this.ledgeAhead(map, sign(want)) || this.wallAhead(map, sign(want)))) want = 0;
+        this.vx = approach(this.vx, want, 600 * dt);
+        if (this.cool <= 0 && adx < 420 && p.state !== 'dead') { this.setState('wind'); game.sfx.play('tell'); }
+        break;
+      }
+      case 'wind': {
+        this.vx = approach(this.vx, 0, 900 * dt);
+        const wt = 0.5 * this.wmul(game);
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'clock';
+        if (this.stateT >= wt) {
+          const base = cx(p), dir = sign(p.vx) || p.face;
+          const xs = this.tier >= 3 ? [base - dir * 60, base, base + dir * 60] : this.tier >= 2 ? [base, base + clamp(p.vx * 1.2, -150, 150) + dir * 30] : [base];
+          xs.forEach((x, i) => {
+            const gy = map.groundBelow(x, p.y);
+            if (gy >= map.pxH) return;
+            const m = new Projectile('mark', x - 18, gy - 96, 0, 0, 20); m.delay = 1.2 + i * 0.25; m.life = m.delay + 0.25; m.gy = gy;
+            game.spawnProjectile(m);
+          });
+          game.sfx.play('tick'); this.cool = 3.2; this.setState('recover');
+        }
+        break;
+      }
+      case 'recover': this.vx = approach(this.vx, 0, 700 * dt); if (this.stateT > 0.6) this.setState('idle'); break;
+      case 'flinch': this.vx = approach(this.vx, 0, 800 * dt); if (this.stateT > 0.25) this.setState('idle'); break;
+    }
+  }
+}
+
+// 風見鶏（指向性攻撃・空を飛ぶ）：主人公の方角を 8 方位で読んで針を放つ。針は一度だけ止まって向き直る（追い続けはしない）。
+// 止まった針の先に向きの線が出るので、その線から外れれば当たらない。第2夜からは 2 本
+export class Vane extends Enemy {
+  constructor(x, y) { super('vane', x, y, 20, 18, 40); this.gravity = false; this.cool = 1.5; this.hoverY = y; this.setState('fly'); }
+  think(game, dt) {
+    const p = game.player, dx = this.dx(p), adx = Math.abs(dx);
+    if (this.cool > 0) this.cool -= dt;
+    this.bob = (this.bob || 0) + dt;
+    switch (this.state) {
+      case 'fly': {
+        this.facePlayer(p);
+        const wantX = adx < 120 ? -this.face * 80 : adx > 260 ? this.face * 70 : Math.sin(this.bob) * 40;
+        const wantY = (p.y - 90) - this.y;
+        this.vx = approach(this.vx, wantX, 300 * dt); this.vy = approach(this.vy, clamp(wantY * 2, -80, 80) + Math.sin(this.bob * 3) * 20, 300 * dt);
+        if (this.cool <= 0 && adx < 380 && p.state !== 'dead') { this.setState('wind'); game.sfx.play('tell'); }
+        break;
+      }
+      case 'wind': {
+        this.vx = approach(this.vx, 0, 600 * dt); this.vy = approach(this.vy, 0, 600 * dt);
+        const wt = 0.5 * this.wmul(game);
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'vane';
+        // 8 方位に丸めた向き（風見鶏の矢印が指す）
+        this.dirA = Math.round(Math.atan2(cy(p) - cy(this), cx(p) - cx(this)) / (Math.PI / 4)) * (Math.PI / 4);
+        if (this.stateT >= wt) {
+          const n = this.tier >= 2 ? 2 : 1;
+          for (let i = 0; i < n; i++) { const a = this.dirA + (i - (n - 1) / 2) * 0.35; const pr = new Projectile('needle', cx(this) - 5, cy(this) - 3, Math.cos(a) * 300, Math.sin(a) * 300, 12); pr.turnAt = 0.45 + i * 0.1; game.spawnProjectile(pr); }
+          game.sfx.play('shoot'); this.cool = 2.0; this.setState('fly');
+        }
+        break;
+      }
+      case 'flinch': this.vx = approach(this.vx, 0, 500 * dt); this.vy = approach(this.vy, 0, 500 * dt); if (this.stateT > 0.25) this.setState('fly'); break;
+    }
+  }
+}
+
 // 従者（小さな護衛）：中ボスに 3 体、刻守に 5 体つき従う、小さな歯車人形。
 // 槍の従者は小さく跳ねて突き、礫の従者は離れて小石を投げる。主のそばを離れすぎない。主が倒れると崩れ落ちる
 export class Squire extends Enemy {
@@ -1256,6 +1416,10 @@ export function makeEnemy(c, x, y) {
     case 'F': return new GearRat(x, y + TILE);
     case 'J': return new Hopper(x, y + TILE);
     case 'H': return new Mallet(x, y + TILE);
+    case 'Y': return new Lancer(x, y + TILE);
+    case 'U': return new Trapper(x, y + TILE);
+    case 'O': return new Clocker(x, y + TILE);
+    case 'G': return new Vane(x + 3, y + 6);
   }
   return null;
 }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sandbox, Driver, FLAT, newGame } from './helpers.mjs';
-import { RustSoldier, GearRoller, ClockArcher, Phantom, BellRinger, PendulumBat, ClockTurret, GearKnight, Beamer, ChainReaper, GearRat, Hopper, Mallet, Warden } from '../src/enemies.js';
+import { RustSoldier, GearRoller, ClockArcher, Phantom, BellRinger, PendulumBat, ClockTurret, GearKnight, Beamer, ChainReaper, GearRat, Hopper, Mallet, Warden, Lancer, Trapper, Clocker, Vane, Projectile as Proj } from '../src/enemies.js';
 import { newMeta, buyUpgrade, upLv, enemyScale, endLoop, inheritCount, UPGRADES } from '../src/meta.js';
 import { computeStats, rollOffer, BOONS, canForge, forgeDiff } from '../src/boons.js';
 import { makeRng, cx, cy } from '../src/util.js';
@@ -14,16 +14,16 @@ import { nightLook } from '../src/nightlook.js';
 function arena(E, dx = 120, tier = 1) {
   const g = sandbox(FLAT); const d = new Driver(g);
   d.frame(2);
-  const e = new E(g.player.x + dx, E === Phantom || E === PendulumBat ? 380 : 450);
+  const e = new E(g.player.x + dx, E === Phantom || E === PendulumBat || E === Vane ? 380 : 450);
   g.addEnemy(e); e.tier = tier;
   g.room.cleared = true;
   g.player.hp = g.player.maxHp = 1e6;
   return { g, d, e };
 }
 
-for (const [name, E] of [['歯車転がし', GearRoller], ['時計弓兵', ClockArcher], ['刻の亡霊', Phantom], ['鐘撞き', BellRinger], ['光線砲手', Beamer], ['鎖鎌兵', ChainReaper], ['歯車ネズミ', GearRat], ['跳ね潰し', Hopper], ['大槌兵', Mallet]]) {
+for (const [name, E] of [['歯車転がし', GearRoller], ['時計弓兵', ClockArcher], ['刻の亡霊', Phantom], ['鐘撞き', BellRinger], ['光線砲手', Beamer], ['鎖鎌兵', ChainReaper], ['歯車ネズミ', GearRat], ['跳ね潰し', Hopper], ['大槌兵', Mallet], ['投槍兵', Lancer], ['罠師', Trapper], ['時限兵', Clocker], ['風見鶏', Vane]]) {
   test(`新しい敵「${name}」：予兆を見せてから攻撃し、プレイヤーに当たる`, () => {
-    const { g, d, e } = arena(E, E === ClockArcher ? 220 : E === Beamer ? 260 : E === ChainReaper ? 170 : 150);
+    const { g, d, e } = arena(E, E === ClockArcher || E === Lancer ? 220 : E === Beamer ? 260 : E === ChainReaper ? 170 : E === Clocker ? 200 : 150);
     let told = false;
     for (let i = 0; i < 60 * 8; i++) { d.frame(1); if (e.tell > 0.5) told = true; g.player.iframeT = 0; }
     assert.ok(told, 'shows a tell');
@@ -1113,3 +1113,72 @@ test('お供を選ぶ：中断メニューから替えられ、夜をまたい�
   assert.equal(g.comp.id, 'chiku'); assert.equal(g.comp.stage, 1);
 });
 import { COMPANION_IDS as COMP_IDS_T } from '../src/companion.js';
+
+test('罠師の罠：置かれてすぐは安全、準備ができると踏んだ者を挟んで一瞬動けなくする。斬れば壊せる', () => {
+  const { g, d } = arena(RustSoldier, 600);
+  g.room.enemies = [];
+  const p = g.player;
+  const trap = new Proj('trap', cx(p) - 10, p.y + p.h - 8, 0, 0, 12); trap.delay = 0.7; trap.life = 9; g.spawnProjectile(trap);
+  d.frame(10);
+  assert.equal(p.hp, p.maxHp, 'not armed yet');
+  d.frame(40);
+  assert.ok(p.hp < p.maxHp, 'snaps when armed');
+  assert.ok(p.rootT > 0);
+  const x0 = p.x; d.frame(10, ['right']);
+  assert.ok(Math.abs(p.x - x0) < 4, 'rooted');
+  const t2 = new Proj('trap', p.x + p.w + 4, p.y + p.h - 8, 0, 0, 12); t2.delay = 0.7; t2.life = 9; g.spawnProjectile(t2);
+  assert.ok(t2.destroyable, 'can be cut');
+});
+
+test('時限兵の印：針が一周すると光の柱が立つ。印から離れれば当たらない', () => {
+  const { g, d } = arena(RustSoldier, 600);
+  g.room.enemies = [];
+  const p = g.player;
+  const mk = (x) => { const m = new Proj('mark', x - 18, p.y + p.h - 96, 0, 0, 16); m.delay = 1.2; m.life = 1.45; m.gy = p.y + p.h; g.spawnProjectile(m); return m; };
+  mk(cx(p)); d.frame(80);
+  assert.ok(p.hp < p.maxHp, 'standing on it hurts');
+  const hp = p.hp; p.iframeT = 0; mk(cx(p));
+  d.frame(40, ['right']); d.frame(40);
+  assert.equal(p.hp, hp, 'moving away avoids it');
+});
+
+test('風見鶏の針：8 方位で放ち、一度だけ止まって向き直る（その後は追わない）', () => {
+  const { g, d } = arena(RustSoldier, 600);
+  g.room.enemies = [];
+  const p = g.player;
+  const n = new Proj('needle', cx(p) + 150, cy(p) - 100, -300, 0, 10); n.turnAt = 0.3; g.spawnProjectile(n);
+  d.frame(25);
+  assert.ok(!n.turned && n.vx === 0 && n.vy === 0, 'pauses to turn');
+  d.frame(10);
+  assert.ok(n.turned);
+  const a1 = Math.atan2(n.vy, n.vx);
+  p.x += 200; d.frame(4);
+  assert.ok(!n.alive || Math.abs(Math.atan2(n.vy, n.vx) - a1) < 1e-6, 'does not keep homing');
+});
+
+test('投槍兵の槍は放物線を描いて相手の足元へ落ちる', () => {
+  const { g, d, e } = arena(Lancer, 260);
+  e.cool = 0;
+  d.until(() => g.room.projectiles.some((pr) => pr.kind === 'javelin'), 200);
+  const j = g.room.projectiles.find((pr) => pr.kind === 'javelin');
+  const vy0 = j.vy; d.frame(10);
+  assert.ok(j.vy > vy0, 'falls under gravity');
+});
+
+test('お供の成長と絆の強化は夜をまたいですべて持ち越す（継承の枠を使わない）', () => {
+  const g = newGame(91); g.meta.companion = 'neji'; g.startLoop(); g.modal = null;
+  while (g.run.level < 10) g.gainExp(50);
+  assert.equal(g.comp.stage, 3);
+  g.player.setBoons([{ id: 'kizuna', tier: 2 }, { id: 'mamori', tier: 1 }, { id: 'edge', tier: 1 }]);
+  g.endRun('death');
+  assert.equal(g.meta.compStage.neji, 3);
+  assert.ok(!g.meta.inherit.some((b) => b.id === 'kizuna'), 'bonds do not use inherit slots');
+  assert.ok(g.rewind.report.kept.some((k) => k.text.startsWith('お供の成長')));
+  g.startLoop(); g.modal = null;
+  assert.equal(g.comp.stage, 3, 'stays evolved');
+  assert.ok(g.player.stats.moveMul > 1.1, 'buffs carry over');
+  assert.ok(g.player.boons.some((b) => b.id === 'kizuna' && b.tier === 2) && g.player.boons.some((b) => b.id === 'mamori'));
+  // ほかのお供は自分の段階から
+  g.setCompanion('chiku');
+  assert.equal(g.comp.stage, 1);
+});

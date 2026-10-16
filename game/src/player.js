@@ -94,7 +94,9 @@ export class Player {
     if (input.pressed('jump')) this.bufferT = P.jumpBuffer; else if (this.bufferT > 0) this.bufferT -= dt;
 
     this.aimY = input.down('up') ? -1 : input.down('down') ? 1 : 0;
-    const dirX = input.dirX ? input.dirX() : (input.down('right') ? 1 : 0) - (input.down('left') ? 1 : 0);
+    // 罠に挟まれている間は歩けない（攻撃・回避はできる）
+    if (this.rootT > 0) this.rootT -= dt;
+    const dirX = this.rootT > 0 ? 0 : input.dirX ? input.dirX() : (input.down('right') ? 1 : 0) - (input.down('left') ? 1 : 0);
 
     switch (this.state) {
       case 'normal': this.updateNormal(game, input, dt, dirX); break;
