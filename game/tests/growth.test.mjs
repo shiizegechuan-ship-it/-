@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sandbox, Driver, FLAT, newGame } from './helpers.mjs';
-import { RustSoldier, GearRoller, ClockArcher, Phantom, BellRinger, PendulumBat, ClockTurret, GearKnight } from '../src/enemies.js';
+import { RustSoldier, GearRoller, ClockArcher, Phantom, BellRinger, PendulumBat, ClockTurret, GearKnight, Beamer, ChainReaper, GearRat, Hopper } from '../src/enemies.js';
 import { newMeta, buyUpgrade, upLv, enemyScale, endLoop, inheritCount, UPGRADES } from '../src/meta.js';
 import { computeStats, rollOffer, BOONS } from '../src/boons.js';
 import { makeRng } from '../src/util.js';
 import { ARTIFACTS } from '../src/artifacts.js';
+import { Spell } from '../src/arts.js';
 
 function arena(E, dx = 120, tier = 1) {
   const g = sandbox(FLAT); const d = new Driver(g);
@@ -17,9 +18,9 @@ function arena(E, dx = 120, tier = 1) {
   return { g, d, e };
 }
 
-for (const [name, E] of [['歯車転がし', GearRoller], ['時計弓兵', ClockArcher], ['刻の亡霊', Phantom], ['鐘撞き', BellRinger]]) {
+for (const [name, E] of [['歯車転がし', GearRoller], ['時計弓兵', ClockArcher], ['刻の亡霊', Phantom], ['鐘撞き', BellRinger], ['光線砲手', Beamer], ['鎖鎌兵', ChainReaper], ['歯車ネズミ', GearRat], ['跳ね潰し', Hopper]]) {
   test(`新しい敵「${name}」：予兆を見せてから攻撃し、プレイヤーに当たる`, () => {
-    const { g, d, e } = arena(E, E === ClockArcher ? 220 : 150);
+    const { g, d, e } = arena(E, E === ClockArcher ? 220 : E === Beamer ? 260 : E === ChainReaper ? 170 : 150);
     let told = false;
     for (let i = 0; i < 60 * 8; i++) { d.frame(1); if (e.tell > 0.5) told = true; g.player.iframeT = 0; }
     assert.ok(told, 'shows a tell');
@@ -126,7 +127,7 @@ test('時の欠片：倒すと貯まり、刻印で恒久強化。次の夜に�
   g.endRun('death');
   assert.equal(g.meta.inherit.length, 4, 'four boons inherited');
   g.startLoop();
-  assert.equal(g.player.maxHp, 330);
+  assert.equal(g.player.maxHp, 165);
   assert.ok(Math.abs(g.player.metaAtk - 1.1) < 1e-9);
   assert.deepEqual(g.player.boons.map((b) => b.id + b.tier).sort(), ['crit2', 'edge3', 'execute2', 'opener2']);
 });
@@ -312,7 +313,7 @@ test('経験値とレベル：敵を倒すと経験値、レベルアップで�
   assert.equal(g.run.level, 1);
   g.gainExp(5000);
   assert.ok(g.run.level >= 10, `level ${g.run.level}`);
-  assert.equal(g.player.maxHp, hp0 + 12 * (g.run.level - 1));
+  assert.equal(g.player.maxHp, hp0 + 6 * (g.run.level - 1));
   assert.equal(g.run.pendingRare, Math.floor(g.run.level / 5));
   d.frame(1);
   assert.equal(g.modal && g.modal.type, 'boon');
@@ -360,7 +361,7 @@ test('脅威：常時の術を 3 つ積むごとに敵が強く・多くなる�
   g.enterRoom(0, 1); g.modal = null;
   assert.equal(g.room.enemies.length, base + 2);
   assert.ok(g.room.enemies.filter((e) => e.extra).every((e) => e.kind !== 'archer' && e.kind !== 'turret'));
-  assert.ok(g.room.enemies[0].maxHp > hp[0] * 2, 'hp scaled');
+  assert.ok(g.room.enemies[0].maxHp > hp[0] * 1.5, 'hp scaled');
 });
 
 test('常時の術は敵を怯ませない（積んでも敵が攻撃してくる）', () => {
@@ -648,4 +649,72 @@ test('剣の道：剣気・破砕・天裂は振りから斬撃が出て敵に�
   const w1 = p.hitbox().w;
   p.setBoons([]); d.frame(40); p.startAttack(g, 1); d.until(() => p.hitbox(), 20);
   assert.ok(w1 > p.hitbox().w);
+});
+
+
+test('敵の数は夜が進むほど（戦闘部屋を重ねるほど）増えていく', () => {
+  const g = newGame(51);
+  g.enterRoom(0, 1); g.modal = null;
+  const n0 = g.room.enemies.length;
+  g.run.combats = 9;
+  g.enterRoom(0, 1); g.modal = null;
+  assert.ok(g.room.enemies.length > n0, `${g.room.enemies.length} > ${n0}`);
+});
+
+test('陣形：術を積むと散開（ネズミが混じり固まらない）、剣を積むと槍衾（奥に遠距離）', () => {
+  const g = newGame(52);
+  g.player.setBoons([{ id: 'orbit', tier: 3 }, { id: 'aura', tier: 3 }]);
+  g.enterRoom(0, 1); g.modal = null;
+  assert.equal(g.room.formation, 'aoe');
+  assert.ok(g.room.enemies.some((e) => e.kind === 'rat'));
+  assert.ok(g.room.enemies.filter((e) => !e.elite).every((e) => e.spread));
+  const g2 = newGame(53);
+  g2.player.setBoons([{ id: 'swordqi', tier: 3 }, { id: 'edge', tier: 2 }]);
+  g2.enterRoom(1, 0); g2.modal = null;
+  assert.equal(g2.room.formation, 'melee');
+  const P = g2.marker('P');
+  const ground = g2.room.enemies.filter((e) => e.gravity !== false && !e.extra).sort((a, b) => Math.abs(cx0(b) - P.x) - Math.abs(cx0(a) - P.x));
+  if (ground.length >= 2) assert.ok(['beamer', 'archer'].includes(ground[0].kind), ground.map((e) => e.kind).join());
+});
+
+test('刻守は戦いの中で、いちばん受けているダメージを半減するようになる', () => {
+  const g = newGame(54);
+  const bi = g.run.plan.floors[2].findIndex((r) => r.type === 'boss');
+  g.enterRoom(2, bi); g.modal = null;
+  const b = g.room.boss; b.setState('idle');
+  for (let i = 0; i < 40 && !b.adapted; i++) g.dealDamage(b, { base: 12, cat: 'combo', knock: 0, dir: 1 });
+  assert.ok(b.adapted);
+  assert.equal(b.resist.combo <= 0.5, true);
+});
+
+test('範囲攻撃を躱す：術の多い相手には、迫る衝撃波を跳んで躱し、その間は術が当たらない（クールタイムあり）', () => {
+  const { g, d, e } = arena(RustSoldier, 200);
+  e.hp = e.maxHp = 1e6; e.cool = 99; e.aoeDodge = true; e.aoeCd = 0;
+  d.frame(2);
+  const fy = e.y + e.h;
+  g.room.spells.push(new Spell('groundwave', cx0(e) - 100, fy, { passive: true, vx: 430, life: 0.9, dmg: 50 }));
+  d.frame(3);
+  assert.ok(e.dodgeI > 0 || e.vy < 0, 'dodged');
+  const hp = e.hp;
+  g.dealDamage(e, { base: 100, cat: 'skill', knock: 0, dir: 1, spell: true });
+  assert.equal(e.hp, hp, 'spell misses while dodging');
+  assert.ok(e.aoeCd > 2, 'cooldown');
+});
+
+test('部屋全体を攻める術：刻震は部屋じゅうの敵に当たり、遠鐘＋星屑の合成「天球の鐘」は素材より強い', () => {
+  const g = newGame(55); g.enterRoom(0, 1); g.modal = null;
+  g.player.setBoons([{ id: 'timequake', tier: 1 }]); g.player.gauge = 100;
+  for (const e of g.room.enemies) { e.hp = e.maxHp = 1e5; }
+  g.useSkill();
+  assert.ok(g.room.enemies.every((e) => e.hp < e.maxHp));
+  const dealt = (boons) => {
+    const { g: g2, d: d2, e } = arena(RustSoldier, 300);
+    e.hp = e.maxHp = 1e7; e.cool = 99;
+    g2.player.setBoons(boons); g2.run.fusionDeclined = ['celestial'];
+    d2.frame(60 * 12); g2.modal = null;
+    return e.maxHp - e.hp;
+  };
+  const before = dealt([{ id: 'tolling', tier: 2 }, { id: 'starfield', tier: 2 }]);
+  const after = dealt([{ id: 'celestial', tier: 1 }]);
+  assert.ok(before > 0 && after > before, `${after} > ${before}`);
 });

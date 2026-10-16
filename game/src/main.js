@@ -2,6 +2,7 @@
 import { DT, VIEW_W, VIEW_H } from './config.js';
 import { Input, attachKeyboard, pollGamepad } from './input.js';
 import { Game } from './game.js';
+import { makeEnemy } from './enemies.js';
 import { Sfx } from './audio.js';
 import { render } from './render.js';
 import { isTouchDevice, setupTouch } from './touch.js';
@@ -19,6 +20,7 @@ const sfx = new Sfx();
 const game = new Game({ sfx, storage });
 window.__game = game; // デバッグ・自動テスト用
 window.__input = input;
+window.__makeEnemy = makeEnemy; // デバッグ用
 
 attachKeyboard(input, window);
 window.addEventListener('keydown', () => sfx.unlock(), { once: false });

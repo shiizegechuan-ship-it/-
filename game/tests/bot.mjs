@@ -13,6 +13,9 @@ export function botInputs(g, frame, skill = 'mid') {
   const react = skill === 'good' ? 0.75 : skill === 'mid' ? 0.85 : 2;
   const danger = enemies.some((e) => e.tell > react && Math.abs(cx(e) - cx(p)) < (e.boss ? 150 : 90) && e.tellKind !== 'clock')
     || g.room.projectiles.some((pr) => pr.delay <= 0 && Math.hypot(pr.x - cx(p), pr.y - cy(p)) < 50);
+  // 光線：照準線が固定されたら跳ぶ（人も線を見て跳ぶ）
+  const beam = enemies.some((e) => e.kind === 'beamer' && e.state === 'aim' && e.tell > 0.7 && Math.abs(e.aimY - cy(p)) < 20);
+  if (beam && p.onGround && skill !== 'bad') { held.push('jump'); return held; }
   if (danger && p.dodgeCd <= 0 && frame % 2 === 0) { held.push('dodge'); held.push(dx > 0 ? 'left' : 'right'); return held; }
   const reach = 34;
   if (Math.abs(dx) > reach) held.push(dx > 0 ? 'right' : 'left');

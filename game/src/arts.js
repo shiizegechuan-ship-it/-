@@ -10,6 +10,7 @@ export const ACTIVE_ARTS = {
   starfall: { cost: (lv) => 55 - 4 * (lv - 1), color: '#ffe14a' },
   rewindblade: { cost: (lv) => 35 - 3 * (lv - 1), color: '#9fe3ff' },
   belltoll: { cost: (lv) => 45 - 3 * (lv - 1), color: '#f2c14e' },
+  timequake: { cost: (lv) => 60 - 4 * (lv - 1), color: '#c8b0ff' },
 };
 
 export class Spell {
@@ -60,6 +61,17 @@ export function castArt(game, art) {
       game.room.spells.push(new Spell('toll', px, py, { r: 0, maxR: 165 + 12 * lv, dmg: 34 * m }));
       game.sfx.play('bossBell'); game.fx.shake(5, 0.2); game.fx.screenFlash('#f2c14e', 0.2);
       break;
+  }
+  if (art.id === 'timequake') {
+    // 部屋じゅうの敵を打つ（威力は低め）
+    for (const e of game.room.enemies) {
+      if (!e.alive || (e.boss && e.defeated)) continue;
+      const sp = new Spell('roomhit', cx(e), cy(e), { life: 0.45, top: e.y });
+      game.room.spells.push(sp);
+      strike(game, sp, e, 16 * m, { knock: 60 });
+      if (e.alive && !e.boss && !e.elite && e.setState) { e.setState('flinch'); e.stateT = -0.3; }
+    }
+    game.sfx.play('bossBell'); game.fx.shake(6, 0.3); game.fx.screenFlash('#c8b0ff', 0.25);
   }
   game.emit('art', { id: art.id });
 }
@@ -246,7 +258,7 @@ export function updateSpells(game, dt) {
         if (sp.t > sp.life) sp.alive = false;
         break;
       }
-      case 'riposte': case 'thunder': case 'zap':
+      case 'riposte': case 'thunder': case 'zap': case 'roomhit':
         if (sp.t > sp.life) sp.alive = false;
         break;
       case 'frost': {
@@ -404,6 +416,22 @@ export function updatePassives(game, dt) {
   }
   if (pv.emberfloor && anyFoe() && tick('emberfloor', 5)) {
     game.room.spells.push(new Spell('burnfloor', px, floorY(), { passive: true, life: 2.2, half: 150, dmg: dmg(7, 'emberfloor') }));
+  }
+  // ───── 部屋全体を攻める常時の術 ─────
+  const everyone = () => game.room.enemies.filter((e) => e.alive && !(e.boss && e.defeated));
+  if (pv.tolling && anyFoe() && tick('tolling', 6)) {
+    for (const e of everyone()) { const sp = new Spell('roomhit', cx(e), cy(e), { passive: true, life: 0.35, top: e.y, soft: true }); game.room.spells.push(sp); strike(game, sp, e, dmg(6, 'tolling'), { knock: 20 }); }
+    game.sfx.play('bossBell'); game.fx.shake(1.5, 0.1);
+  }
+  if (pv.starfield && anyFoe() && tick('starfield', 5)) {
+    everyone().forEach((e, i) => game.room.spells.push(new Spell('star', cx(e), cy(e), { passive: true, delay: i * 0.05, fall: 0.3, dmg: dmg(8, 'starfield'), from: { x: cx(e) - 40, y: cy(e) - 220 }, small: true })));
+  }
+  if (pv.celestial && anyFoe() && tick('celestial', 3)) {
+    everyone().forEach((e, i) => {
+      game.room.spells.push(new Spell('star', cx(e), cy(e), { passive: true, delay: i * 0.04, fall: 0.25, dmg: dmg(28, 'celestial'), from: { x: cx(e) - 50, y: cy(e) - 260 } }));
+      game.room.spells.push(new Spell('roomhit', cx(e), cy(e), { passive: true, life: 0.35, top: e.y, soft: true }));
+    });
+    game.sfx.play('bossBell'); game.fx.shake(2.5, 0.12); game.fx.screenFlash('#ffe9a0', 0.1);
   }
   // ───── 合成した常時の術 ─────
   if (pv.gearwaltz) {

@@ -33,6 +33,10 @@ export const KNOWLEDGE = {
   tell_archer: { cat: '敵', title: '時計弓兵', text: () => '距離を取って弓を引き絞る。照準線が出たら矢が来る。矢は斬り落とせる。近づけば逃げる。' },
   tell_phantom: { cat: '敵', title: '刻の亡霊', text: () => 'あなたの背後に紫の揺らぎを残し、そこへ跳んで斬る。揺らぎを見たら前へ回避。' },
   tell_bell: { cat: '敵', title: '鐘撞き', text: () => '槌を振り上げたら鐘が鳴り、音の輪が広がる。輪の帯に重なると当たる。回避の無敵か、輪の外へ。' },
+  tell_beamer: { cat: '敵', title: '光線砲手', text: () => '遠くから照準線を引き、部屋を貫く光線を撃つ。線は最後の一瞬で固定される――その瞬間に跳ぶか、線の高さから外れる。近づくと下がる。' },
+  tell_chain: { cat: '敵', title: '鎖鎌兵', text: () => '少し離れた距離を保ち、鎖を振りかぶってまっすぐ伸ばす（届くのは約 6 歩）。振りかぶりを見たら跳ぶか、鎖の外へ。' },
+  tell_rat: { cat: '敵', title: '歯車ネズミ', text: () => 'すばしっこく駆け寄り、身をかがめたら噛みつきの突進。噛んだらすぐ逃げる。体力は低い――逃げる背中を斬れ。' },
+  tell_hopper: { cat: '敵', title: '跳ね潰し', text: () => '身をかがめると着地点に影が落ち、そこへ跳びかかる。影から離れれば当たらない。着地のあとは隙だらけ。' },
   tell_warden: { cat: '敵', title: '振り子の番人', text: () => '振り子を引いたら前方を大きく薙ぐ（怒ると振り返ってもう一度）。跳び上がったら着地の衝撃波が床を走る――跳べ。鐘を掲げたら音の輪。大技のあとの長い隙に重撃を当てると大きく崩れる。' },
   tell_boss: { cat: '敵', title: '刻守', text: () => '懐中時計を掲げたら時が止まる。時が戻る瞬間の刃に合わせて回避すれば、刹那が取れる。' },
 };
@@ -49,11 +53,11 @@ export const COUNTERS = {
 
 // 雑魚・中ボスの対策（前の夜にいちばん使った手段）
 export const MOB_COUNTERS = {
-  combo: '連撃が効きにくく、連撃では怯まない',
-  heavy: '重撃が効きにくく、溜めを見ると跳び退く',
-  air: '空中攻撃が効きにくい',
-  skill: '術（常時の術を含む）が効きにくい',
-  echo: '残響が効きにくい',
+  combo: '連撃のダメージを半減し、連撃では怯まない',
+  heavy: '重撃のダメージを半減し、溜めを見ると跳び退く',
+  air: '空中攻撃のダメージを半減',
+  skill: '術（常時の術を含む）のダメージを半減',
+  echo: '残響のダメージを半減',
   dodge: '動きが速い（よく回避するあなたを追う）',
 };
 
@@ -86,7 +90,7 @@ export function newMeta(seed = (Date.now() & 0x7fffffff)) {
 const cost = (base, g) => (lv) => Math.round(base * Math.pow(g, lv));
 export const UPGRADES = {
   atk: { name: '刃の刻印', max: 30, desc: (lv) => `基礎攻撃 +${lv * 10}%`, cost: cost(12, 1.22) },
-  hp: { name: '命の刻印', max: 20, desc: (lv) => `最大HP +${lv * 30}`, cost: cost(10, 1.22) },
+  hp: { name: '命の刻印', max: 20, desc: (lv) => `最大HP +${lv * 15}`, cost: cost(10, 1.22) },
   inherit: { name: '継承の刻印', max: 4, desc: (lv) => `前の夜の強化を ${3 + lv} 個まで持ち越せる`, cost: cost(40, 1.9) },
   crit: { name: '会心の刻印', max: 10, desc: (lv) => `会心率 +${lv * 2}%`, cost: cost(16, 1.3) },
   combo: { name: '連撃の刻印', max: 5, desc: (lv) => `コンボの持続 +${(lv * 0.4).toFixed(1)}秒`, cost: cost(18, 1.4) },

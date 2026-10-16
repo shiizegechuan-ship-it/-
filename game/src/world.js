@@ -304,7 +304,10 @@ export const LAYOUTS = {
 // 階層ごとの敵の出現テーブル（揺らぎ）。夜の深さで種類と数が増える
 // S 錆兵 / A 時計弓兵 / R 歯車転がし / L 鐘撞き / B 振り子蝙蝠 / P 刻の亡霊 / T 時計砲台
 function floorEnemies(floor, nl) {
-  const g = [['S', 'S', 'A'], ['S', 'R', 'A', 'L'], ['S', 'A', 'R', 'L']][floor].slice();
+  // E 光線砲手 / N 鎖鎌兵 / F 歯車ネズミ / J 跳ね潰し
+  const g = [['S', 'S', 'A', 'F'], ['S', 'R', 'A', 'L', 'N', 'J'], ['S', 'A', 'R', 'L', 'E', 'N', 'J', 'F']][floor].slice();
+  if (nl >= 1 && floor === 0) g.push('J', 'N');
+  if (nl >= 2 && floor <= 1) g.push('E');
   const a = [['B'], ['B', 'P'], ['B', 'P']][floor].slice();
   if (nl >= 1 && floor === 0) g.push('R');
   if (nl >= 2 && floor === 0) { g.push('L'); a.push('P'); }
@@ -316,7 +319,7 @@ function floorEnemies(floor, nl) {
 // 脅威で増える敵の種類（弓兵と砲台は増やさない）
 export function extraEnemyTypes(floor, nl) {
   const t = floorEnemies(floor, nl);
-  return { g: t.g.filter((c) => c !== 'A'), a: t.a };
+  return { g: t.g.filter((c) => c !== 'A' && c !== 'E'), a: t.a };
 }
 const COMBAT_POOLS = [
   ['alley', 'steps', 'pit', 'watch', 'hall', 'pillars', 'islands', 'cage', 'ruins', 'terrace'],

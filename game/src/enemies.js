@@ -35,7 +35,34 @@ export class Enemy {
   dx(p) { return cx(p) - cx(this); }
   dy(p) { return cy(p) - cy(this); }
 
+  // 範囲攻撃を見切って躱す（前の夜に術が多かった／常時の術を積んでいるとき）。クールタイムあり
+  tryDodgeAoe(game, dt) {
+    if (this.dodgeI > 0) this.dodgeI -= dt;
+    this.aoeCd = (this.aoeCd ?? 1) - dt;
+    if (this.aoeCd > 0 || !game.room || this.defeated) return;
+    const ex = cx(this), ey = this.y + this.h, ecy = cy(this);
+    let away = 0, jump = false;
+    for (const sp of game.room.spells) {
+      if (sp.melee) continue;
+      const k = sp.kind;
+      if (k === 'groundwave' && sp.t >= 0) { const d = ex - sp.x; if (Math.abs(d) < 110 && sign(d) === sign(sp.vx) && Math.abs(ey - sp.y) < 40) { jump = true; break; } }
+      else if ((k === 'star' || k === 'sword' || k === 'spike') && !sp.boomed && Math.abs(sp.x - ex) < 60) { away = sign(ex - sp.x) || 1; break; }
+      else if (k === 'flamering' || k === 'ember' || k === 'toll' || k === 'frost' || k === 'quake') { const d = Math.hypot(ex - sp.x, ecy - sp.y); if (d < (sp.maxR || 100) + 20 && d > (sp.r || 0) - 10) { away = sign(ex - sp.x) || 1; break; } }
+      else if (k === 'burnfloor' && Math.abs(ex - sp.x) < sp.half + 10 && Math.abs(ey - sp.y) < 34) { away = sign(ex - sp.x) || 1; break; }
+    }
+    if (!away && !jump) return;
+    this.aoeCd = this.boss ? 8 : this.elite ? 4 : 3.5;
+    this.dodgeI = 0.4; // この間は術が当たらない
+    if (this.gravity && this.onGround) this.vy = jump ? -480 : -260;
+    else if (!this.gravity) this.vy = -160;
+    if (away) this.vx = away * 300;
+    game.fx.text(ex, this.y - 14, 'かわす', '#9fd0ff', 10);
+    game.fx.dust(ex, ey, 4);
+  }
   update(game, dt) {
+    if (this.aoeDodge) this.tryDodgeAoe(game, dt);
+    // 散開の陣形：仲間と固まらないように離れる
+    if (this.spread && game.room) for (const o of game.room.enemies) if (o !== this && o.alive && Math.abs(cx(o) - cx(this)) < 44 && Math.abs(cy(o) - cy(this)) < 40) this.vx += sign(cx(this) - cx(o)) * 300 * dt;
     // 重撃への対策：溜めを見ると跳び退く
     const p = game.player;
     if (this.counter === 'heavy' && !this.elite && this.gravity && this.onGround) {
@@ -735,6 +762,197 @@ export class Warden extends Enemy {
   }
 }
 
+// 光線砲手（遠距離）：照準線を引き、部屋を貫く光線を撃つ。近づかれると下がる。線の上から外れれば当たらない
+export class Beamer extends Enemy {
+  constructor(x, y) {
+    super('beamer', x + 3, y - 30, 24, 30, 55);
+    this.cool = 1.8; this.aimY = 0; this.beamLen = 0;
+    this.setState('idle');
+  }
+  think(game, dt) {
+    const p = game.player, map = game.map;
+    const dx = this.dx(p), adx = Math.abs(dx), ady = Math.abs(this.dy(p));
+    if (this.cool > 0) this.cool -= dt;
+    switch (this.state) {
+      case 'idle': {
+        this.facePlayer(p);
+        let want = adx < 170 ? -this.face * 80 : 0;
+        if (want && (this.ledgeAhead(map, sign(want)) || this.wallAhead(map, sign(want)))) want = 0;
+        this.vx = approach(this.vx, want, 500 * dt);
+        if (this.cool <= 0 && ady < 70 && adx < 640 && p.state !== 'dead') { this.setState('aim'); this.aimY = cy(p); game.sfx.play('tell'); }
+        break;
+      }
+      case 'aim': {
+        // 照準線が光を増していく。最後の 0.3 秒は線が固定される（そこで跳ぶか伏せる）
+        this.vx = approach(this.vx, 0, 900 * dt);
+        const wt = 1.05 * this.wmul(game);
+        if (this.stateT < wt - 0.3) { this.facePlayer(p); this.aimY = approach(this.aimY, cy(p), 90 * dt); }
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'beam';
+        // 壁までの長さ
+        let len = 0; const sx = cx(this);
+        while (len < 720 && !map.solidAt(sx + this.face * (len + 15), this.aimY)) len += 15;
+        this.beamLen = len;
+        if (this.stateT >= wt) { this.setState('fire'); this.swing++; game.sfx.play('shoot'); game.fx.shake(2.5, 0.12); }
+        break;
+      }
+      case 'fire': {
+        const len = this.beamLen, x0 = this.face > 0 ? cx(this) : cx(this) - len;
+        if (this.stateT < 0.3) this.attacks.push({ x: x0, y: this.aimY - 7, w: len, h: 14, dmg: 13, key: this.id * 1000 + this.swing });
+        if (this.stateT >= 0.35) this.setState('recover');
+        break;
+      }
+      case 'recover':
+        this.vx = approach(this.vx, 0, 500 * dt);
+        if (this.stateT >= 1.0) { this.cool = this.tier >= 2 ? 2.2 : 2.8; this.setState('idle'); }
+        break;
+      case 'flinch':
+        this.vx = approach(this.vx, 0, 700 * dt);
+        if (this.stateT > 0.25) { this.cool = Math.max(this.cool, 0.6); this.setState('idle'); }
+        break;
+    }
+  }
+}
+
+// 鎖鎌兵（中距離）：少し離れた距離を保ち、鎖を振りかぶって前方へ伸ばす。鎖の届く先は約 180
+export class ChainReaper extends Enemy {
+  constructor(x, y) {
+    super('chain', x + 4, y - 32, 20, 32, 60);
+    this.cool = 1.2; this.reach = 0; this.lashes = 0;
+    this.setState('idle');
+  }
+  think(game, dt) {
+    const p = game.player, map = game.map;
+    const dx = this.dx(p), adx = Math.abs(dx), ady = Math.abs(this.dy(p));
+    if (this.cool > 0) this.cool -= dt;
+    switch (this.state) {
+      case 'idle': {
+        this.facePlayer(p);
+        let want = adx > 190 ? this.face * 80 : adx < 110 ? -this.face * 90 : 0;
+        if (want && (this.ledgeAhead(map, sign(want)) || this.wallAhead(map, sign(want)))) want = 0;
+        this.vx = approach(this.vx, want, 600 * dt);
+        if (this.cool <= 0 && adx < 210 && ady < 60 && p.state !== 'dead') { this.lashes = this.tier >= 2 ? 2 : 1; this.setState('wind'); game.sfx.play('tell'); }
+        break;
+      }
+      case 'wind': {
+        this.vx = approach(this.vx, 0, 900 * dt);
+        const wt = 0.55 * this.wmul(game);
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'chain';
+        if (this.stateT >= wt) { this.setState('lash'); this.swing++; game.sfx.play('swing'); }
+        break;
+      }
+      case 'lash': {
+        this.reach = Math.min(180, this.stateT / 0.15 * 180);
+        if (this.stateT < 0.25) this.attacks.push({ ...this.frontBox(this.reach, 14, -4), dmg: 14, key: this.id * 1000 + this.swing });
+        if (this.stateT >= 0.3) {
+          this.reach = 0; this.lashes--;
+          if (this.lashes > 0) { this.setState('wind'); this.stateT = 0.3; } else this.setState('recover');
+        }
+        break;
+      }
+      case 'recover':
+        this.vx = approach(this.vx, 0, 600 * dt);
+        if (this.stateT >= 0.75) { this.cool = 1.3; this.setState('idle'); }
+        break;
+      case 'flinch':
+        this.reach = 0;
+        this.vx = approach(this.vx, 0, 700 * dt);
+        if (this.stateT > 0.25) this.setState('idle');
+        break;
+    }
+  }
+}
+
+// 歯車ネズミ（すばしっこい）：素早く駆け寄って噛みつき、すぐに逃げる。体力は低い
+export class GearRat extends Enemy {
+  constructor(x, y) {
+    super('rat', x + 7, y - 12, 16, 12, 22);
+    this.cool = 0.5;
+    this.setState('run');
+  }
+  think(game, dt) {
+    const p = game.player, map = game.map;
+    const dx = this.dx(p), adx = Math.abs(dx), ady = Math.abs(this.dy(p));
+    if (this.cool > 0) this.cool -= dt;
+    // 段差や穴は跳び越える
+    const hop = () => { if (this.onGround && (this.ledgeAhead(map, sign(this.vx) || this.face) || this.wallAhead(map, sign(this.vx) || this.face))) this.vy = -430; };
+    switch (this.state) {
+      case 'run':
+        this.facePlayer(p);
+        this.vx = approach(this.vx, this.face * 250, 1400 * dt); hop();
+        if (this.cool <= 0 && adx < 110 && ady < 40 && p.state !== 'dead') this.setState('crouch');
+        break;
+      case 'crouch': {
+        this.vx = approach(this.vx, 0, 1600 * dt);
+        const wt = 0.28 * this.wmul(game);
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'bite';
+        if (this.stateT >= wt) { this.setState('bite'); this.swing++; this.vx = this.face * 520; this.vy = -120; }
+        break;
+      }
+      case 'bite':
+        this.attacks.push({ ...this.frontBox(10, 12), dmg: 8, key: this.id * 1000 + this.swing });
+        if (this.stateT >= 0.25) { this.setState('flee'); this.face = -this.face; }
+        break;
+      case 'flee':
+        this.vx = approach(this.vx, this.face * 230, 1400 * dt); hop();
+        if (this.stateT >= 0.55) { this.cool = 0.7; this.setState('run'); }
+        break;
+      case 'flinch':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        if (this.stateT > 0.18) this.setState('flee');
+        break;
+    }
+  }
+}
+
+// 跳ね潰し（飛び跳ねて潰す）：身をかがめ、着地点に影を落としてから跳びかかる。着地のあとは隙だらけ
+export class Hopper extends Enemy {
+  constructor(x, y) {
+    super('hopper', x + 2, y - 22, 26, 22, 75);
+    this.cool = 1.2; this.landX = 0;
+    this.setState('idle');
+  }
+  think(game, dt) {
+    const p = game.player, map = game.map;
+    const dx = this.dx(p), adx = Math.abs(dx);
+    if (this.cool > 0) this.cool -= dt;
+    switch (this.state) {
+      case 'idle':
+        this.facePlayer(p);
+        this.vx = approach(this.vx, 0, 600 * dt);
+        if (this.cool <= 0 && adx < 400 && p.state !== 'dead') { this.setState('crouch'); this.landX = cx(p); game.sfx.play('tell'); }
+        break;
+      case 'crouch': {
+        const wt = 0.55 * this.wmul(game);
+        if (this.stateT < wt * 0.7) this.landX = cx(p);
+        this.tell = clamp(this.stateT / wt, 0, 1); this.tellKind = 'hop';
+        if (this.stateT >= wt) { this.setState('air'); this.vy = -640; this.vx = clamp((this.landX - cx(this)) / 0.62, -460, 460); }
+        break;
+      }
+      case 'air':
+        this.tell = 1; this.tellKind = 'hop';
+        if (this.stateT > 0.12 && this.onGround) {
+          this.vx = 0; this.swing++;
+          game.fx.shake(4, 0.15); game.fx.dust(cx(this), this.y + this.h, 10); game.sfx.play('heavyHit');
+          if (this.tier >= 3) for (const v of [260, -260]) game.spawnProjectile(new Projectile('wave', cx(this) - 8, this.y + this.h - 18, v, 0, 10));
+          this.setState('crush');
+        }
+        break;
+      case 'crush':
+        if (this.stateT < 0.1) this.attacks.push({ x: this.x - 18, y: this.y - 4, w: this.w + 36, h: this.h + 4, dmg: 20, key: this.id * 1000 + this.swing });
+        if (this.stateT >= 0.12) this.setState('recover');
+        break;
+      case 'recover':
+        this.vx = approach(this.vx, 0, 800 * dt);
+        if (this.stateT >= 0.9) { this.cool = 0.9; this.setState('idle'); }
+        break;
+      case 'flinch':
+        this.vx = approach(this.vx, 0, 700 * dt);
+        if (this.stateT > 0.25) this.setState('idle');
+        break;
+    }
+  }
+}
+
 // 爆弾：地面で弾けて小さな衝撃波
 Projectile.prototype.explode = function (game) {
   this.alive = false;
@@ -755,6 +973,10 @@ export function makeEnemy(c, x, y) {
     case 'A': return new ClockArcher(x, y + TILE);
     case 'P': return new Phantom(x + 5, y);
     case 'L': return new BellRinger(x, y + TILE);
+    case 'E': return new Beamer(x, y + TILE);
+    case 'N': return new ChainReaper(x, y + TILE);
+    case 'F': return new GearRat(x, y + TILE);
+    case 'J': return new Hopper(x, y + TILE);
   }
   return null;
 }

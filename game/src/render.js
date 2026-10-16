@@ -513,6 +513,15 @@ function drawSpell(b, sp, t) {
       b.globalAlpha = 1;
       break;
     }
+    case 'roomhit': { // 部屋全体の術：敵ごとに光の柱と鐘の波紋
+      const k = sp.t / sp.life, top = Math.round(sp.top / 2);
+      b.globalAlpha = (sp.soft ? 0.5 : 0.85) * (1 - k);
+      rect(b, x - 2, top - 30, 5, y - top + 34, sp.soft ? '#f2c14e' : '#c8b0ff');
+      rect(b, x, top - 30, 1, y - top + 34, '#ffffff');
+      circle(b, x, y, Math.round(4 + k * 10), sp.soft ? '#f2c14e' : '#c8b0ff');
+      b.globalAlpha = 1;
+      break;
+    }
     case 'cross': { // 残心：遅れて走る十字の斬撃
       if (sp.t < sp.delay) break;
       const k = (sp.t - sp.delay) / 0.22, r = Math.round(10 * Math.min(1, k * 3));
@@ -728,6 +737,48 @@ function drawEnemy(b, game, e) {
       line(b, bx + f * 3, by - 12, mx, my, '#6a5a44');
       rect(b, mx - 2, my - 2, 5, 4, '#120c14'); rect(b, mx - 1, my - 1, 3, 2, flash ? '#fff' : '#9a8a70');
       if (up && e.tell > 0.5) { b.globalAlpha = (e.tell - 0.5) * 2; circle(b, bx, by - 9, 10 + Math.round(e.tell * 4), '#f2c14e'); b.globalAlpha = 1; }
+      break;
+    }
+    case 'beamer': { // 光線砲手：背の高い望遠鏡の筒を担いだ機械兵。照準線→光線
+      const tc = e.tell > 0 ? (e.tell > 0.7 ? '#ff4a2a' : '#c0402a') : null;
+      if (tc) rect(b, bx - 7, by - 16, 14, 17, tc); else if (slowGlow) rect(b, bx - 7, by - 16, 14, 17, '#5aa9e6');
+      rect(b, bx - 6, by - 15, 12, 15, flash ? '#ffffff' : '#3a3a4c'); rect(b, bx - 5, by - 14, 10, 6, flash ? '#ffffff' : '#5a5a72');
+      pset(b, bx + f * 2, by - 12, '#ff6a4a'); rect(b, bx - 4, by - 2, 3, 2, '#2a2a36'); rect(b, bx + 1, by - 2, 3, 2, '#2a2a36');
+      // 筒（砲身）
+      const ey = Math.round((e.state === 'aim' || e.state === 'fire' ? e.aimY : cy(e)) / 2);
+      line(b, bx, by - 10, bx + f * 9, ey, '#8a8aa2', 2); pset(b, bx + f * 10, ey, e.tell > 0.5 ? '#ffffff' : '#ffb04a');
+      const x0 = bx + f * 10, x1 = Math.round((cx(e) + f * e.beamLen) / 2);
+      if (e.state === 'aim') { b.globalAlpha = 0.25 + e.tell * 0.6; line(b, x0, ey, x1, ey, e.stateT > 1.05 * e.wmul(game) - 0.3 ? '#ff4a2a' : '#c0402a', e.tell > 0.7 ? 2 : 1); b.globalAlpha = 1; }
+      if (e.state === 'fire') { const k = 1 - e.stateT / 0.35; b.globalAlpha = Math.max(0, k); rect(b, Math.min(x0, x1), ey - 3, Math.abs(x1 - x0), 7, '#ff8a5a'); rect(b, Math.min(x0, x1), ey - 1, Math.abs(x1 - x0), 3, '#fff6e0'); b.globalAlpha = 1; }
+      break;
+    }
+    case 'chain': { // 鎖鎌兵：頭巾と鎌。振りかぶると鎖が回る
+      const tc = e.tell > 0 ? (e.tell > 0.6 ? '#ff4a2a' : '#c0402a') : null;
+      if (tc) rect(b, bx - 6, by - 17, 12, 18, tc); else if (slowGlow) rect(b, bx - 6, by - 17, 12, 18, '#5aa9e6');
+      rect(b, bx - 5, by - 16, 10, 16, flash ? '#ffffff' : '#4a2a3a'); rect(b, bx - 4, by - 15, 8, 5, flash ? '#ffffff' : '#2a1a24');
+      pset(b, bx + f * 2, by - 13, '#ff6a4a'); rect(b, bx - 4, by - 2, 3, 2, '#2a1a24'); rect(b, bx + 1, by - 2, 3, 2, '#2a1a24');
+      if (e.state === 'wind') { const a2 = t * 22; const r = 6; dashLine(b, bx, by - 14, bx + Math.round(Math.cos(a2) * r), by - 14 + Math.round(Math.sin(a2) * r), '#c8c0b0', 1, 1); }
+      if (e.state === 'lash' && e.reach > 0) { const len = Math.round(e.reach / 2); dashLine(b, bx + f * 4, by - 9, bx + f * (4 + len), by - 9, '#c8c0b0', 1, 1); line(b, bx + f * (4 + len), by - 12, bx + f * (6 + len), by - 7, '#e8eef6', 2); }
+      else line(b, bx + f * 4, by - 9, bx + f * 7, by - 13, '#e8eef6');
+      break;
+    }
+    case 'rat': { // 歯車ネズミ：小さな体に歯車の尻尾。速さで残像が出る
+      if (Math.abs(e.vx) > 200) { b.globalAlpha = 0.3; rect(b, bx - 4 - f * 4, by - 5, 8, 4, '#8a7a6a'); b.globalAlpha = 1; }
+      const tc = e.tell > 0 ? '#ff4a2a' : slowGlow ? '#5aa9e6' : null;
+      if (tc) rect(b, bx - 5, by - 7, 10, 7, tc);
+      rect(b, bx - 4, by - 6, 8, 5, flash ? '#ffffff' : '#7a6a5a'); rect(b, bx + f * 3, by - 5, 2, 2, flash ? '#ffffff' : '#9a8a7a');
+      pset(b, bx + f * 4, by - 6, '#ff3a2a'); pset(b, bx - f * 6, by - 4, '#c9a052'); pset(b, bx - f * 7, by - 5, '#c9a052');
+      if (Math.floor(t * 16) % 2) { pset(b, bx - 2, by - 1, '#3a2a22'); pset(b, bx + 2, by - 1, '#3a2a22'); }
+      break;
+    }
+    case 'hopper': { // 跳ね潰し：丸い鉄の体とばねの脚。着地点に影
+      if (e.state === 'crouch' || e.state === 'air') { const lx = Math.round(e.landX / 2), gy = Math.round(Math.min(game.map.groundBelow(e.landX, e.y), game.map.pxH) / 2); b.globalAlpha = 0.35 + e.tell * 0.5; rect(b, lx - 9, gy - 1, 18, 1, '#ff4a2a'); rect(b, lx - 6, gy - 2, 12, 1, '#c0402a'); b.globalAlpha = 1; }
+      const sq = e.state === 'crouch' ? Math.round(e.tell * 3) : e.state === 'recover' ? 1 : 0;
+      const tc = e.tell > 0 && e.state === 'crouch' ? '#ff4a2a' : slowGlow ? '#5aa9e6' : null;
+      if (tc) disc(b, bx, by - 6 + sq, 8, tc);
+      disc(b, bx, by - 6 + sq, 7, flash ? '#ffffff' : '#5a4a3a'); disc(b, bx - 2, by - 8 + sq, 3, flash ? '#ffffff' : '#7a6a52');
+      pset(b, bx + f * 3, by - 7 + sq, '#ff3a2a');
+      line(b, bx - 4, by - 1, bx - 5, by, '#c9a052'); line(b, bx + 4, by - 1, bx + 5, by, '#c9a052');
       break;
     }
     case 'warden': { // 振り子の番人：大きな柱時計の体・文字盤の顔・胸の振り子

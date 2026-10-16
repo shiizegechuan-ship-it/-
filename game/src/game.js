@@ -20,11 +20,13 @@ import {
 } from './meta.js';
 
 const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
+// 剣のビルドとして数える強化（陣形の判定用）
+const MELEE_IDS = ['edge', 'crit', 'critdmg', 'comboheat', 'heavyart', 'fourth', 'execute', 'aerial', 'momentum', 'opener'];
 // 脅威 1 段あたりの上がり幅（常時の術 3 つごとに 1 段）
-export const THREAT = { free: 3, per: 3, hp: 0.7, dmg: 0.15, bossHp: 0.55, extraCap: 4 }; // 最初の 3 つ（Lv の合計）は数えない
+export const THREAT = { free: 3, per: 3, hp: 0.45, dmg: 0.08, bossHp: 0.65, extraCap: 3, growCap: 2 }; // 最初の 3 つ（Lv の合計）は数えない
 const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourglass: '砂時計', gold: '金貨', artifact: 'アーティファクト' };
 // 敵ごとの金貨（夜が深いほど多い）
-const GOLD = { soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
+const GOLD = { beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
 
 export class Game {
   constructor(opts = {}) {
@@ -104,13 +106,14 @@ export class Game {
       level: 1, exp: 0, pendingRare: 0, phoenixUsed: false,
       gold: 0, keys: 0, shops: {}, firstDoorDone: false, aegisUsed: false,
       mobCounter: bossCounter(meta.lastLoop), // 雑魚・中ボスも前の夜の戦い方を覚えている
+      aoeTendency: (() => { const a = habitAnalysis(meta.lastLoop); return !!(a && a.total >= 80 && a.shares.skill >= 0.4); })(), // 前の夜は術（範囲攻撃）が多かったか
       scale: enemyScale(meta),
     };
     // 発動する術は 1 つだけ（楔と継承で重なったら Lv の高い方）
     const actives = wedgedBoons.filter((b) => BOONS[b.id].active).sort((a, b) => b.tier - a.tier);
     for (const extra of actives.slice(1)) wedgedBoons.splice(wedgedBoons.indexOf(extra), 1);
     this.player = new Player(0, 0);
-    this.player.baseMaxHp = PC.maxHp + 30 * upLv(meta, 'hp');
+    this.player.baseMaxHp = PC.maxHp + 15 * upLv(meta, 'hp');
     this.player.metaAtk = 1 + 0.1 * upLv(meta, 'atk');
     this.player.setBoons(wedgedBoons);
     this.player.hp = this.player.maxHp;
@@ -156,12 +159,12 @@ export class Game {
     this.player.lastSafe = { x: this.player.x, y: this.player.y };
     this.updateCamera(DT, true);
     if (fi !== prevFloor) {
-      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 45);
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 22);
       this.fx.setBanner(FLOOR_NAMES[fi], `夜 ${fmtClock(run.clock)}`, '#efe6d2', 1.8);
     }
     const setup = {
       entry: () => this.setupEntry(),
-      combat: () => { for (const e of desc.enemies) this.addEnemy(makeEnemy(e.type, e.x * TILE, e.y * TILE)); this.spawnThreatExtras(desc); },
+      combat: () => { this.run.combats = (this.run.combats || 0) + 1; for (const e of this.formation(desc.enemies)) this.addEnemy(makeEnemy(e.type, e.x * TILE, e.y * TILE)); this.spawnThreatExtras(desc); },
       forge: () => this.setupForge(),
       elite: () => this.setupElite(),
       archive: () => this.setupArchive(),
@@ -202,7 +205,7 @@ export class Game {
   // 中ボス・刻守は、術で一度に削れる量に上限がある（1 秒あたり最大HPの数%。超えた分はごくわずかしか通らない）
   spellGuard(e, dmg) {
     const now = this.run.clock;
-    let cap = e.maxHp * (e.boss ? 0.03 : 0.09);
+    let cap = e.maxHp * (e.boss ? 0.035 : 0.09);
     if (e.counter === 'skill') cap *= 0.5;
     const g = (e.sg ||= { b: cap, t: now });
     g.b = Math.min(cap * 1.5, g.b + (now - g.t) * cap); g.t = now;
@@ -213,8 +216,10 @@ export class Game {
   }
   threatHp() { return 1 + THREAT.hp * this.threatStep(); }
   enemyDmgMul() { return this.run.scale.dmg * (1 + THREAT.dmg * this.threatStep()); }
+  // 増援：脅威の段に加えて、夜が進む（戦闘部屋を 3 つ越える）ごと・夜が深いほど、だんだん敵が増える
   spawnThreatExtras(desc) {
-    const n = Math.min(THREAT.extraCap, this.threatStep());
+    const grow = Math.min(THREAT.growCap, Math.floor(((this.run.combats || 1) - 1) / 3) + Math.floor(this.run.scale.level / 2));
+    const n = Math.min(THREAT.extraCap, this.threatStep()) + grow;
     if (!n) return;
     const rng = makeRng((this.run.plan.offerSeed ^ (this.run.fi * 97 + this.run.ri * 13)) >>> 0);
     const types = extraEnemyTypes(this.run.fi, this.run.scale.level);
@@ -226,8 +231,47 @@ export class Game {
     for (let i = 0; i < n && pool.length; i++) {
       const m = pool[i % pool.length];
       const e = this.addEnemy(makeEnemy(rng.pick(types[m.c]), m.x + (i >= pool.length ? 20 : 0), m.y));
-      if (e) e.extra = true;
+      if (e) { e.extra = true; if (this.room.formation === 'aoe') e.spread = true; }
     }
+  }
+  // 主人公の戦い方（今の強化と前の夜の傾向）
+  buildStyle() {
+    const bs = this.player.boons;
+    const sum = (f) => bs.filter((b) => f(b.id)).reduce((a, b) => a + passiveWeight(b), 0);
+    const pas = sum((id) => PASSIVE_IDS.includes(id));
+    const mel = sum((id) => BOONS[id].melee || MELEE_IDS.includes(id));
+    if (pas >= 4 && pas >= mel) return 'aoe';
+    if (mel >= 4) return 'melee';
+    const mc = this.run.mobCounter;
+    if (mc === 'skill' || mc === 'echo') return 'aoe';
+    if (mc === 'combo' || mc === 'heavy' || mc === 'air') return 'melee';
+    return null;
+  }
+  // 陣形：主人公の戦い方とその階層に合わせて、敵の並びと顔ぶれを組み替える
+  //  槍衾（剣の相手）…入口に近い前衛は近接、奥の後衛は遠距離（光線砲手・弓兵）
+  //  散開（術の相手）…固まらずに散らばり、足の速いネズミと遠距離が増える
+  formation(list) {
+    const style = this.buildStyle();
+    this.room.formation = style;
+    if (!style) return list;
+    const fi = this.run.fi, P = this.marker('P');
+    const GROUND = 'SRALENJF';
+    const out = list.map((e) => ({ ...e }));
+    const ground = out.filter((e) => GROUND.includes(e.type)).sort((a, b) => Math.abs(a.x - P.tx) - Math.abs(b.x - P.tx));
+    const ranged = fi >= 1 ? 'E' : 'A';
+    if (style === 'melee') {
+      ground.forEach((e, i) => {
+        if (i < Math.ceil(ground.length / 2)) { if (e.type === 'A' || e.type === 'E') e.type = fi >= 1 ? 'N' : 'S'; }
+        else if (i >= ground.length - Math.min(2, Math.floor(ground.length / 2))) e.type = i === ground.length - 1 ? ranged : 'A'; // 光線砲手は最後尾の 1 体だけ
+      });
+    } else {
+      ground.forEach((e, i) => { if (i % 3 === 1) e.type = 'F'; if (i === ground.length - 1 && ground.length >= 3) e.type = ranged; });
+    }
+    if (!this.run.formShown || this.run.formShown !== style) {
+      this.run.formShown = style;
+      this.fx.setBanner(style === 'melee' ? '陣形：槍衾' : '陣形：散開', style === 'melee' ? '前衛が押し、後衛が撃つ――剣のあなたへの備え' : '固まらず、足の速い者と遠距離で――術のあなたへの備え', '#ff9a7a', 2.0);
+    }
+    return out;
   }
   addEnemy(e) {
     if (!e) return;
@@ -236,8 +280,11 @@ export class Game {
     e.maxHp = e.hp = Math.round(e.maxHp * sc.hp * (e.boss ? 1 + THREAT.bossHp * this.threatStep() : this.threatHp()));
     e.tier = sc.tier;
     if (!e.boss && this.run.mobCounter) e.counter = this.run.mobCounter;
+    if (this.room.formation === 'aoe') e.spread = !e.boss && !e.elite;
+    // 範囲攻撃が多い相手には、範囲攻撃を躱す動きを覚える
+    if (this.run.aoeTendency || this.player.boons.filter((b) => PASSIVE_IDS.includes(b.id)).reduce((a, b) => a + passiveWeight(b), 0) >= 6) e.aoeDodge = true;
     this.room.enemies.push(e);
-    const tellKey = { warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
+    const tellKey = { beamer: 'tell_beamer', chain: 'tell_chain', rat: 'tell_rat', hopper: 'tell_hopper', warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
     if (tellKey) e.tellKey = tellKey;
     return e;
   }
@@ -465,6 +512,8 @@ export class Game {
     if (e.hp <= e.maxHp * 0.35) dmg *= st.executeMul;
     let crit = false;
     let cat = info.cat;
+    // 範囲攻撃を躱している最中は術が当たらない
+    if (info.spell && e.dodgeI > 0) { if (!e.missT || this.run.clock - e.missT > 0.4) { e.missT = this.run.clock; this.fx.text(cx(e), e.y - 22, 'MISS', '#9fd0ff', 11); } return { silent: true }; }
     const direct = !info.echo && !info.spell && !info.proj;
     // 断罪：重撃で弱った雑魚を断つ。中ボス以上には大きく効く
     if (info.heavy && st.judgement) {
@@ -487,13 +536,28 @@ export class Game {
     if (e.warp > 0) cat = 'skill';
     // 雑魚・中ボスの対策：前の夜にいちばん使った手段が効きにくい
     let countered = false;
-    if (!e.boss && e.counter && (info.echo ? 'echo' : info.cat) === e.counter) { dmg *= e.elite ? 0.55 : 0.75; countered = true; }
+    if (!e.boss && e.counter && (info.echo ? 'echo' : info.cat) === e.counter) { dmg *= 0.5; countered = true; } // 1 種類のダメージを半減
     // 刻守は術そのものに強い。中ボス・刻守は術で削れる量に上限
     if (info.spell && e.boss) dmg *= 0.6;
     // 剣の道の飛ぶ斬撃は、中ボス・刻守には浅くしか入らない（本体の剣で斬るのが本命）
     if (info.proj && (e.boss || e.elite)) dmg *= e.boss ? 0.5 : 0.7;
     if (info.spell && (e.boss || e.elite)) dmg = this.spellGuard(e, dmg);
     dmg = Math.round(dmg);
+    // 刻守は戦いの中でも見切る：HP が 7 割を切った時点で、いちばん受けている種類のダメージを半減する
+    if (e.boss && !e.defeated) {
+      const ck = info.echo ? 'echo' : info.spell ? 'skill' : info.cat;
+      const tk = (e.taken ||= {}); tk[ck] = (tk[ck] || 0) + dmg;
+      if (!e.adapted && e.hp <= e.maxHp * 0.7) {
+        const tot = Object.values(tk).reduce((a, b) => a + b, 0);
+        const [top, v] = Object.entries(tk).sort((a, b) => b[1] - a[1])[0];
+        e.adapted = true;
+        if (tot > 0 && v / tot >= 0.5 && COUNTERS[top]) {
+          e.resist = { ...(e.resist || {}), [top]: Math.min((e.resist || {})[top] ?? 1, 0.5) };
+          this.fx.setBanner('刻守が見切った', `あなたの${COUNTERS[top].habit}は、ここから半分しか通らない`, '#ff7a5a', 2.0);
+          this.sfx.play('tellBig');
+        }
+      }
+    }
     const res = e.takeHit(this, { dmg, dir: info.dir, knock: info.knock, breaks: info.breaks, echo: !!info.echo, cat: info.cat, lift: info.lift || 0, passive: !!info.passive || (!!info.proj && !!e.boss) });
     if (res.silent) return res;
     if (res.absorbed) { this.fx.text(cx(e), e.y - 10, '吸収', '#b67cf0', 12); return res; }
@@ -1060,7 +1124,7 @@ export class Game {
     const p = this.player;
     this.emit('reward', { kind });
     if (kind === 'heal') {
-      const amt = Math.round(120 * (1 + 0.2 * upLv(this.meta, 'heal')) * p.stats.healMul); p.hp = Math.min(p.maxHp, p.hp + amt);
+      const amt = Math.round(60 * (1 + 0.2 * upLv(this.meta, 'heal')) * p.stats.healMul); p.hp = Math.min(p.maxHp, p.hp + amt);
       this.sfx.play('heal'); this.fx.text(cx(p), p.y - 20, `+${amt}`, '#5fd18b', 16); this.fx.ring(cx(p), cy(p), '#5fd18b', 40);
       this.openDoors();
     } else if (kind === 'gold') {
@@ -1070,8 +1134,8 @@ export class Game {
     } else if (kind === 'artifact') {
       this.openArtifactPick('normal', 2, true);
     } else if (kind === 'hourglass') {
-      p.baseMaxHp += 36; p.setBoons(p.boons); p.hp = Math.min(p.maxHp, p.hp + 60);
-      this.sfx.play('heal'); this.fx.text(cx(p), p.y - 20, '最大HP+36', '#f2c14e', 15);
+      p.baseMaxHp += 18; p.setBoons(p.boons); p.hp = Math.min(p.maxHp, p.hp + 30);
+      this.sfx.play('heal'); this.fx.text(cx(p), p.y - 20, '最大HP+18', '#f2c14e', 15);
       this.openDoors();
     } else {
       this.openBoonPick(kind === 'boon2' ? 2 : 1, null);
@@ -1150,7 +1214,7 @@ export class Game {
       case 'fountain':
         if (this.run.fountainUsed[it.id]) break;
         this.run.fountainUsed[it.id] = true;
-        const fh = Math.round(105 * p.stats.healMul);
+        const fh = Math.round(52 * p.stats.healMul);
         p.hp = Math.min(p.maxHp, p.hp + fh);
         this.sfx.play('heal'); this.fx.ring(cx(p), cy(p), '#5fd18b', 40); this.fx.text(cx(p), p.y - 20, `+${fh}`, '#5fd18b', 16);
         break;
@@ -1701,7 +1765,7 @@ export class Game {
       const ids = Object.keys(BOONS).filter((id) => BOONS[id].school === school && !p.boons.some((b) => b.id === id));
       offer = this.run.offerRng.shuffle(ids).slice(0, 3);
     } else offer = rollOffer(this.run.offerRng, p.boons, this.meta.unlocked, 3 + upLv(this.meta, 'choice'));
-    if (!offer.length) { p.hp = Math.min(p.maxHp, p.hp + 90); this.openDoors(); return; }
+    if (!offer.length) { p.hp = Math.min(p.maxHp, p.hp + 45); this.openDoors(); return; }
     this.modal = { type: 'boon', offer, sel: 1 % offer.length, count, school, noDoors, t: 0 };
     this.sfx.play('pickup');
   }
