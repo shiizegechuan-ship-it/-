@@ -71,7 +71,6 @@ export class Player {
   get invulnerable() { return this.iframeT > 0 || this.state === 'dead'; }
   get dodging() { return this.state === 'dodge'; }
 
-  canAct() { return this.state === 'normal'; }
 
   update(game, input, dt) {
     const map = game.map;

@@ -252,7 +252,6 @@ export function unionReady(game) {
   return COMPANION_IDS.every((id) => list.some((c) => c.id === id && c.stage >= 3));
 }
 const U = { sparks: 16, spark: 30, bolt: 40, shadows: 18, shadow: 30, dawn: 120, dawnAt: 2.0, life: 2.6 };
-export const UNION = U;
 function unionHit(game, e, base, knock = 80) {
   if (!e.alive || (e.boss && e.defeated)) return;
   game.dealDamage(e, { base, cat: 'skill', knock, dir: sign(cx(e) - cx(game.player)) || 1, spell: true, companion: true, union: true });

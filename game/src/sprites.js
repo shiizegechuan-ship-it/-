@@ -293,18 +293,6 @@ const BELL = pad([
 export const BELL_FRAMES = { stand: BELL, ring: shift(BELL, 0, 3, -1) };
 export const PAL_BELL = { ...PAL_FOE, g: '#7a5a2a', G: '#c9a052' };
 
-// スプライトの実体（キャッシュされる）
-export function heroSprite(name) { return sprite('hero:' + name, HERO_FRAMES[name], PAL_ALLY); }
-export function liraSprite() { return sprite('lira', LIRA, PAL_ALLY); }
-export function glenSprite() { return sprite('glen', GLEN, PAL_ALLY); }
-export function soldierSprite(name) { return sprite('soldier:' + name, SOLDIER_FRAMES[name], PAL_FOE); }
-export function batSprite(name) { return sprite('bat:' + name, BAT_FRAMES[name], PAL_FOE); }
-export function knightSprite(name) { return sprite('knight:' + name, KNIGHT_FRAMES[name], PAL_FOE); }
-export function bossSprite(name, duel) {
-  const pal = duel ? { ...PAL_FOE, m: '#4a4058', M: '#6e6280' } : PAL_FOE;
-  return sprite('boss:' + name + (duel ? ':d' : ''), BOSS_FRAMES[name], pal);
-}
-
 export const ALL_FRAMES = { HERO_FRAMES, SOLDIER_FRAMES, BAT_FRAMES, KNIGHT_FRAMES, BOSS_FRAMES, ARCHER_FRAMES, PHANTOM_FRAMES, BELL_FRAMES, LIRA: { a: LIRA }, GLEN: { a: GLEN } };
 
 // 色違い（白＝被弾の光、赤＝予備動作の縁取り、青＝遅延、亡霊＝回避の残像）

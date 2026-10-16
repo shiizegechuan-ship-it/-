@@ -54,7 +54,6 @@ export class Input {
     return l ? -1 : r ? 1 : 0;
   }
   pressed(a) { return (this.cur[a] && !this.prev[a]) || !!(this.pressedNow && this.pressedNow[a]); }
-  released(a) { return !this.cur[a] && this.prev[a]; }
   // メニュー等が入力を消費したときに使う
   consume(a) { this.prev[a] = this.cur[a]; if (this.pressedNow) this.pressedNow[a] = false; }
   clear() { for (const a of ACTIONS) { this.raw[a] = false; } this.sources = {}; this.pressBuffer = {}; }

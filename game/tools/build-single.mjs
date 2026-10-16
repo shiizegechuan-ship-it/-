@@ -9,7 +9,9 @@ const out = resolve(process.argv[2] || resolve(root, 'dist/wedge-of-dawn.html'))
 const tmp = resolve(root, 'dist/bundle.js');
 mkdirSync(dirname(tmp), { recursive: true });
 mkdirSync(dirname(out), { recursive: true });
-execFileSync('npx', ['--yes', 'esbuild@0.24.0', resolve(root, 'src/main.js'), '--bundle', '--format=iife', '--minify-syntax', `--outfile=${tmp}`], { stdio: 'inherit' });
+// 配る 1 ファイルは容量を最小に：空白・名前を詰め（--minify）、日本語は \u エスケープせずそのまま（--charset=utf8）。
+// 編集は src/ の読みやすいコードで行う（ここで縮めるのは出力だけ）
+execFileSync('npx', ['--yes', 'esbuild@0.24.0', resolve(root, 'src/main.js'), '--bundle', '--format=iife', '--minify', '--charset=utf8', '--legal-comments=none', `--outfile=${tmp}`], { stdio: 'inherit' });
 const js = readFileSync(tmp, 'utf8');
 if (js.includes('</script')) throw new Error('bundle contains </script');
 
@@ -55,5 +57,8 @@ ${js}
 })();
 </script>
 `;
-writeFileSync(out, html);
-console.log('wrote', out, `${(html.length / 1024).toFixed(0)}KB`);
+// HTML・CSS の注釈と字下げも出力では落とす（スクリプトの中身には触れない）
+const [head, rest] = html.split('<script>\n' + js);
+const slim = head.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n\s+/g, '\n').replace(/\n+/g, '\n') + '<script>\n' + js + rest.replace(/\n\s+/g, '\n');
+writeFileSync(out, slim);
+console.log('wrote', out, `${(Buffer.byteLength(slim) / 1024).toFixed(0)}KB`);

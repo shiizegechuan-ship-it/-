@@ -2,7 +2,7 @@
 //   下層・市場：夕暮れの空、遠くの町並みと窓明かり、市場の梁と提灯
 //   中層・歯車回廊：薄暗い機械室、回る大歯車、配管と鎖
 //   上層・鐘楼：星空と月、眼下の町、石のアーチと大鐘
-import { makeCanvas, rect, line, disc, circle, pset, hash2, PW, PH } from './pix.js';
+import { makeCanvas, rect, line, disc, circle, pset, hash2, PW } from './pix.js';
 
 const LAYER_W = 480, LAYER_H = 270;
 

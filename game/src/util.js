@@ -13,7 +13,6 @@ export const cy = (e) => e.y + e.h / 2;
 export function dist(a, b) {
   return Math.hypot(cx(a) - cx(b), cy(a) - cy(b));
 }
-export const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 
 // 決定的乱数（mulberry32）
 export function makeRng(seed) {

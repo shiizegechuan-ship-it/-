@@ -2,13 +2,11 @@
 // 世界座標 2px = ドット 1px（ZOOM 1.5 で 640×360 の世界が見える）。
 export const PW = 320, PH = 180, PX = 2;
 
-let canvasFactory = (w, h) => {
+export function makeCanvas(w, h) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   return c;
-};
-export function setCanvasFactory(f) { canvasFactory = f; }
-export function makeCanvas(w, h) { return canvasFactory(w, h); }
+}
 
 // ───────── 点・線・円（にじまない） ─────────
 export function rect(ctx, x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }

@@ -1,11 +1,11 @@
 // HUD・メニュー・巻き戻り画面。装飾より可読性を優先する。
 import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC } from './config.js';
 import { clamp } from './util.js';
-import { COMPANIONS, stageOf, allComps, unionReady } from './companion.js';
+import { COMPANIONS, allComps, unionReady } from './companion.js';
 import { BOONS, forgeDiff, SCHOOLS, RESONANCE, synergyHints, schoolCounts, fusionsFor } from './boons.js';
 import { ACTIVE_ARTS } from './arts.js';
 import { ARTIFACTS, ARTIFACT_COLOR } from './artifacts.js';
-import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, openQuestions, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritCount, inheritLabel, enemyScale, DAWN_STEPS, dawnProgress } from './meta.js';
+import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritLabel, DAWN_STEPS, dawnProgress } from './meta.js';
 import { FLOOR_NAMES } from './world.js';
 import { expToNext, LEVEL } from './level.js';
 import { LB, lbStart, rewindGrid } from './layout.js';

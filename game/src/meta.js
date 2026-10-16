@@ -340,17 +340,3 @@ export function dawnProgress(m) {
   return { done, total: DAWN_STEPS.length, next };
 }
 
-// 記録帳の「未解決の問い」。答えではなく、次に試すことの方向だけを示す。
-export function openQuestions(m) {
-  const q = [];
-  if (!knows(m, 'glen_saved')) q.push(knows(m, 'glen_time') ? 'グレンを助けるには、鍛冶場へもっと早く着く必要がある。' : '鍛冶場では何が起きているのか？');
-  if (!knows(m, 'lira_name')) q.push('市場の少女はなぜ同じ言葉を繰り返すのか？');
-  else if (!hasWedge(m, 'lira')) q.push('名前を呼んでも、少女は次の夜には忘れてしまう。忘れさせない方法は？');
-  else if (!knows(m, 'lira_message')) q.push('覚えている少女に、名前で呼びかけたら？');
-  if (!knows(m, 'code')) q.push('中層の書庫の扉は番号で閉ざされている。番号はどこに？');
-  else if (!knows(m, 'master_reason')) q.push('番号は分かった。書庫の扉を開けよう。');
-  if (!m.flags.bossBeaten) q.push('鐘楼の刻守を倒せ。');
-  else if (!trueEndReady(m)) q.push('刻守を倒しても夜は戻る。彼が本当に止めたいものは？');
-  else q.push('刻守に、リラの言葉を届けよ。');
-  return q;
-}

@@ -1,12 +1,12 @@
 // ゲーム本体。シミュレーションのみで DOM に触れない（テストからも動かせる）。
-import { DT, TILE, VIEW_W, VIEW_H, ZOOM, PLAYER as PC, DIFFICULTY } from './config.js';
+import { DT, TILE, VIEW_W, VIEW_H, ZOOM, PLAYER as PC, DIFFICULTY, DIFF_ORDER } from './config.js';
 import { overlap, cx, cy, clamp, lerp, makeRng, sign } from './util.js';
 import { TileMap, ONEWAY, EMPTY } from './tilemap.js';
 import { Player } from './player.js';
 import { makeEnemy, RustSoldier, GearKnight, Warden, Squire, Projectile } from './enemies.js';
 import { Tokimori, updateHoming } from './boss.js';
-import { COMPANIONS, COMPANION_IDS, makeCompanion, updateCompanions, onHeroHit, stageOf, companionMods, combinedMods, allComps, CALL_BOON, callTarget, unionReady, castUnion } from './companion.js';
-import { castArt, castWarpSlash, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, spawnWave, Spell, MELEE, PRISM } from './arts.js';
+import { COMPANIONS, COMPANION_IDS, makeCompanion, updateCompanions, onHeroHit, stageOf, combinedMods, allComps, CALL_BOON, callTarget, unionReady, castUnion } from './companion.js';
+import { castArt, castWarpSlash, updateSpells, updatePassives, PROCS, ACTIVE_ARTS, Spell, MELEE, PRISM } from './arts.js';
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
 import { Fx } from './fx.js';
 import { NullSfx } from './audio.js';
@@ -14,12 +14,11 @@ import { BOONS, LEGEND_IDS, rollOffer, rollRare, boonMax, canForge, PASSIVE_IDS,
 import { expToNext, expFor, levelBonus, LEVEL } from './level.js';
 import { rewindGrid, lbRowAt } from './layout.js';
 import { nightLook } from './nightlook.js';
-import { LAYOUTS, FLOOR_NAMES, buildPlan, layoutRows, extraEnemyTypes } from './world.js';
+import { FLOOR_NAMES, buildPlan, layoutRows, extraEnemyTypes } from './world.js';
 import {
   newMeta, serialize, deserialize, endLoop, learn, knows, hasWedge, addWedge, removeWedge, freeSlots,
   bossCounter, trueEndReady, finalReady, FINAL_NIGHT, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
-  upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount, inheritLabel, habitAnalysis, dawnProgress, MOB_COUNTERS,
-} from './meta.js';
+  upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount, inheritLabel, habitAnalysis, dawnProgress, MOB_COUNTERS} from './meta.js';
 
 const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
 // 剣のビルドとして数える強化（陣形の判定用）
@@ -2270,8 +2269,7 @@ export class Game {
   difficulty() { return DIFFICULTY[(this.meta && this.meta.difficulty) || this.settings.difficulty || 'normal'] || DIFFICULTY.normal; }
   // 難易度を切り替える（簡単→普通→難しい。セーブがあれば次の夜から反映）
   cycleDifficulty() {
-    const order = ['veryeasy', 'easy', 'normal', 'hard', 'nightmare'];
-    const next = order[(order.indexOf(this.difficulty().id) + 1) % order.length];
+    const next = DIFF_ORDER[(DIFF_ORDER.indexOf(this.difficulty().id) + 1) % DIFF_ORDER.length];
     this.settings.difficulty = next;
     if (this.meta) { this.meta.difficulty = next; this.save(); } else this.saveSettings();
   }

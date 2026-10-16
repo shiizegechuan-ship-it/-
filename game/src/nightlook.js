@@ -3,7 +3,7 @@
 //  4〜5夜：月が赤みを帯び、色が赤茶に沈む
 //  6夜〜 ：大きな赤い月。塔はひび割れだらけ
 //  夜明け後：白みはじめた空（青みがかった色）
-import { rect, pset, disc, line } from './pix.js';
+import { pset, disc } from './pix.js';
 import { hash2 } from './pix.js';
 
 export function nightStage(meta) {
