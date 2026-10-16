@@ -450,7 +450,7 @@ export class Game {
     }
     // ヒットストップ中の入力は捨てずに持ち越す（連撃・回避の取りこぼし防止）
     if (this.hitstop > 0) {
-      this.hitstop = Math.max(0, this.hitstop - DT);
+      this.hitstop = Math.max(0, this.hitstop - DT); if (this.hitstop < 1e-6) this.hitstop = 0; // 小数の誤差でもう 1 コマ止まらないように
       for (const a of BUFFERED) if (input.pressed(a)) this.pendingPresses.add(a);
       return;
     }
@@ -477,6 +477,8 @@ export class Game {
     if (p.state === 'normal' && p.onGround && (input.pressed('jump') || input.pressed('confirm'))) {
       const it = this.nearestInteractable();
       if (it && this.interactPrompt(it)) { input.consume('jump'); input.consume('confirm'); p.bufferT = 0; this.tryInteract(); }
+      // 部屋を終えたら（報酬を取り、仕掛けも済んだら）、跳ぶボタンで扉の横までくるくる回って移動し、落ちている金貨なども拾う
+      else if (this.canAutoTravel()) { input.consume('jump'); input.consume('confirm'); p.bufferT = 0; this.autoTravel(); }
     }
     p.update(this, input, pdt);
     if (p.wallSlam) this.onWallSlam();
@@ -1404,6 +1406,32 @@ export class Game {
     }
     return { gx: bx, gy: feet };
   }
+  canAutoTravel() {
+    const room = this.room, p = this.player;
+    if (!room.doorsOpen || this.modal || p.state !== 'normal') return false;
+    if (room.enemies.some((e) => e.alive && !(e.boss && e.defeated))) return false;
+    const t = room.desc.type;
+    if (!['combat', 'elite', 'elite2', 'trial', 'golden', 'shrine'].includes(t)) return false;
+    // まだ済んでいない物（報酬・楔を打てる残骸・宝箱・祠など）があれば動かない
+    return !room.items.some((it) => it.kind === 'reward' || (!['door', 'sign', 'lift', 'merchant'].includes(it.kind) && this.interactPrompt(it)));
+  }
+  autoTravel() {
+    const p = this.player, map = this.map;
+    const doors = this.room.items.filter((i) => i.kind === 'door');
+    if (!doors.length) return false;
+    const d = doors.slice().sort((a, b) => Math.abs(cx(a) - cx(p)) - Math.abs(cx(b) - cx(p)))[0];
+    const ty = d.y + d.h - p.h;
+    // 立てる所：壁の中でなく、足元に床がある
+    const okAt = (x) => x > 4 && x + p.w < map.pxW - 4 && !map.solidAt(x + 2, ty + 4) && !map.solidAt(x + p.w - 2, ty + p.h - 4) && Math.abs(map.groundBelow(x + p.w / 2, ty + p.h - 6) - (ty + p.h)) < 6;
+    const near = cx(p) < cx(d) ? [d.x - p.w - 6, d.x + d.w + 6] : [d.x + d.w + 6, d.x - p.w - 6];
+    let tx = near.find((x) => okAt(x));
+    if (tx == null) tx = cx(d) - p.w / 2; // 横に立てなければ扉の前
+    // 拾いきれていない金貨・経験値の粒は、すべて自動で回収する
+    if ((this.room.pickups || []).length) { this.flushPickups(); this.fx.text(cx(p), p.y - 30, '回収', '#ffd84a', 12); this.sfx.play('coin'); }
+    p.startTravel(tx, ty);
+    this.sfx.play('dodge');
+    return true;
+  }
   separateFromDoors() {
     const map = this.map, doors = this.room.items.filter((i) => i.kind === 'door');
     if (!doors.length) return;
@@ -2130,6 +2158,11 @@ export class Game {
       case 'dialog': {
         if (m.t < 0.12) return;
         const last = m.idx >= m.lines.length - 1;
+        // 回避（戻る）ボタン：カーソルがどこにあっても「立ち去る」「やめる」で会話を終える
+        if (m.choices && back) {
+          const leave = m.choices.find((c) => c.cancel || c.label === '立ち去る' || c.label === 'やめる');
+          if (leave) { this.modal = null; this.sfx.play('select'); input.consume('dodge'); input.consume('back'); input.consume('attack'); input.consume('jump'); leave.fn(); return; }
+        }
         if (last && m.choices) {
           if (input.pressed('up')) { m.sel = (m.sel + m.choices.length - 1) % m.choices.length; this.sfx.play('select'); }
           if (input.pressed('down')) { m.sel = (m.sel + 1) % m.choices.length; this.sfx.play('select'); }

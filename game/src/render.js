@@ -342,7 +342,7 @@ function drawUnion(b, game, u, t) {
 const COMPANIONS_COLOR = { hotaru: '#ffe14a', neji: '#9fd0ff', chiku: '#d8c8ff' };
 
 function drawPlayer(b, game, p) {
-  const blink = p.state === 'hurt' || (p.iframeT > 0 && !p.dodging && p.state !== 'dead' && p.state !== 'autodash');
+  const blink = p.state === 'hurt' || (p.iframeT > 0 && !p.dodging && p.state !== 'dead' && p.state !== 'autodash' && p.state !== 'travel');
   if (blink && Math.floor(game.time * 20) % 2 === 0) return;
   const f = p.face, t = game.time;
   const bx = Math.round(cx(p) / 2), by = Math.round((p.y + p.h) / 2);

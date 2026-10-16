@@ -104,6 +104,7 @@ export class Player {
       case 'charge': this.updateCharge(game, input, dt, dirX); break;
       case 'dodge': this.updateDodge(game, input, dt); break;
       case 'autodash': this.updateAutoDash(game, input, dt); break;
+      case 'travel': this.updateTravel(game, dt); break;
       case 'hurt': this.updateHurt(dt); if (this.kbT > 0 && this.kbGround) this.stopAtAbyssAir(game.map, dt); else this.stopAtAbyss(game.map, dt); break;
       case 'channel': this.updateChannel(game, input, dt); break;
       case 'dead': this.vx = approach(this.vx, 0, 900 * dt); break;
@@ -111,7 +112,7 @@ export class Player {
     }
 
     // 重力（回避中は無重力）
-    if (this.state !== 'dodge' && this.state !== 'autodash') {
+    if (this.state !== 'dodge' && this.state !== 'autodash' && this.state !== 'travel') {
       const g = P.gravity * (this.vy > 0 ? P.fallGravityMul : 1);
       this.vy = Math.min(this.vy + g * dt, P.maxFall);
     }
@@ -299,6 +300,24 @@ export class Player {
   inReach(e) {
     const gapX = Math.abs(cx(e) - (this.x + this.w / 2)) - e.w / 2 - this.w / 2;
     return gapX <= 34 && Math.abs(cy(e) - (this.y + this.h / 2)) < e.h / 2 + 14;
+  }
+  // 部屋を終えたあと、扉の横までくるくる回りながら飛んでいく（壁は抜ける）
+  startTravel(tx, ty) {
+    this.state = 'travel'; this.stateT = 0; this.atk = null;
+    this.travel = { x0: this.x, y0: this.y, tx, ty, t: 0, dur: Math.min(0.9, 0.35 + Math.hypot(tx - this.x, ty - this.y) / 900) };
+    this.face = Math.sign(tx - this.x) || this.face;
+  }
+  updateTravel(game, dt) {
+    const tr = this.travel;
+    tr.t += dt;
+    const k = Math.min(1, tr.t / tr.dur), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    this.x = tr.x0 + (tr.tx - tr.x0) * e;
+    this.y = tr.y0 + (tr.ty - tr.y0) * e - Math.sin(k * Math.PI) * 50;
+    this.vx = 0; this.vy = 0;
+    this.iframeT = Math.max(this.iframeT, 0.1);
+    this.flipT = 0.34 - ((tr.t * 2.6) % 1) * 0.34;
+    if (Math.floor(tr.t / 0.06) !== Math.floor((tr.t - dt) / 0.06)) game.fx.afterimage(this);
+    if (k >= 1) { this.x = tr.tx; this.y = tr.ty; this.state = 'normal'; this.stateT = 0; this.flipT = 0; this.onGround = true; this.travel = null; game.fx.landPuff(this.x + this.w / 2, this.y + this.h, 0.5); }
   }
   updateAutoDash(game, input, dt) {
     const a = this.autoDash, e = a.e;

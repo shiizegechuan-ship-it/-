@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { cx } from '../src/util.js';
 import { newGame, Driver } from './helpers.mjs';
 import { addWedge, learn } from '../src/meta.js';
 
@@ -232,4 +233,41 @@ test('制圧後の報酬（ひし形）は、どの部屋のどこで制圧し�
     });
   }
   assert.ok(n > 200);
+});
+
+test('会話の選択肢：カーソルがどこにあっても、回避（戻る）ボタンで「立ち去る」を選べる', () => {
+  const g = newGame(13); const d = new Driver(g);
+  let left = false, other = false;
+  g.openDialog([{ who: 'a', text: '一行目' }, { who: 'a', text: '二行目' }], [{ label: '話を聞く', fn: () => { other = true; } }, { label: '強化を鍛えてもらう', fn: () => { other = true; } }, { label: '立ち去る', fn: () => { left = true; } }]);
+  d.frame(10);
+  d.frame(1, ['dodge']); // まだ一行目でも
+  assert.equal(g.modal, null);
+  assert.ok(left && !other);
+  assert.equal(g.player.state === 'dodge', false, 'did not dodge');
+});
+
+test('部屋を終えたら、跳ぶボタンで扉の横までくるくる回って移動し、落ちている金貨と粒も回収する', () => {
+  const g = newGame(14); g.startLoop(); g.modal = null;
+  const ri = g.run.plan.floors[0].findIndex((r) => r.type === 'combat');
+  g.enterRoom(0, ri); g.modal = null;
+  const d = new Driver(g), p = g.player;
+  for (const e of g.room.enemies) { e.hp = 0; e.alive = false; }
+  d.frame(5);
+  // 報酬が残っている間は動かない
+  assert.ok(g.room.items.some((i) => i.kind === 'reward'));
+  assert.equal(g.canAutoTravel(), false);
+  g.room.items = g.room.items.filter((i) => i.kind !== 'reward'); g.openDoors();
+  g.room.pickups = [{ type: 'gold', v: 7, x: p.x + 300, y: p.y, vx: 0, vy: 0, t: 1 }, { type: 'exp', v: 5, x: p.x + 200, y: p.y, vx: 0, vy: 0, t: 1 }];
+  const gold0 = g.run.gold;
+  d.until(() => p.onGround && p.state === 'normal', 60);
+  d.frame(1, ['jump']); if (p.state !== 'travel') d.frame(1); // ヒットストップ中の入力は次のコマへ持ち越される
+  assert.equal(p.state, 'travel');
+  assert.equal(g.run.gold, gold0 + 7, 'coins collected');
+  d.until(() => p.state !== 'travel', 120);
+  const door = g.room.items.filter((i) => i.kind === 'door').sort((a, b) => Math.abs(cx(a) - cx(p)) - Math.abs(cx(b) - cx(p)))[0];
+  assert.ok(Math.abs(cx(door) - cx(p)) < 50, 'next to a door');
+  d.frame(10);
+  assert.ok(p.onGround, 'standing on the floor');
+  // 扉の前ではそのまま跳ぶボタンで入れる
+  assert.equal(g.nearestInteractable() && g.nearestInteractable().kind, 'door');
 });
