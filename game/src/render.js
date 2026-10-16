@@ -818,8 +818,21 @@ function drawEnemy(b, game, e) {
     }
     case 'knight': {
       const frame = e.state === 'stagger' ? 'stagger' : Math.abs(e.vx) > 10 ? (Math.floor(t * 6) % 2 ? 'walk0' : 'walk1') : 'stand';
-      const tell = (e.tellKind === 'shield' || e.tellKind === 'hammer') ? e.tell : 0;
+      const tell = e.tellKind && e.tellKind !== 'shadow' ? e.tell : 0;
       body('knight', frame, tell);
+      // 新しい技の予兆と動き
+      if (e.state === 'upperWind' || e.state === 'upper') { // 大槌を真上へ
+        const up = e.state === 'upper', hy = by - 30 - (up ? 18 : Math.round(e.tell * 6));
+        line(b, bx, by - 13, bx + f * 2, hy, '#6a5a44', 2); rect(b, bx + f * 2 - 4, hy - 4, 9, 7, flash ? '#fff' : '#7a6a52');
+        if (!up) for (let i = 0; i < 3; i++) pset(b, bx - 4 + i * 4, by - 40 - (Math.floor(t * 10 + i) % 3), '#ff4a2a');
+        if (up && e.stateT < 0.18) { glowLine(b, bx, by - 20, bx, by - 66, '#ffd0a0', 3); }
+      }
+      if (e.state === 'throwWind') { const gx = bx - f * 8, gy = by - 22 - Math.round(e.tell * 4); disc(b, gx, gy, 5, '#8a6a3a'); circle(b, gx, gy, 6, e.tell > 0.6 ? '#ff4a2a' : '#c9a052'); }
+      if (e.state === 'sparkWind') for (let i = 0; i < 4; i++) { const a = t * 9 + i * 1.6; pset(b, bx + Math.round(Math.cos(a) * 9), by - 16 + Math.round(Math.sin(a) * 9), i % 2 ? '#ffb04a' : '#ffe14a'); }
+      if (e.state === 'diveHold' || e.state === 'dive') {
+        glow(b, bx, by - 10, 14, '#ff8a5a', e.state === 'dive' ? 0.6 : 0.35);
+        if (e.diveV) { b.globalAlpha = e.state === 'diveHold' ? 0.6 : 0.25; dashLine(b, bx, by - 10, bx + Math.round(e.diveV.x / 6), by - 10 + Math.round(e.diveV.y / 6), '#ff4a2a', 1, 2); b.globalAlpha = 1; }
+      }
       // 盾（前面のトゲ）
       if (e.state !== 'stagger') {
         const glow = e.tellKind === 'shield' ? e.tell : 0;
@@ -979,6 +992,14 @@ function drawEnemy(b, game, e) {
       if (e.state === 'sweepWind') dashLine(b, bx + f * 10, by - 14, bx + f * 46, by - 14 + Math.round(e.tell * 6), e.tell > 0.6 ? '#ff4a2a' : '#c0402a');
       if (e.state === 'sweep') { arc(b, bx + f * 6, by - 16, 34, f > 0 ? -1.1 : Math.PI - 0.8, f > 0 ? 0.8 : Math.PI + 1.1, '#ff8a5a', 3); arc(b, bx + f * 6, by - 16, 30, f > 0 ? -0.9 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 0.9, '#ffffff', 1); }
       if (e.state === 'tollWind') { const bt = Math.round(e.tell * 4); for (let i = 0; i < 6; i++) rect(b, bx - 2 - Math.floor(i / 2), y0 - 10 - bt + i, 5 + Math.floor(i / 2) * 2, 1, '#f2c14e'); }
+      if (e.state === 'liftWind' || e.state === 'lift') { // 振り子を真上へ
+        const up = e.state === 'lift';
+        dashLine(b, bx, y0 + 12, bx, y0 - 10 - (up ? 30 : Math.round(e.tell * 8)), e.tell > 0.6 || up ? '#ff4a2a' : '#c0402a');
+        if (up && e.stateT < 0.2) glowLine(b, bx, y0, bx, y0 - 52, '#ffd0a0', 3);
+      }
+      if (e.state === 'bladeWind') { const a = t * 20; for (let i = 0; i < 2; i++) line(b, bx - f * 12, by - 18, bx - f * 12 + Math.round(Math.cos(a + i * Math.PI) * 7), by - 18 + Math.round(Math.sin(a + i * Math.PI) * 4), e.tell > 0.6 ? '#ff4a2a' : '#ffe6c0', 2); }
+      if (e.state === 'notesWind') { const r = 6 + Math.round(e.tell * 10); b.globalAlpha = 0.6; circle(b, bx, y0 + 5, r, '#ffe14a'); b.globalAlpha = 1; }
+      if (e.state === 'spinAir') { const a = e.spinA || 0; for (let i = 0; i < 2; i++) { const aa = a + i * Math.PI; glowLine(b, bx, by - 14, bx + Math.round(Math.cos(aa) * 26), by - 14 + Math.round(Math.sin(aa) * 20), '#ffd0a0', 2); } arc(b, bx, by - 14, 26, a - 1.2, a, '#ffffff', 1); }
       if (e.state === 'jump' && e.tell) { const gy = Math.round(game.map.groundBelow(cx(e), e.y + e.h) / 2); b.globalAlpha = 0.5; rect(b, bx - 10, gy - 1, 20, 1, '#ff4a2a'); b.globalAlpha = 1; }
       if (e.state === 'recover' || e.state === 'stagger') for (let i = 0; i < 3; i++) pset(b, bx - 3 + i * 3, y0 - 4 - (Math.floor(t * 6 + i) % 2), '#9a8fa6');
       break;
@@ -1082,6 +1103,23 @@ function drawProjectile(b, pr, t) {
     const k = pr.r / pr.maxR;
     b.globalAlpha = 1 - k * 0.6;
     for (let i = 0; i < Math.max(1, Math.round(pr.band / 4)); i++) circle(b, pr.x / 2, pr.y / 2, Math.max(1, pr.r / 2 - i * 2), i % 2 ? '#c9a052' : '#ffe6a0');
+    b.globalAlpha = 1;
+  } else if (pr.kind === 'biggear') { // 戻ってくる大歯車
+    const a = pr.spin || 0;
+    glow(b, x, y, 9, '#ffb04a', 0.35);
+    disc(b, x, y, 6, '#2a1e18'); disc(b, x, y, 5, '#8a6a3a'); disc(b, x, y, 2, '#2a1e18');
+    for (let i = 0; i < 8; i++) { const aa = a + i / 8 * Math.PI * 2; rect(b, Math.round(x + Math.cos(aa) * 7) - 1, Math.round(y + Math.sin(aa) * 7) - 1, 2, 2, '#c9a052'); }
+  } else if (pr.kind === 'blade') { // 回る振り子の刃
+    const a = pr.t * 18;
+    glow(b, x, y, 8, '#ff8a5a', 0.3);
+    for (let i = 0; i < 2; i++) { const aa = a + i * Math.PI; line(b, x, y, Math.round(x + Math.cos(aa) * 7), Math.round(y + Math.sin(aa) * 4), '#ffe6c0', 2); }
+    disc(b, x, y, 2, '#c9a052');
+  } else if (pr.kind === 'note') { // 追ってくる鐘の音・火花
+    const col = pr.color || '#ffe14a';
+    glow(b, x, y, 6, col, 0.45);
+    disc(b, x, y, 3, col); pset(b, x - 1, y - 1, '#ffffff');
+    const d = Math.hypot(pr.vx, pr.vy) || 1;
+    for (let i = 1; i <= 3; i++) { b.globalAlpha = 0.5 - i * 0.12; pset(b, Math.round(x - pr.vx / d * i * 2), Math.round(y - pr.vy / d * i * 2), col); }
     b.globalAlpha = 1;
   } else if (pr.kind === 'wave') {
     const bx = Math.round(pr.x / 2), by = Math.round((pr.y + pr.h) / 2);

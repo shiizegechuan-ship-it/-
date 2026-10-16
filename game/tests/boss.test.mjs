@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { cx } from '../src/util.js';
 import assert from 'node:assert/strict';
 import { newGame, Driver } from './helpers.mjs';
 import { addWedge } from '../src/meta.js';
@@ -121,3 +122,33 @@ test('時止め中もプレイヤーは遅く動ける（完全停止はしな�
   assert.ok(g.player.x > x0 + 5, 'moves a little');
   assert.ok(g.player.x < x0 + 120, 'but slowly');
 });
+
+// ───── 中ボスの遠距離・空中・追尾・上方向の攻撃 ─────
+import { GearKnight as GK2, Warden as WD2 } from '../src/enemies.js';
+import { sandbox as sb2, Driver as Dr2, FLAT as FL2 } from './helpers.mjs';
+function midArena(E, dx) {
+  const g = sb2(FL2); const d = new Dr2(g); d.frame(2);
+  const e = new E(g.player.x + dx, 450); g.addEnemy(e); e.cool = 0; e.stateT = 2;
+  g.room.cleared = true; g.player.hp = g.player.maxHp = 1e6;
+  return { g, d, e };
+}
+const seen = (g, d, e, states, frames, hold) => { const s = new Set(); for (let i = 0; i < frames; i++) { if (hold) hold(); d.frame(1); s.add(e.state); g.player.iframeT = 0; } return states.filter((x) => s.has(x)); };
+for (const [name, E, ranged, homing, air, up] of [['歯車騎士', GK2, 'throwWind', 'sparkWind', 'dive', 'upper'], ['振り子の番人', WD2, 'bladeWind', 'notesWind', 'spinAir', 'lift']]) {
+  test(`中ボス「${name}」：遠く離れると遠距離攻撃と追尾する弾を使い、どちらもプレイヤーに届く`, () => {
+    const { g, d, e } = midArena(E, 560);
+    const p = g.player; const px = p.x;
+    const got = seen(g, d, e, [ranged, homing], 60 * 14, () => { p.x = px; p.vx = 0; if (Math.abs(cx(e) - cx(p)) < 400) e.x = p.x + 520; });
+    assert.deepEqual(got.sort(), [ranged, homing].sort());
+    assert.ok(p.hp < p.maxHp, 'ranged attacks reach the player');
+  });
+  test(`中ボス「${name}」：空中攻撃と、頭上の相手への上方向の攻撃がある`, () => {
+    const { g, d, e } = midArena(E, 180);
+    const p = g.player;
+    const got = seen(g, d, e, [air], 60 * 12, () => { if (Math.abs(cx(e) - cx(p)) < 140 || Math.abs(cx(e) - cx(p)) > 300) { e.x = p.x + 190; e.gravity = true; } });
+    assert.deepEqual(got, [air]);
+    const m = midArena(E, 30);
+    m.g.player.y -= 90; m.g.player.vy = 0;
+    const got2 = seen(m.g, m.d, m.e, [up], 60 * 3, () => { m.g.player.y = m.e.y - 90; m.g.player.vy = 0; m.g.player.x = m.e.x; });
+    assert.deepEqual(got2, [up]);
+  });
+}

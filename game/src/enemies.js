@@ -349,8 +349,15 @@ export class GearKnight extends Enemy {
         const blocked = this.ledgeAhead(map, this.face) || this.wallAhead(map, this.face);
         this.vx = approach(this.vx, adx > 70 && !blocked ? this.face * 70 : 0, 600 * dt);
         if (this.cool <= 0 && p.state !== 'dead' && !behind) {
-          if (adx < 110) { this.setState(this.combo % 3 === 2 ? 'slamWind' : 'bashWind'); this.combo++; game.sfx.play('tellBig'); }
-          else if (this.tier >= 3 && adx >= 140 && adx < 320 && this.stateT > 0.8) { this.setState('leapWind'); game.sfx.play('tellBig'); }
+          const dy = this.dy(p);
+          this.seq = (this.seq || 0);
+          // 頭上の相手には大槌の突き上げ（上方向）
+          if (dy < -50 && adx < 90) { this.setState('upperWind'); game.sfx.play('tellBig'); }
+          else if (adx < 110) { this.setState(this.combo % 3 === 2 ? 'slamWind' : 'bashWind'); this.combo++; game.sfx.play('tellBig'); }
+          // 中距離：跳び上がって空中から盾ごと急降下（空中攻撃）／第3夜からは叩きつけも
+          else if (adx >= 140 && adx < 320 && this.stateT > 0.6) { this.setState(this.tier >= 3 && this.seq % 2 ? 'leapWind' : 'skyWind'); this.seq++; game.sfx.play('tellBig'); }
+          // 遠距離：戻ってくる大歯車／追尾する火花
+          else if (adx >= 200 && this.stateT > 0.5) { this.setState(this.seq % 2 ? 'sparkWind' : 'throwWind'); this.seq++; game.sfx.play('tellBig'); }
           else if (adx < 260 && this.stateT > 1.2) { this.setState('bashWind'); game.sfx.play('tellBig'); }
         }
         break;
@@ -394,15 +401,87 @@ export class GearKnight extends Enemy {
         if (this.stateT < 0.12) this.attacks.push({ ...this.frontBox(70, 44), dmg: 25, key: this.id * 1000 + this.swing });
         if (this.stateT >= 0.2) this.setState('recover');
         break;
+      // 上方向：大槌を真上へ突き上げる（第2夜からは針も 3 本上へ）
+      case 'upperWind':
+        this.vx = approach(this.vx, 0, 900 * dt); this.facePlayer(p);
+        this.tell = clamp(this.stateT / (0.45 * wm), 0, 1); this.tellKind = 'up';
+        if (this.stateT >= 0.45 * wm) {
+          this.setState('upper'); this.swing++; game.sfx.play('heavySwing');
+          if (this.tier >= 2) for (const a of [-0.35, 0, 0.35]) game.spawnProjectile(new Projectile('hand', cx(this) - 6, this.y - 10, Math.sin(a) * 420, -Math.cos(a) * 420, 12));
+        }
+        break;
+      case 'upper':
+        if (this.stateT < 0.18) this.attacks.push({ x: this.x - 14, y: this.y - 96, w: this.w + 28, h: 100, dmg: 20, knock: 300, key: this.id * 1000 + this.swing });
+        if (this.stateT >= 0.25) this.setState('recover');
+        break;
+      // 遠距離：回りながら飛んで戻ってくる大歯車（行きと帰りの 2 回当たりうる。跳ぶか回避で抜ける）
+      case 'throwWind':
+        this.vx = approach(this.vx, 0, 900 * dt); this.facePlayer(p);
+        this.tell = clamp(this.stateT / (0.6 * wm), 0, 1); this.tellKind = 'throw';
+        if (this.stateT >= 0.6 * wm) {
+          const g = new Projectile('biggear', cx(this) - 11, this.y + this.h - 30, this.face * 420, 0, 16);
+          g.owner = this; g.turnAt = Math.min(1.0, (adx + 80) / 420); g.life = 3.2;
+          game.spawnProjectile(g); game.sfx.play('heavySwing');
+          this.setState('recover');
+        }
+        break;
+      // 追尾：鎧の継ぎ目から火花を放ち、しばらく追ってくる
+      case 'sparkWind':
+        this.vx = approach(this.vx, 0, 900 * dt); this.facePlayer(p);
+        this.tell = clamp(this.stateT / (0.55 * wm), 0, 1); this.tellKind = 'spark';
+        if (this.stateT >= 0.55 * wm) {
+          const n = this.tier >= 2 ? 3 : 2;
+          for (let i = 0; i < n; i++) {
+            const a = -Math.PI / 2 + (i - (n - 1) / 2) * 0.7;
+            const pr = new Projectile('note', cx(this) - 6, this.y + 4, Math.cos(a) * 200, Math.sin(a) * 200, 11);
+            pr.seek = { speed: 190, turn: 2.6, time: 2.2 }; pr.life = 3.6; pr.color = '#ffb04a'; pr.delay = i * 0.12;
+            game.spawnProjectile(pr);
+          }
+          game.sfx.play('shoot');
+          this.setState('recover');
+        }
+        break;
+      // 空中攻撃：高く跳び、頂点で一瞬止まってから相手へ向けて盾ごと急降下
+      case 'skyWind':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        this.tell = clamp(this.stateT / (0.45 * wm), 0, 1); this.tellKind = 'shield';
+        if (this.stateT >= 0.45 * wm) { this.setState('sky'); this.vy = -820; this.vx = clamp(dx * 0.6, -200, 200); game.sfx.play('jump'); }
+        break;
+      case 'sky':
+        this.tell = 1; this.tellKind = 'shadow';
+        if (this.stateT > 0.32) {
+          this.facePlayer(p);
+          const ax = cx(p) - cx(this), ay = cy(p) - cy(this), d = Math.hypot(ax, ay) || 1;
+          this.diveV = { x: ax / d * 560, y: Math.max(260, ay / d * 560) };
+          this.gravity = false; this.vx = 0; this.vy = 0; this.swing++;
+          this.setState('diveHold');
+        }
+        break;
+      case 'diveHold': // 頂点で光る（ここで横へ逃げる）
+        this.vx = 0; this.vy = 0; this.tell = 1; this.tellKind = 'shield';
+        if (this.stateT >= 0.22 * wm) { this.setState('dive'); this.vx = this.diveV.x; this.vy = this.diveV.y; game.sfx.play('heavySwing'); }
+        break;
+      case 'dive':
+        this.attacks.push({ x: this.x - 6, y: this.y - 4, w: this.w + 12, h: this.h + 8, dmg: 20, knock: 460, key: this.id * 1000 + this.swing });
+        if (this.onGround || (this.coll && (this.coll.hitX || this.coll.hitY)) || this.stateT > 1.2) {
+          this.gravity = true; this.vx = 0;
+          game.fx.shake(6, 0.2); game.sfx.play('heavyHit'); game.fx.dust(cx(this), this.y + this.h, 10);
+          if (this.tier >= 2) for (const v of [260, -260]) game.spawnProjectile(new Projectile('wave', cx(this) - 8, this.y + this.h - 18, v, 0, 12));
+          this.setState('recover');
+        }
+        break;
       case 'recover':
+        this.gravity = true;
         this.vx = approach(this.vx, 0, 900 * dt);
         if (this.stateT >= 0.85) { this.cool = enraged ? 0.35 : 0.7; this.setState('approach'); }
         break;
       case 'stagger':
+        this.gravity = true;
         this.vx = approach(this.vx, 0, 600 * dt);
         if (this.stateT >= 1.4) { this.cool = 0.3; this.setState('approach'); }
         break;
       case 'flinch':
+        this.gravity = true;
         this.vx = approach(this.vx, 0, 900 * dt);
         if (this.stateT >= 0.2) this.setState('approach');
         break;
@@ -434,13 +513,13 @@ export class Projectile {
   constructor(kind, x, y, vx, vy, dmg) {
     this.kind = kind;
     this.x = x; this.y = y; this.vx = vx; this.vy = vy;
-    this.w = kind === 'wave' ? 16 : kind === 'hand' ? 12 : kind === 'arrow' ? 14 : 10;
-    this.h = kind === 'wave' ? 18 : kind === 'hand' ? 12 : kind === 'arrow' ? 6 : 10;
+    this.w = kind === 'wave' ? 16 : kind === 'hand' ? 12 : kind === 'arrow' ? 14 : kind === 'biggear' ? 22 : kind === 'blade' ? 24 : kind === 'note' ? 12 : 10;
+    this.h = kind === 'wave' ? 18 : kind === 'hand' ? 12 : kind === 'arrow' ? 6 : kind === 'biggear' ? 22 : kind === 'blade' ? 12 : kind === 'note' ? 12 : 10;
     this.dmg = dmg;
     this.alive = true;
     this.t = 0;
     this.life = kind === 'wave' ? 1.6 : 3.5;
-    this.destroyable = kind !== 'wave' && kind !== 'ring';
+    this.destroyable = kind !== 'wave' && kind !== 'ring' && kind !== 'biggear';
     this.key = 'p' + nextId++;
     this.delay = 0; // 時止め中に置かれた刃は遅れて動く
   }
@@ -450,6 +529,22 @@ export class Projectile {
     if (this.kind === 'bomb') { this.vy += 900 * dt; if (game.map.solidAt(this.x + 5, this.y + 11)) { this.explode(game); return; } }
     if (this.kind === 'arrow') this.vy += 120 * dt;
     if (this.kind === 'ring') { this.r += this.speed * dt; if (this.r > this.maxR) this.alive = false; return; }
+    // 追尾：しばらくのあいだプレイヤーの方へ少しずつ曲がる
+    if (this.seek && this.t < this.seek.time) {
+      const p = game.player, ax = cx(p) - (this.x + this.w / 2), ay = cy(p) - (this.y + this.h / 2);
+      const want = Math.atan2(ay, ax), cur = Math.atan2(this.vy, this.vx);
+      let da = want - cur; while (da > Math.PI) da -= Math.PI * 2; while (da < -Math.PI) da += Math.PI * 2;
+      const na = cur + clamp(da, -this.seek.turn * dt, this.seek.turn * dt), sp = this.seek.speed;
+      this.vx = Math.cos(na) * sp; this.vy = Math.sin(na) * sp;
+    }
+    // 戻ってくる大歯車：投げた者のところへ帰る
+    if (this.kind === 'biggear' && this.owner) {
+      this.spin = (this.spin || 0) + dt * 14;
+      if (this.t > this.turnAt) { const ax = cx(this.owner) - (this.x + this.w / 2), ay = cy(this.owner) - (this.y + this.h / 2), d = Math.hypot(ax, ay) || 1; this.vx = approach(this.vx, ax / d * 380, 900 * dt); this.vy = approach(this.vy, ay / d * 380, 900 * dt); if (d < 24 || !this.owner.alive) { this.alive = false; return; } }
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      if (this.t > this.life) this.alive = false;
+      return;
+    }
     this.x += this.vx * dt; this.y += this.vy * dt;
     if (this.t > this.life) this.alive = false;
     if (this.kind !== 'wave' && game.map.solidAt(this.x + this.w / 2, this.y + this.h / 2)) { this.alive = false; game.fx.sparks(this.x, this.y, '#f2c14e', 4); }
@@ -700,9 +795,14 @@ export class Warden extends Enemy {
         const blocked = this.ledgeAhead(map, this.face) || this.wallAhead(map, this.face);
         this.vx = approach(this.vx, adx > 70 && !blocked ? this.face * 60 : 0, 500 * dt);
         if (this.cool <= 0 && p.state !== 'dead') {
-          if (adx < 130) this.setState(this.seq % 3 === 2 ? 'quakeWind' : 'sweepWind');
-          else if (adx < 360) this.setState(this.tier >= 2 && this.seq % 2 ? 'tollWind' : 'quakeWind');
-          else break;
+          const dy = this.dy(p);
+          // 頭上の相手には振り子を真上へ振り上げる（上方向）
+          if (dy < -60 && adx < 120) this.setState('liftWind');
+          else if (adx < 130) this.setState(this.seq % 3 === 2 ? 'quakeWind' : this.seq % 3 === 1 ? 'spinWind' : 'sweepWind');
+          // 中距離：鐘の輪・跳躍の衝撃波・追尾する鐘の音
+          else if (adx < 240) this.setState(['quakeWind', 'notesWind', this.tier >= 2 ? 'tollWind' : 'spinWind'][this.seq % 3]);
+          // 遠距離：飛ぶ振り子の刃／追尾する鐘の音
+          else this.setState(this.seq % 2 ? 'notesWind' : 'bladeWind');
           this.seq++; game.sfx.play('tellBig');
         }
         break;
@@ -753,6 +853,62 @@ export class Warden extends Enemy {
           game.sfx.play('bossBell'); game.fx.shake(5, 0.2);
           this.setState('recover');
         }
+        break;
+      // 上方向：振り子を真上へ振り上げ、鐘の針を扇に撃ち上げる
+      case 'liftWind':
+        this.vx = approach(this.vx, 0, 900 * dt); this.facePlayer(p);
+        this.tell = clamp(this.stateT / (0.5 * wm), 0, 1); this.tellKind = 'up';
+        if (this.stateT >= 0.5 * wm) {
+          this.setState('lift'); this.swing++; game.sfx.play('heavySwing');
+          const n = this.tier >= 2 ? 5 : 3;
+          for (let i = 0; i < n; i++) { const a = (i - (n - 1) / 2) * 0.3; game.spawnProjectile(new Projectile('hand', cx(this) - 6, this.y - 12, Math.sin(a) * 440, -Math.cos(a) * 440, 13)); }
+        }
+        break;
+      case 'lift':
+        if (this.stateT < 0.2) this.attacks.push({ x: this.x - 20, y: this.y - 110, w: this.w + 40, h: 114, dmg: 22, knock: 300, key: this.id * 1000 + this.swing });
+        if (this.stateT >= 0.3) this.setState('recover');
+        break;
+      // 遠距離：回る振り子の刃を飛ばす（第2夜からは低い刃と高い刃の 2 枚。低い刃は跳ぶ、高い刃はくぐる）
+      case 'bladeWind':
+        this.vx = approach(this.vx, 0, 900 * dt); this.facePlayer(p);
+        this.tell = clamp(this.stateT / (0.65 * wm), 0, 1); this.tellKind = 'throw';
+        if (this.stateT >= 0.65 * wm) {
+          const low = new Projectile('blade', cx(this) - 12, this.y + this.h - 16, this.face * 330, 0, 16); low.life = 3;
+          game.spawnProjectile(low);
+          if (this.tier >= 2) { const hi = new Projectile('blade', cx(this) - 12, this.y + this.h - 64, this.face * 330, 0, 16); hi.life = 3; hi.delay = 0.45; game.spawnProjectile(hi); }
+          game.sfx.play('heavySwing');
+          this.setState('recover');
+        }
+        break;
+      // 追尾：胸の鐘を鳴らし、ゆっくり追ってくる鐘の音を放つ（斬れば消える）
+      case 'notesWind':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        this.tell = clamp(this.stateT / (0.6 * wm), 0, 1); this.tellKind = 'bell';
+        if (this.stateT >= 0.6 * wm) {
+          const n = this.tier >= 3 ? 4 : 3;
+          for (let i = 0; i < n; i++) {
+            const a = -Math.PI / 2 + (i - (n - 1) / 2) * 0.8;
+            const pr = new Projectile('note', cx(this) - 6, this.y + 6, Math.cos(a) * 170, Math.sin(a) * 170, 12);
+            pr.seek = { speed: 165, turn: 2.2, time: 2.6 }; pr.life = 4; pr.color = '#ffe14a'; pr.delay = i * 0.15;
+            game.spawnProjectile(pr);
+          }
+          game.sfx.play('bossBell');
+          this.setState('recover');
+        }
+        break;
+      // 空中攻撃：跳び上がって空中で振り子を一回転させ、周りを薙ぎ払う
+      case 'spinWind':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        this.tell = clamp(this.stateT / (0.55 * wm), 0, 1); this.tellKind = 'pendulum';
+        if (this.stateT >= 0.55 * wm) { this.setState('spinAir'); this.vy = -660; this.vx = clamp(dx / 0.7, -240, 240); this.swing++; game.sfx.play('jump'); }
+        break;
+      case 'spinAir':
+        this.tell = 0; this.spinA = (this.spinA || 0) + dt * 16;
+        if (this.stateT > 0.2) {
+          if (Math.floor(this.stateT / 0.22) !== Math.floor((this.stateT - dt) / 0.22)) { this.swing++; game.sfx.play('swing'); }
+          this.attacks.push({ x: this.x - 44, y: this.y - 30, w: this.w + 88, h: this.h + 44, dmg: 18, knock: 360, key: this.id * 1000 + this.swing });
+        }
+        if (this.stateT > 0.25 && this.onGround) { this.vx = 0; game.fx.dust(cx(this), this.y + this.h, 8); game.fx.shake(4, 0.15); this.setState('recover'); }
         break;
       case 'recover':
         this.vx = approach(this.vx, 0, 700 * dt);
