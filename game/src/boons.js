@@ -152,6 +152,16 @@ export const FUSIONS = [
 // 脅威の数え方：常時の術と剣の道の Lv の合計。合成したものは Lv +3（素材 2 つぶん）として数える
 export const passiveWeight = (b) => (b.tier || 1) + (BOONS[b.id].fusion ? 3 : 0);
 export const countsForThreat = (id) => PASSIVE_IDS.includes(id) || !!BOONS[id].melee;
+// 合成ごとの色（素材 2 つのカードと手持ちを同じ色でつなぐ）
+export const FUSION_COLORS = ['#ffd84a', '#ff6ad5', '#5fe3ff', '#7dff9a', '#ff9a4a', '#a98bff', '#ff5a6a', '#4ad8c0', '#e8ff5a', '#ffb0e0', '#8ab8ff', '#ffcf8a'];
+// この強化が素材になる合成（もう合成済みのものは除く）。相手の素材と、その持ち状況つき
+export function fusionsFor(id, owned) {
+  const lv = Object.fromEntries(owned.map((b) => [b.id, b.tier || 1]));
+  return FUSIONS.map((f, i) => ({ f, i })).filter(({ f }) => (f.a === id || f.b === id) && !(f.to in lv)).map(({ f, i }) => {
+    const other = f.a === id ? f.b : f.a;
+    return { to: f.to, other, otherLv: lv[other] || 0, color: FUSION_COLORS[i % FUSION_COLORS.length] };
+  });
+}
 export function readyFusions(boons) {
   const lv = Object.fromEntries(boons.map((b) => [b.id, b.tier || 1]));
   return FUSIONS.filter((f) => (lv[f.a] || 0) >= 2 && (lv[f.b] || 0) >= 2 && !lv[f.to]);
@@ -261,7 +271,17 @@ export function computeStats(boons) {
 // 強化候補の抽出。乱数は周回ごとのもの（揺らぎ）。解放されていない系統は出ない。
 // 強化候補の抽出。乱数は周回ごとのもの（揺らぎ）。解放されていない系統は出ない。
 // 火力系統は手持ちでも Lv が上限未満なら「Lv アップ」として候補に出る。
-export function rollOffer(rng, owned, unlockedSchools, n = 3) {
+// 強化のジャンル：常時の術・剣の道・それ以外は系統ごと
+export const genreOf = (id) => (PASSIVE_IDS.includes(id) ? 'passive' : BOONS[id].melee ? 'melee' : BOONS[id].school);
+// 手持ちでいちばん多いジャンル（Lv の合計。絆・稀少・伝説は数えない）
+export function mainGenre(owned) {
+  const sum = {};
+  for (const b of owned) { const sc = BOONS[b.id] && BOONS[b.id].school; if (!sc || sc === 'bond' || sc === 'rare' || sc === 'legend') continue; const g = genreOf(b.id); sum[g] = (sum[g] || 0) + passiveWeight(b); }
+  let best = null; for (const g in sum) if (!best || sum[g] > sum[best]) best = g;
+  return best;
+}
+// diverse：3 択がすべて手持ちの主なジャンルなら、1 つを別のジャンルに替える
+export function rollOffer(rng, owned, unlockedSchools, n = 3, diverse = false) {
   const lv = Object.fromEntries(owned.map((b) => [b.id, b.tier || 1]));
   // 合成でしか得られないもの・合成済みの素材は候補に出ない
   const usedUp = new Set(FUSIONS.filter((f) => f.to in lv).flatMap((f) => [f.a, f.b]));
@@ -284,6 +304,11 @@ export function rollOffer(rng, owned, unlockedSchools, n = 3) {
     const id = rng.pick(weighted);
     if (!out.includes(id)) out.push(id);
     for (let i = weighted.length - 1; i >= 0; i--) if (weighted[i] === id) weighted.splice(i, 1);
+  }
+  const main = diverse ? mainGenre(owned) : null;
+  if (main && out.length && out.every((id) => genreOf(id) === main)) {
+    const others = pool.filter((id) => genreOf(id) !== main && !out.includes(id));
+    if (others.length) out[out.length - 1] = rng.pick(others);
   }
   return out;
 }

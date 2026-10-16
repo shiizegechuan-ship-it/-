@@ -32,6 +32,8 @@ const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourg
 export const GUARDS = { elite: 3, boss: 5 };
 // 戦闘部屋の最短の戦い：この秒数に満たないうちは、敵が減ると時間差で増援が湧く（強い術で一瞬で終わらないように）
 export const MIN_FIGHT = 15;
+// 最低 15 秒の戦いと増援があるのは、戦闘部屋と試練の間（アーティファクトの部屋）
+const isFightRoom = (t) => t === 'combat' || t === 'trial';
 // warn：予兆の秒数、cap：場に同時にいる敵（湧く予定を含む）の上限、hp・dmg：増援の体力と攻撃の倍率
 const REINF = { warn: 0.6, cap: 4, hp: 0.6, dmg: 0.6 };
 // 出現位置：画面の外なら端から reach 以内、画面の中なら主人公から far 以上
@@ -236,7 +238,13 @@ export class Game {
       shop: () => this.setupShop(),
       shrine: () => this.setupShrine(),
       elite2: () => this.setupWarden(),
-      trial: () => { room0.wave = 0; for (const e of desc.waves[0]) this.addEnemy(makeEnemy(this.easyType(e.type), e.x * TILE, e.y * TILE)); this.fx.setBanner('試練の間', '2 波を退けると、アーティファクトか強化と金貨', '#ff9a7a', 1.8); },
+      trial: () => {
+        room0.wave = 0; for (const e of desc.waves[0]) this.addEnemy(makeEnemy(this.easyType(e.type), e.x * TILE, e.y * TILE));
+        // 試練の間も戦闘部屋と同じく、最低 15 秒は増援が湧き続ける（取り分は 2 波ぶんの総量を分ける）
+        this.ensureVisibleFoe(); this.room.incoming = []; this.initRoomBudget(desc.waves[1].map((w) => makeEnemy(this.easyType(w.type), 0, 0)).filter(Boolean));
+        for (const e of this.room.enemies) e.initial = true; this.room.initCount = this.room.enemies.length;
+        this.fx.setBanner('試練の間', '2 波を退けると、アーティファクトか強化と金貨', '#ff9a7a', 1.8);
+      },
       golden: () => this.setupGolden(),
     }[desc.type];
     const room0 = this.room;
@@ -361,7 +369,7 @@ export class Game {
   }
   updateReinforcements(dt) {
     const room = this.room;
-    if (room.desc.type !== 'combat' || room.cleared) return;
+    if (!isFightRoom(room.desc.type) || room.cleared) return;
     const inc = (room.incoming ||= []);
     for (const s of inc) {
       s.t -= dt;
@@ -373,13 +381,13 @@ export class Game {
     }
     room.incoming = inc.filter((s) => s.t > 0);
     // 念のため：15 秒たつ前に敵も増援もいなくなったら 1 体呼ぶ
-    if (room.t < MIN_FIGHT && !room.incoming.length && !room.enemies.some((e) => e.alive && !e.boss)) this.queueReinforcement();
+    if (room.t < MIN_FIGHT && !room.incoming.length && !(room.desc.type === 'trial' && room.wave === 0) && !room.enemies.some((e) => e.alive && !e.boss)) this.queueReinforcement();
   }
   // 戦闘部屋の取り分：金貨・粒・欠片は、部屋に入った時の敵の分を総量として、倒すたびに分けて渡す。
   // 増援で倒す数が増えても、部屋 1 つで受け取れる量は今までとほぼ同じ（最後の 1 体で残りをすべて渡す）
-  initRoomBudget() {
+  initRoomBudget(later = []) {
     const room = this.room;
-    const foes = room.enemies.filter((e) => e.alive && !e.boss);
+    const foes = [...room.enemies.filter((e) => e.alive && !e.boss), ...later]; // later：あとから来る波（試練の間の 2 波目）
     room.budget = { gold: 0, exp: 0, shard: 0, kills: 0, valSum: 0 };
     for (const e of foes) { const v = this.killValue(e); room.budget.gold += v.gold; room.budget.exp += v.exp; room.budget.shard += v.shard; }
     room.budget.avg = foes.length ? room.budget.gold / foes.length : 1;
@@ -780,8 +788,8 @@ export class Game {
         return { silent: true };
       }
     }
-    // 出てすぐ（SPAWN_GUARD 秒）の敵は、常時の術を防ぐ
-    if (info.passive && !e.boss && this.room && this.room.t - (e.bornT || 0) < SPAWN_GUARD) {
+    // 出てすぐ（SPAWN_GUARD 秒）の敵は、常時の術とお供の攻撃（仲間技も）を防ぐ
+    if ((info.passive || info.companion) && !e.boss && this.room && this.room.t - (e.bornT || 0) < SPAWN_GUARD) {
       if (!e.sgT || this.run.clock - e.sgT > 0.35) { e.sgT = this.run.clock; this.fx.text(cx(e), e.y - 22, 'ガード', '#cfe8ff', 11); this.fx.sparks(cx(e), cy(e), '#cfe8ff', 4, 160); }
       return { silent: true };
     }
@@ -1484,14 +1492,16 @@ export class Game {
     const living = room.enemies.filter((e) => e.alive && !e.boss).length;
     const t = room.desc.type;
     // 試練の間：1 波目を倒すと 2 波目
-    if (t === 'trial' && !room.cleared && living === 0 && room.wave === 0) {
+    // （増援が湧いていても、1 波目の敵をすべて倒せば 2 波目が来る）
+    if (t === 'trial' && !room.cleared && room.wave === 0 && !room.enemies.some((e) => e.alive && e.initial)) {
       room.wave = 1;
       for (const e of room.desc.waves[1]) this.addEnemy(makeEnemy(this.easyType(e.type), e.x * TILE, e.y * TILE));
       this.fx.setBanner('第二波', '', '#ff9a7a', 1.0); this.sfx.play('tellBig');
       return;
     }
     // 戦闘部屋は MIN_FIGHT 秒たつまで終わらない（増援が湧き続ける）
-    if (t === 'combat' && (room.t < MIN_FIGHT || (room.incoming && room.incoming.length))) return;
+    if (isFightRoom(t) && (room.t < MIN_FIGHT || (room.incoming && room.incoming.length))) return;
+    if (t === 'trial' && room.wave === 0) return;
     if (!room.cleared && living === 0 && (t === 'combat' || t === 'elite' || t === 'elite2' || t === 'trial' || (t === 'forge' && this.run.glen === 'attacked'))) {
       if (t === 'forge') this.onGlenSaved();
       else this.clearRoom(false);
@@ -2332,7 +2342,7 @@ export class Game {
         const cw = m.offer.length > 3 ? 214 : 250, gap = 18, total = m.offer.length * cw + (m.offer.length - 1) * gap;
         for (let i = 0; i < m.offer.length; i++) {
           const cx0 = VIEW_W / 2 - total / 2 + i * (cw + gap);
-          if (x >= cx0 && x <= cx0 + cw && y >= 130 && y <= 390) {
+          if (x >= cx0 && x <= cx0 + cw && y >= 130 && y <= 412) {
             if (m.sel === i) return true; // 2回目のタップで決定
             m.sel = i; this.sfx.play('select'); return false;
           }
@@ -2382,7 +2392,11 @@ export class Game {
     if (school) {
       const ids = Object.keys(BOONS).filter((id) => BOONS[id].school === school && !p.boons.some((b) => b.id === id));
       offer = this.run.offerRng.shuffle(ids).slice(0, 3);
-    } else offer = rollOffer(this.run.offerRng, p.boons, this.meta.unlocked, 3 + upLv(this.meta, 'choice'));
+    } else {
+      // 2 回に 1 回は、手持ちの主なジャンルとは別のジャンルの強化を最低 1 つ混ぜる
+      this.run.offerN = (this.run.offerN || 0) + 1;
+      offer = rollOffer(this.run.offerRng, p.boons, this.meta.unlocked, 3 + upLv(this.meta, 'choice'), this.run.offerN % 2 === 0);
+    }
     if (!offer.length) { p.hp = Math.min(p.maxHp, p.hp + 45); this.openDoors(); return; }
     this.modal = { type: 'boon', offer, sel: 1 % offer.length, count, school, noDoors, t: 0 };
     this.sfx.play('pickup');

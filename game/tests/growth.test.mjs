@@ -536,6 +536,9 @@ test('新しい部屋：時の祠・試練の間・振り子の番人が 1 夜�
   for (const e of g.room.enemies) { e.hp = 0; e.alive = false; } d.frame(12);
   assert.equal(g.room.wave, 1); assert.ok(g.room.enemies.some((e) => e.alive)); assert.ok(!g.room.cleared);
   for (const e of g.room.enemies) { e.hp = 0; e.alive = false; } d.frame(12);
+  assert.ok(!g.room.cleared, 'not before 15 seconds');
+  g.room.t = MIN_FIGHT; g.room.incoming = []; // 最短の戦いは済んだことにする
+  for (const e of g.room.enemies) { e.hp = 0; e.alive = false; } d.frame(12);
   assert.ok(g.room.cleared);
   // 振り子の番人：予兆を見せてから攻撃し、大技のあとに隙
   g.enterRoom(...find('elite2')); g.modal = null;
@@ -1623,4 +1626,73 @@ test('召喚師は戦闘部屋に出る（各階の敵の種類に入ってい�
   for (const seed of [1, 2, 3, 4, 5, 6]) { const g = newGame(seed); g.startLoop(); for (const fl of g.run.plan.floors) for (const r of fl) if (r.type === 'combat' && r.enemies.some((x) => x.type === 'M')) found = true; }
   assert.ok(found);
   for (const f of [0, 1, 2]) assert.ok(!extraEnemyTypes(f, 2).g.includes('M'));
+});
+
+test('試練の間（アーティファクトの部屋）も最低 15 秒続く：一瞬で倒しても増援が湧き、2 波目も来て、取り分の総量は 2 波ぶん', () => {
+  const g = newGame(3); g.startLoop(); g.modal = null;
+  let at = null;
+  g.run.plan.floors.forEach((fl, fi) => fl.forEach((r, ri) => { if (!at && r.type === 'trial') at = [fi, ri]; }));
+  assert.ok(at, 'trial room exists');
+  g.enterRoom(...at); g.modal = null;
+  const d = new Driver(g);
+  const B0 = { ...g.room.budget };
+  let clearedAt = null, sawWave2 = false, kills = 0, gold = 0;
+  const dg = g.dropGold.bind(g); g.dropGold = (n, ...a) => { gold += n; return dg(n, ...a); };
+  for (let f = 0; f < 60 * 30 && clearedAt === null; f++) {
+    if (g.modal) g.modal = null;
+    for (const e of g.room.enemies) if (e.alive && !e.boss) { e.hp = 0; e.alive = false; kills++; }
+    d.frame(1);
+    if (g.room.wave === 1) sawWave2 = true;
+    if (g.room.cleared) clearedAt = g.room.t;
+  }
+  assert.ok(clearedAt !== null && clearedAt >= MIN_FIGHT, `cleared at ${clearedAt}`);
+  assert.ok(sawWave2, 'second wave came');
+  assert.ok(kills >= 10, `kills ${kills}`);
+  assert.ok(B0.gold > 0 && g.room.budget.gold < 1e-6, 'whole budget paid out');
+});
+
+test('出てすぐの敵は、お供の攻撃と仲間技もガードする', () => {
+  const { g, d, e } = arena(RustSoldier, 40);
+  d.frame(1);
+  const e2 = new RustSoldier(e.x + 20, e.y); g.addEnemy(e2); e2.hp = e2.maxHp = 1e5; e2.cool = 99;
+  const h0 = e2.hp;
+  g.dealDamage(e2, { base: 50, cat: 'skill', knock: 0, dir: 1, spell: true, passive: true, companion: true });
+  g.dealDamage(e2, { base: 50, cat: 'skill', knock: 0, dir: 1, spell: true, companion: true, union: true });
+  assert.equal(e2.hp, h0);
+  d.frame(60);
+  g.dealDamage(e2, { base: 50, cat: 'skill', knock: 0, dir: 1, spell: true, companion: true, union: true });
+  assert.ok(e2.hp < h0);
+});
+
+test('強化の 3 択：2 回に 1 回は、手持ちの主なジャンルとは別のジャンルが最低 1 つ入る', async () => {
+  const { genreOf, mainGenre, PASSIVE_IDS } = await import('../src/boons.js');
+  for (const build of [
+    [{ id: 'orbit', tier: 3 }, { id: 'aura', tier: 3 }, { id: 'meteor', tier: 2 }, { id: 'seeker', tier: 2 }, { id: 'satellites', tier: 2 }],
+    [{ id: 'edge', tier: 3 }, { id: 'crit', tier: 3 }, { id: 'comboheat', tier: 2 }, { id: 'execute', tier: 2 }],
+  ]) {
+    const g = newGame(81); g.startLoop(); g.modal = null;
+    g.meta.unlocked = Object.keys(BOONS).map((id) => BOONS[id].school).filter((v, i, a) => a.indexOf(v) === i);
+    g.player.setBoons(build.map((b) => ({ ...b })));
+    const main = mainGenre(g.player.boons);
+    assert.ok(main && (build[0].id !== 'orbit' || main === 'passive'), main);
+    let allMainOnOdd = 0;
+    for (let i = 0; i < 40; i++) {
+      g.modal = null; g.openBoonPick(1, null);
+      const offer = g.modal.offer;
+      if (g.run.offerN % 2 === 0) assert.ok(offer.some((id) => genreOf(id) !== main), `offer ${g.run.offerN}: ${offer}`);
+      else if (offer.every((id) => genreOf(id) === main)) allMainOnOdd++;
+    }
+    if (main === 'passive') assert.ok(allMainOnOdd > 0, 'without the rule, all-passive offers do happen (the rule matters)');
+  }
+});
+
+test('強化の選択画面の合成の案内：素材なら合成先・相手の素材・その持ち状況（Lv2 で合成可）を返す。合成済みなら出さない', async () => {
+  const { fusionsFor } = await import('../src/boons.js');
+  let f = fusionsFor('orbit', [{ id: 'gearsaw', tier: 2 }]);
+  const gw = f.find((x) => x.to === 'gearwaltz');
+  assert.ok(gw && gw.other === 'gearsaw' && gw.otherLv === 2 && gw.color);
+  assert.ok(f.some((x) => x.to === 'clockhand' && x.other === 'spinblade' && x.otherLv === 0), 'orbit is in two recipes');
+  f = fusionsFor('orbit', [{ id: 'gearwaltz', tier: 1 }]);
+  assert.ok(!f.some((x) => x.to === 'gearwaltz'));
+  assert.ok(BOONS.lag); assert.equal(fusionsFor('lag', []).length, 0);
 });

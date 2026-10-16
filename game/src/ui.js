@@ -2,7 +2,7 @@
 import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC } from './config.js';
 import { clamp } from './util.js';
 import { COMPANIONS, stageOf, allComps, unionReady } from './companion.js';
-import { BOONS, forgeDiff, SCHOOLS, RESONANCE, synergyHints, schoolCounts } from './boons.js';
+import { BOONS, forgeDiff, SCHOOLS, RESONANCE, synergyHints, schoolCounts, fusionsFor } from './boons.js';
 import { ACTIVE_ARTS } from './arts.js';
 import { ARTIFACTS, ARTIFACT_COLOR } from './artifacts.js';
 import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, openQuestions, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritCount, inheritLabel, enemyScale, DAWN_STEPS, dawnProgress } from './meta.js';
@@ -278,7 +278,7 @@ function drawBoonPick(ctx, game, m) {
   const p = game.player;
   text(ctx, m.rare ? `レベル ${game.run.level} ― 稀少の強化を選ぶ` : m.school ? '書庫の祭壇 ―「停滞」の強化' : '強化を選ぶ', VIEW_W / 2, 92, { size: 22, align: 'center', bold: true, font: SERIF, color: C.gold });
   if (m.count > 1) text(ctx, `あと ${m.count} つ`, VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });
-  const cw = m.offer.length > 3 ? 214 : 250, ch = 240, gap = 18;
+  const cw = m.offer.length > 3 ? 214 : 250, ch = 270, gap = 18;
   const total = m.offer.length * cw + (m.offer.length - 1) * gap;
   m.offer.forEach((id, i) => {
     const def = BOONS[id], sc = SCHOOLS[def.school];
@@ -299,15 +299,37 @@ function drawBoonPick(ctx, game, m) {
     const curArt = def.active && !own ? p.boons.find((b) => BOONS[b.id].active) : null;
     if (curArt) text(ctx, `持ち替え：${BOONS[curArt.id].name} を外す`, x + 16, y + ch - 32, { size: 11, color: '#ff8ae0' });
     wrap(ctx, own ? (forgeDiff(id, own.tier).diff || def.desc(nt)) : def.desc(nt), cw - 28, 15).forEach((l, j) => text(ctx, l, x + 14, y + 86 + j * 21, { size: 15, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0' }));
-    const hints = synergyHints(id, p.boons);
+    // 合成の素材なら、カードの下に「合成先・相手の素材・持っているか」を色つきの枠で見せる
+    const fus = fusionsFor(id, p.boons);
+    if (fus.length) text(ctx, '◆ 合成素材', x + cw - 16, y + 46, { size: 10, align: 'right', color: fus[0].color, bold: true });
+    const hints = synergyHints(id, p.boons).filter((h) => !h.startsWith('合成：'));
+    const boxH = fus.length * 34;
     let hy = y + 180;
-    for (const h of hints) { wrap(ctx, h, cw - 32, 11).forEach((l) => { text(ctx, l, x + 16, hy, { size: 11, color: '#f2c14e' }); hy += 15; }); }
-    if (!hints.length && RESONANCE[def.school] && !schoolCounts(p.boons)[def.school]) text(ctx, `同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted });
+    for (const h of hints) { wrap(ctx, h, cw - 32, 11).forEach((l) => { if (hy < y + ch - boxH - 12) text(ctx, l, x + 16, hy, { size: 11, color: '#f2c14e' }); hy += 15; }); }
+    fus.forEach((f, j) => {
+      const by = y + ch - boxH - 6 + j * 34;
+      ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(x + 8, by, cw - 16, 30);
+      ctx.fillStyle = f.color; ctx.fillRect(x + 8, by, 3, 30);
+      text(ctx, `合成 ▶ ${BOONS[f.to].name}`, x + 18, by + 13, { size: 12, bold: true, color: f.color });
+      const have = f.otherLv > 0, ready = f.otherLv >= 2;
+      text(ctx, `＋ ${BOONS[f.other].name}`, x + 18, by + 27, { size: 11, color: '#e8e0d0' });
+      text(ctx, ready ? `手持ち Lv${f.otherLv} ✓` : have ? `手持ち Lv${f.otherLv}（Lv2 で）` : '未所持', x + cw - 14, by + 27, { size: 10, align: 'right', color: ready ? '#7dff9a' : have ? '#ffe14a' : C.muted });
+    });
+    if (!fus.length && !hints.length && RESONANCE[def.school] && !schoolCounts(p.boons)[def.school]) text(ctx, `同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted });
     ctx.globalAlpha = 1;
   });
-  text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定', VIEW_W / 2, 412, { size: 12, align: 'center', color: C.muted });
-  // 現在の手持ち
-  if (p.boons.length) text(ctx, '手持ち：' + p.boons.map((b) => BOONS[b.id].name + (BOONS[b.id].max ? ` Lv${b.tier}` : b.tier > 1 ? 'II' : '')).join('・'), VIEW_W / 2, 440, { size: 11, align: 'center', color: '#bbb' });
+  text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定', VIEW_W / 2, 428, { size: 12, align: 'center', color: C.muted });
+  // 現在の手持ち。選んでいるカードと合成の組になるものは、その合成の色で光らせる
+  if (p.boons.length) {
+    const pair = new Map(fusionsFor(m.offer[m.sel], p.boons).map((f) => [f.other, f.color]));
+    const parts = p.boons.map((b) => ({ s: BOONS[b.id].name + (BOONS[b.id].max ? ` Lv${b.tier}` : b.tier > 1 ? 'II' : ''), c: pair.get(b.id) }));
+    ctx.font = `11px ${FONT}`;
+    const label = '手持ち：', sep = '・';
+    const widths = parts.map((q) => ctx.measureText(q.s).width), sw = ctx.measureText(sep).width, lw = ctx.measureText(label).width;
+    let tx = VIEW_W / 2 - (lw + widths.reduce((a, b) => a + b, 0) + sw * (parts.length - 1)) / 2;
+    text(ctx, label, tx, 452, { size: 11, color: '#bbb' }); tx += lw;
+    parts.forEach((q, i) => { text(ctx, q.s, tx, 452, { size: 11, color: q.c || '#bbb', bold: !!q.c }); tx += widths[i]; if (i < parts.length - 1) { text(ctx, sep, tx, 452, { size: 11, color: '#bbb' }); tx += sw; } });
+  }
 }
 
 function drawShop(ctx, game, m) {
