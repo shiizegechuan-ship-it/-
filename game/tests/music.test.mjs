@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SONGS, RANGE, buildSong, musicFor } from '../src/songs.js';
+import { SONGS, RANGE, buildSong, musicFor, harmonyTones, chordTones } from '../src/songs.js';
 import { Music } from '../src/music.js';
 import { newGame } from './helpers.mjs';
 
@@ -32,14 +32,15 @@ test('BGM のコード進行：旋律の小節の頭はコードの音、拍の�
     for (const t of melodic(s)) {
       let on = 0, ok = 0;
       for (const n of t.notes) {
-        const c = s.chords[Math.floor(n.s / 16)], inChord = c.tones.includes(n.m % 12);
-        if (n.s % 16 === 0) assert.ok(inChord, `${id} ${t.part} bar ${n.s / 16 + 1} starts on a chord tone`);
+        const inChord = harmonyTones(s.chordAt(n.s)).includes(n.m % 12);
+        // 小節の頭と、コードが替わる所（小節の後半の頭）はかならずコードの音
+        if (n.s % 8 === 0 && (n.s % 16 === 0 || s.chordAt(n.s) !== s.chordAt(n.s - 8))) assert.ok(inChord, `${id} ${t.part} bar ${Math.floor(n.s / 16) + 1} step ${n.s % 16}: ${n.m} on ${s.chordAt(n.s).sym}`);
         if (n.s % 4 === 0) { on++; if (inChord) ok++; }
       }
       assert.ok(ok / on >= 0.85, `${id} ${t.part} on-beat chord tones ${ok}/${on}`);
       for (let i = 1; i < t.notes.length; i++) assert.ok(Math.abs(t.notes[i].m - t.notes[i - 1].m) <= 9, `${id} ${t.part} leap at ${t.notes[i].s}`);
     }
-    for (const t of s.tracks.filter((t) => t.part === 'bass' || t.part === 'chord')) for (const n of t.notes) assert.ok(s.chords[Math.floor(n.s / 16)].tones.includes(n.m % 12), `${id} ${t.part} ${n.s}`);
+    for (const t of s.tracks.filter((t) => t.part === 'bass' || t.part === 'chord')) for (const n of t.notes) assert.ok(harmonyTones(s.chordAt(n.s)).includes(n.m % 12), `${id} ${t.part} ${n.s}`);
   }
 });
 
@@ -94,5 +95,32 @@ test('BGM の演奏：同時に鳴る音は通常の階で 4 音まで、刻守�
     assert.ok(peak >= max - 1, `${id}: uses its voices (${peak})`);
     assert.ok(nodes.some((n) => n.part === 'echo'), `${id}: echo`);
     assert.ok(nodes.some((n) => n.part === 'lead' && n.frequency.events > 3), `${id}: stepped vibrato`);
+  }
+});
+
+test('BGM のコード進行には、哀愁と少し特殊な響きがある（7 の和音・宙づり・ナポリの和音・下っていく低音・王道進行）', () => {
+  const all = (id) => buildSong(id).chords.flat();
+  const has = (id, f) => all(id).some(f);
+  for (const id of ids) {
+    assert.ok(has(id, (c) => c.tones.length === 4), `${id}: seventh chords`);
+    assert.ok(all(id).filter((c, i, a) => i === 0 || c.sym !== a[i - 1].sym).length >= 16, `${id}: enough chord changes`);
+  }
+  // ナポリの和音（主音から半音上の長三和音）がある曲
+  const key = { market: 'A', gears: 'E', belfry: 'C', boss: 'D', final: 'B' };
+  const napo = (id) => has(id, (c) => c.root === (chordTones(key[id]).root + 1) % 12 && c.tones[1] === (c.root + 4) % 12);
+  assert.ok(['gears', 'belfry', 'boss', 'final'].every(napo), 'Neapolitan chords');
+  // 宙づり（sus4）と、分数コードで下っていく低音
+  assert.ok(ids.filter((id) => has(id, (c) => /sus4/.test(c.sym))).length >= 3);
+  assert.ok(ids.filter((id) => has(id, (c) => c.bass !== c.root)).length >= 3);
+  // 王道進行（IV maj7 → V7 → iii m7 → vi m7）
+  assert.match(SONGS.market.chords, /Fmaj7 G7 Em7 Am7/);
+});
+
+test('BGM：コードが小節の途中で替わる所で、伸ばしている音が新しいコードとぶつからない', () => {
+  for (const id of ids) {
+    const s = buildSong(id);
+    for (const t of s.tracks) if (t.wave !== 'noise') for (const n of t.notes) for (let k = n.s + 1; k < n.s + n.len; k++) {
+      if (s.chordAt(k) !== s.chordAt(k - 1)) assert.ok(harmonyTones(s.chordAt(k)).includes(n.m % 12), `${id} ${t.part} bar ${Math.floor(n.s / 16) + 1}`);
+    }
   }
 });
