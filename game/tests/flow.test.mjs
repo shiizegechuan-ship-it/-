@@ -206,3 +206,30 @@ test('楔を打つ物（騎士の残骸など）は扉と重ならない', () =>
   assert.ok(doors.length && wreck);
   for (const dr of doors) assert.ok(wreck.x + wreck.w <= dr.x - 10 || wreck.x >= dr.x + dr.w + 10, `wreck ${wreck.x} vs door ${dr.x}`);
 });
+
+test('制圧後の報酬（ひし形）は、どの部屋のどこで制圧しても床や壁の中に出ない', () => {
+  let n = 0;
+  for (let s = 1; s <= 12; s++) {
+    const g = newGame(s * 37); g.startLoop(); g.modal = null;
+    for (let fi = 0; fi < 3; fi++) g.run.plan.floors[fi].forEach((r, ri) => {
+      if (r.type !== 'combat') return;
+      g.enterRoom(fi, ri); g.modal = null;
+      const map = g.map, p = g.player;
+      // 主人公を部屋のいろいろな足場（壁ぎわ・段差の前）に立たせて制圧する
+      for (let tx = 1; tx < map.w - 1; tx += 3) for (let ty = 1; ty < map.h - 1; ty++) {
+        if (map.get(tx, ty) !== 0 || map.get(tx, ty - 1) !== 0 || map.get(tx, ty + 1) === 0) continue;
+        p.x = tx * 30 + 7; p.y = (ty + 1) * 30 - p.h; p.onGround = true; p.lastSafe = { x: p.x, y: p.y };
+        for (const face of [1, -1]) {
+          p.face = face;
+          const { gx, gy } = g.rewardSpot();
+          const box = { x: gx - 12, y: gy - 30, w: 24, h: 24 };
+          for (const [x, y] of [[box.x + 2, box.y + 2], [box.x + 22, box.y + 2], [box.x + 2, box.y + 22], [box.x + 22, box.y + 22], [box.x + 12, box.y + 12]]) assert.equal(map.get(Math.floor(x / 30), Math.floor(y / 30)), 0, `seed ${s} room ${fi}-${ri} at ${tx},${ty} face ${face}`);
+          // 主人公の足元から届く高さ
+          assert.ok(gy - (p.y + p.h) <= 90 && gy - (p.y + p.h) >= -45);
+          n++;
+        }
+      }
+    });
+  }
+  assert.ok(n > 200);
+});

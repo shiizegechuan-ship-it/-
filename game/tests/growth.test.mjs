@@ -748,6 +748,7 @@ test('難易度はタイトルで切り替えられ、新しく始めた記録�
   assert.equal(g.difficulty().id, 'normal');
   g.cycleDifficulty(); assert.equal(g.difficulty().id, 'hard');
   g.cycleDifficulty(); assert.equal(g.difficulty().id, 'nightmare');
+  g.cycleDifficulty(); assert.equal(g.difficulty().id, 'veryeasy');
   g.cycleDifficulty(); assert.equal(g.difficulty().id, 'easy');
   g.newGame(5); g.modal = null;
   assert.equal(g.meta.difficulty, 'easy'); assert.equal(g.run.diff.id, 'easy');
@@ -1242,4 +1243,32 @@ test('仲間技「夜明けの協奏」：3 匹そろって全員が最後の姿
   assert.equal(g.union, null, 'finishes');
   const dealt = g.room.enemies.map((e, i) => hp0[i] - e.hp);
   assert.ok(dealt.every((x) => x > 200), `every enemy takes a big hit ${dealt.map(Math.round)}`);
+});
+
+test('簡単・めちゃ簡単は斬撃波を最初から持つ（普通は持たない）', () => {
+  for (const [diff, has] of [['veryeasy', true], ['easy', true], ['normal', false]]) {
+    const g = newGame(71); g.meta.difficulty = diff; g.startLoop(); g.modal = null;
+    assert.equal(g.player.boons.some((b) => b.id === 'wave'), has, diff);
+    if (has) assert.ok(g.player.stats.wave);
+  }
+});
+
+test('めちゃ簡単：通常攻撃を押すと、離れた敵へ回転しながら飛び込んで斬る（必中）。空の敵にも届く', () => {
+  for (const E of [RustSoldier, PendulumBat]) {
+    const { g, d, e } = arena(E, 220);
+    g.run.diff = { ...g.run.diff, id: 'veryeasy', autoAim: true };
+    e.hp = e.maxHp = 1e5; e.cool = 99;
+    const x0 = g.player.x;
+    d.frame(1, ['attack']);
+    assert.equal(g.player.state, 'autodash');
+    assert.ok(g.player.invulnerable);
+    d.until(() => e.hp < e.maxHp, 60);
+    assert.ok(e.hp < e.maxHp, `${E.name} gets hit`);
+    assert.ok(Math.abs(g.player.x - x0) > 100, 'hero moved by itself');
+  }
+  // 普通では勝手に動かない
+  const { g, d, e } = arena(RustSoldier, 220);
+  e.hp = e.maxHp = 1e5; e.cool = 99;
+  d.frame(1, ['attack']); d.frame(20);
+  assert.equal(e.hp, e.maxHp);
 });

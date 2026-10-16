@@ -128,6 +128,8 @@ export class Game {
     // 発動する術は 1 つだけ（楔と継承で重なったら Lv の高い方）
     const actives = wedgedBoons.filter((b) => BOONS[b.id].active).sort((a, b) => b.tier - a.tier);
     for (const extra of actives.slice(1)) wedgedBoons.splice(wedgedBoons.indexOf(extra), 1);
+    // 簡単・めちゃ簡単：斬撃波を最初から持つ
+    if (diff.startWave && !wedgedBoons.some((b) => b.id === 'wave')) wedgedBoons.push({ id: 'wave', tier: 1 });
     this.player = new Player(0, 0);
     this.player.baseMaxHp = PC.maxHp + 15 * upLv(meta, 'hp');
     this.player.metaAtk = 1 + 0.1 * upLv(meta, 'atk');
@@ -281,7 +283,7 @@ export class Game {
   //  槍衾（剣の相手）…入口に近い前衛は近接、奥の後衛は遠距離（光線砲手・弓兵）
   //  散開（術の相手）…固まらずに散らばり、足の速いネズミと遠距離が増える
   // 簡単：指向性の針を撃つ風見鶏は出さない（振り子蝙蝠に替える）
-  easyType(t) { return (this.run.diff && this.run.diff.id === 'easy' && t === 'G') ? 'B' : t; }
+  easyType(t) { return (this.run.diff && (this.run.diff.id === 'easy' || this.run.diff.id === 'veryeasy') && t === 'G') ? 'B' : t; }
   formation(list) {
     const diff = this.run.diff || DIFFICULTY.normal;
     list = list.map((e) => ({ ...e, type: this.easyType(e.type) }));
@@ -1295,10 +1297,7 @@ export class Game {
     }
     if (reward) {
       // 報酬はプレイヤーの近くの足場に出す（部屋の形に左右されない）
-      const p = this.player, base = p.onGround ? p : { x: p.lastSafe.x, y: p.lastSafe.y, w: p.w, h: p.h };
-      let gx = clamp(cx(base) + p.face * 60, 60, this.map.pxW - 60);
-      let gy = this.map.groundBelow(gx, base.y + 2);
-      if (gy >= this.map.pxH || gy - (base.y + base.h) > 90) { gx = cx(base); gy = base.y + base.h; }
+      const { gx, gy } = this.rewardSpot();
       this.addItem({ kind: 'reward', reward, x: gx - 12, y: gy - 30, w: 24, h: 24, bob: 0 });
     } else this.openDoors();
     this.emit('roomClear', { type: t });
@@ -1377,6 +1376,28 @@ export class Game {
 
   // ───────── 調べる ─────────
   // 楔を打つ物（騎士の残骸・人物・歯止めなど）が扉と重ならないよう、扉の横へずらす
+  // 報酬を置く場所：主人公の近くで、床の「上」に空きがあり、主人公の足元から届く高さの所。
+  // 壁や床の中には決して置かない（見つからなければ主人公の足元）
+  rewardSpot() {
+    const p = this.player, map = this.map;
+    const base = p.onGround ? p : { x: p.lastSafe.x, y: p.lastSafe.y, w: p.w, h: p.h };
+    const feet = base.y + base.h, bx = cx(base);
+    const T = TILE;
+    const free = (x, y) => x > 8 && x < map.pxW - 8 && map.get(Math.floor(x / T), Math.floor(y / T)) === 0;
+    for (const off of [60, -60, 90, -90, 30, -30, 120, -120]) {
+      const gx = clamp(bx + p.face * off, 40, map.pxW - 40);
+      // 主人公の足元より少し上から下へ、最初に見つかる「上が空いている床」を探す
+      for (let ty = Math.floor((feet - 60) / T); ty < map.h; ty++) {
+        const tile = map.get(Math.floor(gx / T), ty);
+        if (tile === 0) continue;
+        const top = ty * T;
+        if (top - feet > 90 || top - feet < -45) break; // 高すぎる・低すぎる所はやめる
+        if (free(gx, top - 4) && free(gx, top - 26) && free(gx - 12, top - 14) && free(gx + 12, top - 14)) return { gx, gy: top };
+        break;
+      }
+    }
+    return { gx: bx, gy: feet };
+  }
   separateFromDoors() {
     const map = this.map, doors = this.room.items.filter((i) => i.kind === 'door');
     if (!doors.length) return;
@@ -1691,7 +1712,7 @@ export class Game {
       const gx = clamp(cx(b) + side * (60 + 34 * Math.floor(k / 2)), 60, this.map.pxW - 60);
       const g = this.addEnemy(new Squire(gx - 15, b.y + b.h, k % 2 ? 'sling' : 'lance', b));
       g.lord = b.boss ? 'boss' : 'elite';
-      if (this.run.diff && this.run.diff.id === 'easy') { g.maxHp = g.hp = Math.round(g.maxHp * 0.7); }
+      if (this.run.diff && (this.run.diff.id === 'easy' || this.run.diff.id === 'veryeasy')) { g.maxHp = g.hp = Math.round(g.maxHp * 0.7); }
       this.fx.burst(gx, b.y + b.h - 10, b.boss ? '#f2c14e' : '#c98a52', 10);
     }
   }
@@ -1943,7 +1964,7 @@ export class Game {
   difficulty() { return DIFFICULTY[(this.meta && this.meta.difficulty) || this.settings.difficulty || 'normal'] || DIFFICULTY.normal; }
   // 難易度を切り替える（簡単→普通→難しい。セーブがあれば次の夜から反映）
   cycleDifficulty() {
-    const order = ['easy', 'normal', 'hard', 'nightmare'];
+    const order = ['veryeasy', 'easy', 'normal', 'hard', 'nightmare'];
     const next = order[(order.indexOf(this.difficulty().id) + 1) % order.length];
     this.settings.difficulty = next;
     if (this.meta) { this.meta.difficulty = next; this.save(); }

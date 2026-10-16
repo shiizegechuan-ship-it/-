@@ -1,5 +1,5 @@
 import { PLAYER as P, ATTACKS, F } from './config.js';
-import { approach, sign } from './util.js';
+import { approach, sign, cx, cy } from './util.js';
 import { moveBody, standingOnOneway } from './tilemap.js';
 import { computeStats } from './boons.js';
 import { applyArtifacts } from './artifacts.js';
@@ -103,6 +103,7 @@ export class Player {
       case 'attack': this.updateAttack(game, input, dt, dirX); break;
       case 'charge': this.updateCharge(game, input, dt, dirX); break;
       case 'dodge': this.updateDodge(game, input, dt); break;
+      case 'autodash': this.updateAutoDash(game, input, dt); break;
       case 'hurt': this.updateHurt(dt); if (this.kbT > 0 && this.kbGround) this.stopAtAbyssAir(game.map, dt); else this.stopAtAbyss(game.map, dt); break;
       case 'channel': this.updateChannel(game, input, dt); break;
       case 'dead': this.vx = approach(this.vx, 0, 900 * dt); break;
@@ -110,7 +111,7 @@ export class Player {
     }
 
     // 重力（回避中は無重力）
-    if (this.state !== 'dodge') {
+    if (this.state !== 'dodge' && this.state !== 'autodash') {
       const g = P.gravity * (this.vy > 0 ? P.fallGravityMul : 1);
       this.vy = Math.min(this.vy + g * dt, P.maxFall);
     }
@@ -283,7 +284,48 @@ export class Player {
     return d;
   }
 
+  // めちゃ簡単：通常攻撃を押すと、届かない所の敵へ回転しながら飛び込んでから斬る（通常攻撃は必中）
+  autoTarget(game) {
+    const d = game.run && game.run.diff;
+    if (!d || !d.autoAim || !game.room) return null;
+    let best = null, bd = 420;
+    for (const e of game.room.enemies) {
+      if (!e.alive || (e.boss && (e.defeated || e.invuln))) continue;
+      const dd = Math.hypot(cx(e) - this.x - this.w / 2, cy(e) - this.y - this.h / 2);
+      if (dd < bd) { bd = dd; best = e; }
+    }
+    return best;
+  }
+  inReach(e) {
+    const gapX = Math.abs(cx(e) - (this.x + this.w / 2)) - e.w / 2 - this.w / 2;
+    return gapX <= 34 && Math.abs(cy(e) - (this.y + this.h / 2)) < e.h / 2 + 14;
+  }
+  updateAutoDash(game, input, dt) {
+    const a = this.autoDash, e = a.e;
+    a.t += dt;
+    this.iframeT = Math.max(this.iframeT, 0.12); // 飛び込みの間は当たらない
+    this.flipT = 0.34 - ((a.t * 3.2) % 1) * 0.34; // くるくる回る
+    if (!e.alive || a.t > 0.5 || this.inReach(e)) {
+      this.vx *= 0.2; this.vy = Math.min(this.vy, 0) * 0.2;
+      this.state = 'normal'; this.stateT = 0; this.flipT = 0;
+      this.face = (cx(e) >= this.x + this.w / 2) ? 1 : -1;
+      this.autoDashing = true; this.startAttack(game, 0); this.autoDashing = false;
+      return;
+    }
+    const side = Math.sign(this.x + this.w / 2 - cx(e)) || -this.face;
+    const tx = cx(e) + side * (e.w / 2 + this.w / 2 + 14), ty = e.gravity === false ? cy(e) - this.h / 2 : e.y + e.h - this.h;
+    const dx = tx - (this.x + this.w / 2), dy = ty - this.y, d = Math.hypot(dx, dy) || 1;
+    const sp = 900;
+    this.vx = dx / d * sp; this.vy = dy / d * sp;
+    this.face = Math.sign(cx(e) - (this.x + this.w / 2)) || this.face;
+    if (Math.floor(a.t / 0.05) !== Math.floor((a.t - dt) / 0.05)) game.fx.afterimage(this);
+  }
   startAttack(game, dirX, forceName) {
+    if (!forceName && !this.autoDashing) {
+      const tgt = this.autoTarget(game);
+      if (tgt && !this.inReach(tgt)) { this.state = 'autodash'; this.stateT = 0; this.atk = null; this.autoDash = { e: tgt, t: 0 }; this.iframeT = Math.max(this.iframeT, 0.12); game.sfx.play('dodge'); return; }
+      if (tgt) this.face = Math.sign(cx(tgt) - (this.x + this.w / 2)) || this.face, dirX = 0;
+    }
     if (dirX !== 0) this.face = dirX;
     let name = forceName;
     if (!name) {

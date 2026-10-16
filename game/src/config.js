@@ -76,7 +76,10 @@ export const DIFFICULTY = {
   // 激ムズ：攻撃までの間隔がさらに短く、雑魚は構えて主人公の攻撃をパリィして跳ね返す（重撃か背後なら通る）。
   // ときどき床全体が震える（赤く光ったら跳べば当たらない）
 DIFFICULTY.nightmare = { id: 'nightmare', name: '激ムズ', hp: 1.5, dmg: 1.55, tierAdd: 1, windup: 0.7, speed: 1.15, extra: 2, strategy: 'always', guards: 4, guardWave: 3, parry: true, quake: true, color: '#ff4a9a' };
-export const DIFF_ORDER = ['easy', 'normal', 'hard', 'nightmare'];
+// めちゃ簡単：敵はさらに弱く、通常攻撃を押すと主人公が回転しながら近くの敵へ飛び込んでから斬る（通常攻撃は必中）。斬撃波を最初から持つ
+DIFFICULTY.veryeasy = { id: 'veryeasy', name: 'めちゃ簡単', hp: 0.6, dmg: 0.5, tierAdd: -1, windup: 1.5, speed: 0.85, extra: -1, strategy: false, guards: 1, guardWave: 0, autoAim: true, startWave: true, color: '#a8f0ff' };
+DIFFICULTY.easy.startWave = true; // 簡単も斬撃波を最初から持つ
+export const DIFF_ORDER = ['veryeasy', 'easy', 'normal', 'hard', 'nightmare'];
 
 export const COLORS = {
   bg0: '#0d0b14',
