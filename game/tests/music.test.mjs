@@ -7,12 +7,12 @@ import { newGame } from './helpers.mjs';
 const ids = Object.keys(SONGS);
 const melodic = (s) => s.tracks.filter((t) => t.part === 'lead' || t.part === 'counter');
 
-test('BGM の声部：通常の階は主旋律 1・和音 2・ドラム 1、刻守は主旋律 1・副旋律 1・和音 3・ドラム 1', () => {
+test('BGM の声部：通常の階と戦いのあとは主旋律 1・和音 3・ドラム 1、刻守は主旋律 1・副旋律 1・和音 4・ドラム 1', () => {
   for (const id of ids) {
     const s = buildSong(id), n = (p) => s.tracks.filter((t) => t.part === p).length;
     const chord = n('bass') + n('chord');
-    if (SONGS[id].boss) assert.deepEqual([n('lead'), n('counter'), chord, n('drum')], [1, 1, 3, 1], id);
-    else assert.deepEqual([n('lead'), n('counter'), chord, n('drum')], [1, 0, 2, 1], id);
+    if (SONGS[id].boss) assert.deepEqual([n('lead'), n('counter'), chord, n('drum')], [1, 1, 4, 1], id);
+    else assert.deepEqual([n('lead'), n('counter'), chord, n('drum')], [1, 0, 3, 1], id);
     // 声部の中で音は重ならない（1 声部 = 同時に 1 音）
     for (const t of s.tracks) for (let i = 1; i < t.notes.length; i++) assert.ok(t.notes[i].s >= t.notes[i - 1].s + t.notes[i - 1].len, `${id} ${t.part} overlap at ${t.notes[i].s}`);
   }
@@ -58,6 +58,11 @@ test('場面ごとの曲：各階・刻守・白き刻守。タイトル・倒�
   assert.equal(musicFor(g), 'market');
   g.run.fi = 1; assert.equal(musicFor(g), 'gears');
   g.run.fi = 2; assert.equal(musicFor(g), 'belfry');
+  // 戦いを終えた部屋は静かな曲
+  const keep = g.room.desc; g.room.desc = { type: 'combat' }; g.room.cleared = true;
+  assert.equal(musicFor(g), 'calm');
+  g.room.cleared = false; assert.equal(musicFor(g), 'belfry');
+  g.room.desc = { type: 'shop' }; g.room.cleared = true; assert.equal(musicFor(g), 'belfry'); g.room.desc = keep;
   g.room.desc = { type: 'boss' }; g.room.boss = { defeated: false, finalForm: false };
   assert.equal(musicFor(g), 'boss');
   g.room.boss.defeated = true; assert.equal(musicFor(g), null);
@@ -81,8 +86,8 @@ function fakeAudio() {
   return { ctx, nodes };
 }
 
-test('BGM の演奏：同時に鳴る音は通常の階で 4 音まで、刻守で 6 音まで（エコーは数えない）。エコーとビブラートがある', () => {
-  for (const [id, max] of [['market', 4], ['gears', 4], ['belfry', 4], ['boss', 6], ['final', 6]]) {
+test('BGM の演奏：同時に鳴る音は通常の階と戦いのあとで 5 音まで、刻守で 7 音まで（エコーは数えない）。エコーとビブラートがある', () => {
+  for (const [id, max] of [['market', 5], ['gears', 5], ['belfry', 5], ['calm', 5], ['boss', 7], ['final', 7]]) {
     const { ctx, nodes } = fakeAudio();
     const m = new Music({ ctx, master: { connect() {} } });
     globalThis.setTimeout ??= () => {};
@@ -105,10 +110,11 @@ test('BGM のコード進行には、哀愁と少し特殊な響きがある（7
     assert.ok(has(id, (c) => c.tones.length === 4), `${id}: seventh chords`);
     assert.ok(all(id).filter((c, i, a) => i === 0 || c.sym !== a[i - 1].sym).length >= 16, `${id}: enough chord changes`);
   }
-  // ナポリの和音（主音から半音上の長三和音）がある曲
-  const key = { market: 'A', gears: 'E', belfry: 'C', boss: 'D', final: 'B' };
-  const napo = (id) => has(id, (c) => c.root === (chordTones(key[id]).root + 1) % 12 && c.tones[1] === (c.root + 4) % 12);
-  assert.ok(['gears', 'belfry', 'boss', 'final'].every(napo), 'Neapolitan chords');
+  // ナポリの和音（主音から半音上の長和音）：白き刻守の Cmaj7
+  const napo = buildSong('final').chords.flat().some((c) => c.root === 0 && c.tones[1] === 4);
+  assert.ok(napo, 'Neapolitan chord in the final battle');
+  // 短調の ii–V（m7♭5 → 7）
+  assert.ok(ids.some((id) => has(id, (c) => /m7b5/.test(c.sym))));
   // 宙づり（sus4）と、分数コードで下っていく低音
   assert.ok(ids.filter((id) => has(id, (c) => /sus4/.test(c.sym))).length >= 3);
   assert.ok(ids.filter((id) => has(id, (c) => c.bass !== c.root)).length >= 3);
@@ -122,5 +128,11 @@ test('BGM：コードが小節の途中で替わる所で、伸ばしている�
     for (const t of s.tracks) if (t.wave !== 'noise') for (const n of t.notes) for (let k = n.s + 1; k < n.s + n.len; k++) {
       if (s.chordAt(k) !== s.chordAt(k - 1)) assert.ok(harmonyTones(s.chordAt(k)).includes(n.m % 12), `${id} ${t.part} bar ${Math.floor(n.s / 16) + 1}`);
     }
+  }
+});
+
+test('BGM の主旋律・副旋律は、同じ高さの音を続けて鳴らさない', () => {
+  for (const id of ids) for (const t of melodic(buildSong(id))) for (let i = 1; i < t.notes.length; i++) {
+    assert.notEqual(t.notes[i].m, t.notes[i - 1].m, `${id} ${t.part} bar ${Math.floor(t.notes[i].s / 16) + 1}`);
   }
 });

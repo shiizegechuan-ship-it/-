@@ -1,8 +1,8 @@
 // BGM の楽譜（DOM に依存しない。テストからも読める）。音はすべてビット音（矩形波・三角波・ノイズ）。
 //
 // 声部の数（エコーは数えない）
-//   通常の階：主旋律 1・和音 2・ドラム 1
-//   刻守の部屋：主旋律 1・副旋律 1・和音 3・ドラム 1
+//   通常の階・戦いのあと：主旋律 1・和音 3（根音＋2 声）・ドラム 1
+//   刻守の部屋：主旋律 1・副旋律 1・和音 4（根音＋3 声）・ドラム 1
 //
 // 書き方
 //   chords：1 小節に 1 つのコード（16 小節で 1 周）。'F|E7' は小節の前半と後半、'Am/G' は低音を G に。
@@ -17,85 +17,102 @@ export const SONGS = {
   // 下層・市場：夜の市場。少し怪しく、軽やか（イ短調）
   market: {
     name: '夜市の灯', bpm: 132, style: 'offbeat', echo: 3,
-    // 下っていく低音（A・G・F・E）の哀愁と、後半の王道進行（Fmaj7→G7→Em7→Am7）
-    chords: 'Am Am/G Fmaj7 E7 Am Dm7 G7 Cmaj7 Fmaj7 G7 Em7 Am7 Dm7 Bm7b5|E7 Fmaj7|E7 Esus4|E7',
+    // 短調の ii–V（Bm7♭5→E7）、後半の王道進行（Fmaj7→G7→Em7→Am7）、宙づりの Esus4
+    chords: 'Am Fmaj7 C G7 Am7 Dm7 Bm7b5 E7 Fmaj7 G7 Em7 Am7 Dm7 G7 Cmaj7|Fmaj7 Esus4|E7',
     lead: [
-      'E5/4 A4/2 C5/2 E5/2 D5/2 C5/4', 'E5/6 D5/2 C5/4 A4/4', 'A4/2 C5/2 E5/4 F5/4 E5/2 C5/2', 'D5/6 B4/2 G#4/8',
-      'A4/2 C5/2 E5/2 A5/4 G5/2 E5/4', 'F5/4 E5/2 F5/2 A5/4 F5/4', 'D5/4 F5/4 B5/4 G5/2 F5/2', 'E5/6 D5/2 B4/4 G4/4',
+      'E5/4 A4/2 C5/2 E5/2 D5/2 C5/4', 'F5/6 E5/2 C5/4 A4/4', 'G4/2 C5/2 E5/4 G5/4 E5/2 C5/2', 'D5/6 B4/2 G4/8',
+      'A4/2 C5/2 E5/2 A5/4 G5/2 E5/4', 'F5/4 E5/2 F5/2 A5/4 F5/4', 'D5/4 F5/4 A5/4 G5/2 F5/2', 'E5/6 D5/2 B4/4 G#4/4',
       'C5/2 A4/2 C5/2 F5/6 E5/4', 'D5/2 B4/2 D5/2 G5/6 F5/4', 'E5/4 G5/4 B5/4 G5/4', 'A5/8 E5/4 C5/4',
-      'F5/2 E5/2 D5/4 A4/4 D5/4', 'B4/2 C5/2 D5/4 G#5/4 E5/4', 'E5/4 F5/2 E5/2 D5/4 B4/4', 'B4/8 G#4/4 E4/4',
+      'F5/2 E5/2 D5/4 A4/4 D5/4', 'B4/2 C5/2 D5/4 G5/4 F5/4', 'E5/4 G5/2 E5/2 C5/4 E5/4', 'B4/8 G#4/4 E4/4',
     ],
     drum: { a: 'k.h.s.h.k.k.s.h.', f: 'k.h.s.h.s.s.ssss' }, order: 'aaaaaaafaaaaaaaf',
   },
   // 中層・歯車回廊：歯車が噛み合うように刻む（ホ短調）
   gears: {
     name: '歯車の回廊', bpm: 144, style: 'motor', echo: 2,
-    // 7 の和音で陰りを足し、終わり近くでナポリの和音（F）から B7 へ
-    chords: 'Em Cmaj7 D Bm7 Em Cmaj7 Am7 B7 Cmaj7 D Bm7 Em Am7 F|B7 G Cmaj7|B7',
+    // 7 の和音の陰り、Em→Em/D の下がる低音、D7→G（平行調への寄り道）、最後は Cmaj7 の上で #11 が鳴ってから B7
+    chords: 'Em Cmaj7 D Bm7 Em C Am7 B7 Cmaj7 D Bm7 Em|Em/D Am7 D7 G Cmaj7|B7',
     lead: [
-      'B4/2 E5/2 G5/2 E5/2 B4/2 E5/2 F#5/2 G5/2', 'G5/4 E5/2 C5/2 G4/4 C5/4', 'F#5/2 A5/2 F#5/2 D5/2 A4/4 D5/4', 'F#5/4 B4/4 D5/8',
+      'B4/2 E5/2 G5/2 E5/2 B4/2 E5/2 F#5/2 A5/2', 'G5/4 E5/2 C5/2 G4/4 C5/4', 'F#5/2 A5/2 F#5/2 D5/2 A4/4 D5/4', 'F#5/4 B4/4 D5/8',
       'E5/2 G5/2 B5/2 G5/2 E5/2 G5/2 A5/2 B5/2', 'C6/6 G5/2 E5/4 C5/4', 'A5/2 G5/2 E5/2 C5/2 E5/4 A4/4', 'F#5/6 D#5/2 B4/8',
-      'E5/2 r/2 E5/2 G5/2 C6/4 G5/4', 'F#5/2 r/2 F#5/2 A5/2 F#5/4 D5/4', 'D5/2 F#5/2 B5/4 F#5/2 E5/2 D5/4', 'E5/12 r/4',
-      'C5/2 E5/2 A5/4 E5/2 G5/2 A5/4', 'A5/4 F5/2 E5/2 D#5/4 F#5/4', 'G5/2 D5/2 B4/2 D5/2 G5/2 B5/2 A5/4', 'B5/4 G5/4 D#5/4 B4/4',
+      'E5/2 r/2 B4/2 G5/2 C6/4 G5/4', 'F#5/2 r/2 D5/2 A5/2 F#5/4 A4/4', 'D5/2 F#5/2 B5/4 F#5/2 E5/2 D5/4', 'E5/12 r/4',
+      'C5/2 E5/2 A5/4 E5/2 G5/2 C6/4', 'A5/4 F#5/4 D5/4 E5/2 F#5/2', 'G5/2 D5/2 B4/2 D5/2 G5/2 B5/2 A5/4', 'B5/4 F#5/4 D#5/4 B4/4',
     ],
     drum: { a: 'k.hhs.hhk.hhs.hh', f: 'k.hhs.hhs.s.ssss' }, order: 'aaaaaaafaaaaaaaf',
   },
-  // 上層・鐘楼：重く、厳かに。長い音と鐘のような高い矩形波（ハ短調）
+  // 上層・鐘楼：重く、厳かに。長い音と鐘のような高い音（ハ短調）
   belfry: {
-    name: '鐘楼へ', bpm: 116, style: 'pad', echo: 4, duty: 0.125,
-    // 下っていく低音（C・B♭・A♭・G）、ナポリの和音（D♭maj7）、宙づりの Gsus4、Fm へ向かう C7
-    chords: 'Cm Cm/Bb Abmaj7 G7 Cm Fm7 Dbmaj7|G7 Gsus4|G7 Abmaj7 Bb7 Gm7 Cm|C7 Fm7 Bb7 Ebmaj7 Abmaj7|G7',
+    name: '鐘楼へ', bpm: 116, style: 'pad', echo: 4,
+    // 下がっていく低音（C→C/B♭→A♭maj7）、宙づりの Gsus4、Fm へ向かう C7
+    chords: 'Cm Cm/Bb|Abmaj7 Bb G7 Cm7 Fm7 Abmaj7 Gsus4|G7 Abmaj7 Bb7 Gm7 Cm|C7 Fm7 Bb7 Ebmaj7 G7',
     lead: [
-      'G4/4 C5/4 Eb5/8', 'C5/6 Bb4/2 G4/8', 'Eb5/4 C5/4 Ab4/4 Bb4/2 C5/2', 'D5/12 B4/4',
-      'Eb5/4 G5/4 C6/6 Bb5/2', 'Ab5/8 F5/4 C5/4', 'F5/6 Ab5/2 F5/4 D5/4', 'D5/8 B4/8',
+      'G4/4 C5/4 Eb5/8', 'C5/6 Bb4/2 Ab4/8', 'F5/4 D5/4 Bb4/4 C5/2 Eb5/2', 'D5/12 B4/4',
+      'Eb5/4 G5/4 C6/6 Bb5/2', 'Ab5/8 F5/4 C5/4', 'Eb5/6 F5/2 Eb5/4 C5/4', 'D5/8 B4/8',
       'C5/4 Eb5/4 Ab5/8', 'Bb5/6 Ab5/2 F5/8', 'G5/4 F5/2 D5/2 Bb4/4 D5/4', 'C5/16',
-      'F5/6 Ab5/2 C6/8', 'Bb5/8 F5/4 D5/4', 'Eb5/4 G5/4 Bb5/6 G5/2', 'C5/4 Eb5/4 D5/4 B4/4',
+      'F5/6 Ab5/2 C6/8', 'Bb5/8 F5/4 D5/4', 'Eb5/4 G5/4 Bb5/6 G5/2', 'B4/4 D5/4 G5/8',
     ],
     drum: { a: 'k...h...s...h...', f: 'k...h...s.s.sss.' }, order: 'aaaaaaafaaaaaaaf',
   },
   // 刻守：速く、激しく。副旋律が下で支える（ニ短調）
   boss: {
     name: '刻守', bpm: 160, style: 'drive', echo: 3, boss: true,
-    // 激しさの中に、ナポリの和音（E♭）と、下っていく低音（Dm→Dm/C）
-    chords: 'Dm Bbmaj7 C A7 Dm Gm7 Bb|C A7 Bbmaj7 C Am7 Dm Gm7 Eb|A7 Dm|Dm/C Bbmaj7|A7',
+    // 7 の和音、B♭→Gm7 の半小節の交代、C7（平行調の属七）、下がる低音（Dm→Dm/C）、宙づりの Asus4
+    chords: 'Dm Bbmaj7 C A7 Dm Gm7 Bb|Gm7 A7 Bbmaj7 C7 Am7 Dm|Dm/C Gm7 C7 F Asus4|A7',
     lead: [
-      'A4/3 D5/3 F5/2 A5/4 F5/2 D5/2', 'D5/3 F5/3 Bb5/6 F5/2 D5/2', 'E5/3 G5/3 C6/6 G5/2 E5/2', 'E5/4 C#5/4 A4/4 E5/4',
-      'F5/2 F5/2 r/2 F5/2 A5/2 G5/2 F5/2 E5/2', 'G5/2 G5/2 r/2 G5/2 Bb5/2 A5/2 G5/2 F5/2', 'Bb5/4 F5/4 E5/4 G5/4', 'A5/6 G5/2 E5/4 C#5/4',
+      'A4/3 D5/3 F5/2 A5/4 F5/2 E5/2', 'D5/3 F5/3 Bb5/6 F5/2 D5/2', 'E5/3 G5/3 C6/6 G5/2 F5/2', 'E5/4 C#5/4 A4/4 E5/4',
+      'F5/2 C5/2 r/2 F5/2 A5/2 G5/2 F5/2 E5/2', 'G5/2 D5/2 r/2 G5/2 Bb5/2 A5/2 G5/2 F5/2', 'Bb5/4 F5/4 D5/4 F5/4', 'A5/6 G5/2 E5/4 C#5/4',
       'D5/6 F5/2 Bb5/4 A5/2 F5/2', 'E5/6 G5/2 C6/4 Bb5/2 G5/2', 'A5/4 E5/4 C5/4 E5/4', 'D5/8 F5/4 A5/4',
-      'Bb5/4 A5/2 G5/2 D5/4 G5/4', 'Bb5/4 G5/2 Eb5/2 E5/4 C#5/4', 'A5/6 F5/2 C5/4 F5/4', 'F5/4 D5/4 C#5/4 E5/4',
+      'Bb5/4 A5/2 G5/2 D5/4 G5/4', 'C6/4 Bb5/2 G5/2 E5/4 C5/4', 'A5/6 F5/2 C5/4 F5/4', 'E5/4 A5/4 C#5/8',
     ],
     counter: [
-      'F4/8 A4/8', 'F4/8 D4/8', 'E4/8 G4/8', 'E4/8 C#4/8', 'A4/4 F4/4 D4/8', 'Bb4/4 G4/4 D4/8', 'D4/8 E4/8', 'C#5/8 A4/8',
-      'F4/4 Bb4/4 D5/8', 'G4/4 C5/4 E5/8', 'C5/8 A4/8', 'F4/8 D4/8', 'D4/8 G4/8', 'G4/8 A4/8', 'A4/8 C5/8', 'A4/8 E4/8',
+      'F4/8 A4/8', 'F4/8 D4/8', 'E4/8 G4/8', 'E4/8 C#4/8', 'A4/4 F4/4 D4/8', 'Bb4/4 D4/4 G4/8', 'D4/8 F4/8', 'C#5/8 A4/8',
+      'F4/4 Bb4/4 D5/8', 'G4/4 C5/4 E5/8', 'C5/8 A4/8', 'F4/8 A4/8', 'D4/8 G4/8', 'E4/8 G4/8', 'A4/8 C5/8', 'A4/8 E4/8',
     ],
     drum: { a: 'k.h.s.hkk.h.s.h.', b: 'k.hks.h.k.hks.hs', f: 'k.s.s.s.ssssssss' }, order: 'abababafabababaf',
   },
   // 白き刻守（最後の形）：悲しく、それでいて前へ進む（ロ短調）
   final: {
-    name: '夜明けの楔', bpm: 150, style: 'anthem', echo: 3, boss: true, duty: 0.25,
-    // 宙づりの Asus4、7 の和音の陰り、ナポリの和音（C）から F#7 へ
-    chords: 'Bm Gmaj7 D Asus4|A Bm Em7 Gmaj7|A F#7 Gmaj7 A F#m7 Bm Em7 C|F#7 D|A/C# F#7',
+    name: '夜明けの楔', bpm: 150, style: 'anthem', echo: 3, boss: true,
+    // 宙づりの Asus4、ナポリの和音（Cmaj7）から A7→D、下がる低音（D→Dmaj7/C#）、最後に F#sus4→F#7
+    chords: 'Bm Gmaj7 D Asus4|A Bm Em7 Gmaj7 F#7 Gmaj7 A7 F#m7 Bm Cmaj7 A7 D|Dmaj7/C# F#sus4|F#7',
     lead: [
       'F#5/8 D5/4 B4/4', 'G5/8 D5/4 B4/4', 'D5/4 F#5/2 A5/2 F#5/4 E5/2 F#5/2', 'E5/12 C#5/4',
-      'D5/4 B4/2 D5/2 F#5/6 E5/2', 'G5/6 F#5/2 E5/4 B4/4', 'D5/2 E5/2 G5/4 A5/6 E5/2', 'A#5/4 F#5/4 C#5/4 F#5/4',
+      'D5/4 B4/2 D5/2 F#5/6 E5/2', 'G5/6 F#5/2 E5/4 B4/4', 'D5/2 E5/2 G5/4 B5/6 A5/2', 'A#5/4 F#5/4 C#5/4 F#5/4',
       'B5/4 A5/2 G5/2 D5/8', 'A5/4 G5/2 E5/2 C#5/8', 'F#5/4 A5/4 F#5/4 C#5/4', 'D5/6 C#5/2 B4/8',
-      'G5/4 E5/4 B4/4 G5/4', 'G5/6 E5/2 F#5/4 C#5/4', 'F#5/4 A5/4 E5/4 C#5/4', 'C#5/4 F#5/4 A#4/8',
+      'G5/4 E5/4 B4/4 G5/4', 'A5/6 G5/2 E5/4 C#5/4', 'F#5/4 A5/4 D5/4 F#5/4', 'C#5/4 F#5/4 A#4/8',
     ],
     counter: [
-      'D4/8 F#4/8', 'B4/8 G4/8', 'F#4/8 A4/8', 'E4/8 C#5/8', 'D5/8 B4/8', 'E4/8 G4/8', 'B4/8 C#5/8', 'C#5/8 A#4/8',
-      'G4/8 B4/8', 'E4/8 A4/8', 'A4/8 C#5/8', 'F#4/8 D4/8', 'B4/8 G4/8', 'G4/8 A#4/8', 'A4/8 E4/8', 'A#4/8 C#5/8',
+      'D4/8 F#4/8', 'B4/8 G4/8', 'F#4/8 A4/8', 'E4/8 C#5/8', 'D5/8 B4/8', 'E4/8 G4/8', 'B4/8 D5/8', 'C#5/8 A#4/8',
+      'G4/8 B4/8', 'A4/8 E4/8', 'A4/8 C#5/8', 'F#4/8 D4/8', 'B4/8 G4/8', 'A4/8 C#5/8', 'A4/8 F#4/8', 'B4/8 A#4/8',
     ],
     drum: { a: 'k...s.h.k.k.s.h.', b: 'k.h.s.h.k.hks.h.', f: 'k.s.k.s.s.ssssss' }, order: 'abababafabababaf',
   },
+  // 戦いのあと：部屋を制圧したあとの静けさ。ゆっくり、やわらかく（ヘ長調）
+  calm: {
+    name: '静けさの間', bpm: 96, style: 'arp', echo: 4,
+    // 下がっていくメジャー 7 の連なり（Fmaj7→Em7→Dm7→Cmaj7→B♭maj7…）、Gm7→C7 の ii–V、宙づりの Csus4
+    chords: 'Fmaj7 Em7 Dm7 Cmaj7 Bbmaj7 Am7 Gm7 C7 Fmaj7 Am7 Bbmaj7 Gm7|C7 Am7 Dm7 Gm7 Csus4|C7',
+    lead: [
+      'A4/4 C5/4 E5/8', 'D5/6 B4/2 G4/8', 'A4/4 F4/4 C5/8', 'B4/6 G4/2 E4/8',
+      'F4/4 A4/4 D5/8', 'C5/6 E5/2 G5/8', 'F5/4 D5/4 Bb4/8', 'E5/6 G5/2 Bb4/8',
+      'A4/4 C5/4 F5/8', 'E5/6 C5/2 A4/8', 'D5/4 F5/4 A5/8', 'G5/6 E5/2 Bb4/8',
+      'C5/4 E5/4 G5/8', 'F5/6 E5/2 D5/8', 'Bb4/4 D5/4 G5/8', 'F5/8 E5/8',
+    ],
+    drum: { a: 'k...h...h...h...', f: 'k...h...h.h.hhh.' }, order: 'aaaaaaafaaaaaaaf',
+  },
 };
 
-// 和音の刻み方。bass は三角波の根音、chord は矩形波（通常 1 声・刻守 2 声）。[開始, 長さ, 声] の並び（16 分音符単位）
+// 和音の刻み方。bass は三角波の根音（o は 1 オクターブ上）、chord は和音の声部（通常 2 声・刻守 3 声）。
+// [開始, 長さ, 度]（16 分音符単位）。度：3 = 3 度、5 = 5 度、7 = 7 度（三和音なら 5 度）、X = 7 度（三和音なら根音）
+const OFF = [2, 6, 10, 14], SYNC = [0, 3, 6, 8, 11, 14], EIGHTS = [0, 2, 4, 6, 8, 10, 12, 14];
+const BASS8 = EIGHTS.map((s, i) => [s, 2, i % 2 ? 'o' : 'r']);
 export const CHORD_STYLES = {
-  offbeat: { bass: [[0, 2, 'r'], [2, 2, 'o'], [4, 2, 'r'], [6, 2, 'o'], [8, 2, 'r'], [10, 2, 'o'], [12, 2, 'r'], [14, 2, 'o']], chord: [[[2, 1, 3], [6, 1, 5], [10, 1, 3], [14, 1, 5]]] },
-  motor: { bass: [0, 2, 4, 6, 8, 10, 12, 14].map((s) => [s, 2, 'r']), chord: [Array.from({ length: 16 }, (_, i) => [i, 1, i % 2 ? 5 : 3])] },
-  pad: { bass: [[0, 8, 'r'], [8, 8, 'r']], chord: [[[0, 8, 3], [8, 8, 5]]] },
-  drive: { bass: [[0, 2, 'r'], [2, 2, 'o'], [4, 2, 'r'], [6, 2, 'o'], [8, 2, 'r'], [10, 2, 'o'], [12, 2, 'r'], [14, 2, 'o']], chord: [[0, 3, 6, 8, 11, 14].map((s) => [s, 2, 3]), [0, 3, 6, 8, 11, 14].map((s) => [s, 2, 5])] },
-  anthem: { bass: [[0, 2, 'r'], [2, 2, 'r'], [4, 2, 'o'], [6, 2, 'r'], [8, 2, 'r'], [10, 2, 'r'], [12, 2, 'o'], [14, 2, 'r']], chord: [[[0, 3, 3], [4, 3, 3], [8, 3, 3], [12, 3, 3]], [[2, 2, 5], [6, 2, 5], [10, 2, 5], [14, 2, 5]]] },
+  offbeat: { bass: BASS8, chord: [OFF.map((s) => [s, 1, 3]), OFF.map((s) => [s, 1, 7])] },
+  motor: { bass: EIGHTS.map((s) => [s, 2, 'r']), chord: [Array.from({ length: 16 }, (_, i) => [i, 1, i % 2 ? 5 : 3]), [0, 4, 8, 12].map((s) => [s, 3, 'X'])] },
+  pad: { bass: [[0, 8, 'r'], [8, 8, 'r']], chord: [[[0, 8, 3], [8, 8, 5]], [[0, 8, 7], [8, 8, 7]]] },
+  drive: { bass: BASS8, chord: [SYNC.map((s) => [s, 2, 3]), SYNC.map((s) => [s, 2, 5]), SYNC.map((s) => [s, 2, 'X'])] },
+  anthem: { bass: [[0, 2, 'r'], [2, 2, 'r'], [4, 2, 'o'], [6, 2, 'r'], [8, 2, 'r'], [10, 2, 'r'], [12, 2, 'o'], [14, 2, 'r']], chord: [[0, 4, 8, 12].map((s) => [s, 3, 3]), OFF.map((s) => [s, 2, 5]), [[0, 8, 'X'], [8, 8, 'X']]] },
+  arp: { bass: [[0, 8, 'r'], [8, 8, 'r']], chord: [EIGHTS.map((s, i) => [s, 2, i % 2 ? 5 : 3]), [[0, 8, 7], [8, 8, 7]]] },
 };
 
 const PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -164,7 +181,7 @@ export function buildSong(id) {
     let prev = 64;
     for (let bar = 0; bar < bars; bar++) for (const [s, len, deg] of pat) {
       const c = chordAt(bar * 16 + s);
-      const pc = deg === 3 ? c.tones[1] : c.tones[3] ?? c.tones[2];
+      const pc = deg === 3 ? c.tones[1] : deg === 5 ? c.tones[2] : deg === 7 ? c.tones[3] ?? c.tones[2] : c.tones[3] ?? c.tones[0];
       const m = nearest(pc, prev, RANGE.chord); prev = m;
       notes.push({ s: bar * 16 + s, len, m });
     }
@@ -191,5 +208,7 @@ export function musicFor(game) {
     if (b.finalForm) return b.defeated ? null : 'final';
     return b.defeated ? null : 'boss';
   }
+  // 戦いを終えた部屋（制圧したあと）は、静かな曲に替わる
+  if (game.room.cleared && ['combat', 'trial', 'elite', 'elite2'].includes(game.room.desc.type)) return 'calm';
   return ['market', 'gears', 'belfry'][Math.min(2, game.run.fi)];
 }
