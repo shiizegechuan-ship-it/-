@@ -27,8 +27,8 @@ export const BOONS = {
   mirror: { school: 'echo', name: '鏡像', desc: (t) => `被弾時、残像が周囲に ${t > 1 ? 45 : 30} の反撃` },
   reverb: { school: 'echo', name: '余韻', desc: (t) => `撃破時に残響が弾け、周囲に ${t > 1 ? 40 : 25}` },
   resonate: { school: 'echo', name: '共振', desc: (t) => `残響の命中で秒針ゲージ +${t > 1 ? 10 : 6}、HP +${t > 1 ? 2 : 1}` },
-  sandglass: { school: 'risk', name: '砕けた砂時計', desc: () => '与ダメージ +40%。最大HP -30%' },
-  inverted: { school: 'risk', name: '逆さ時計', desc: () => '通常回避の無敵が4Fに。ジャスト回避の受付+6F、成功後の一撃 ×3' },
+  sandglass: { school: 'risk', name: '砕けた砂時計', desc: () => '与ダメージ +40%。欠点：最大HP -30%' },
+  inverted: { school: 'risk', name: '逆さ時計', desc: () => 'ジャスト回避の受付 +6F、成功後の一撃 ×3。欠点：ふつうの回避の無敵が 12F→4F（3 分の 1）に減る' },
   // 火力：取るたびに Lv が上がり、数字が伸びる（最大 Lv5）
   edge: { school: 'power', max: 5, name: '研ぎ澄まし', desc: (t) => `すべての与ダメージ +${pc(20 * t)}` },
   comboheat: { school: 'power', max: 5, name: '連撃の熱', desc: (t) => `コンボ1ごとの加算 +${t}%（基本 1% に上乗せ）` },

@@ -7,6 +7,9 @@ import { cx, cy, clamp } from './util.js';
 import { drawHud, drawModal, drawTitle, drawRewind, drawEnding, FONT } from './ui.js';
 import { PW, PH, makeCanvas, rect, pset, line, dashLine, circle, disc, wedge, arc, drawSprite } from './pix.js';
 import { drawBackground, backgroundFor, gearFrame, TS } from './background.js';
+// 部屋ごとの内装の型（0〜2）と、夜ごとの荒れ具合（第 2 夜は少し、第 3 夜からかなり）
+export const roomInterior = (game) => (game.run && game.room && game.room.desc.type !== 'boss' ? (game.run.ri + game.run.fi) % 3 : 0);
+export const ruinLevel = (meta) => (!meta || meta.flags.ending ? 0 : meta.loop >= 3 ? 2 : meta.loop === 2 ? 1 : 0);
 import { spr } from './sprites.js';
 import { PRISM } from './arts.js';
 
@@ -75,7 +78,7 @@ function renderPlay(ctx, game) {
     ctx.drawImage(buf, 0, 0, VIEW_W, VIEW_H);
     return;
   }
-  drawBackground(b, fi, camPX, camPY, game.time);
+  drawBackground(b, fi, camPX, camPY, game.time, 99, roomInterior(game), ruinLevel(game.meta)); // 内装は部屋ごとに 3 通り、荒れ具合は夜で
   game.look = nightLook(game.meta);
   drawSkyLook(b, game.look, PW, PH, game.time);
   b.save();
@@ -139,6 +142,7 @@ function renderPlay(ctx, game) {
   }
   for (const k of game.room.pickups || []) drawPickup(b, k, game.time);
   for (const s of fx.slashes) drawSlash(b, s);
+  for (const s of fx.strikes || []) drawStrike(b, s);
   for (const sp of game.room.spells || []) { drawSpell(b, sp, game.time); haloFor(b, sp); }
   for (const im of fx.impacts || []) drawImpact(b, im);
   for (const pr of game.room.projectiles) drawProjectile(b, pr, game.time);
@@ -441,6 +445,21 @@ function sweep(b, x, y, r, a0, a1, k, col, th, dim) {
   const tail = a0 + (a1 - a0) * Math.max(0, prog - 0.55);
   arc(b, x, y, r, Math.min(tail, end), Math.max(tail, end), col, th);
   if (dim) arc(b, x, y, r - th, Math.min(a0, tail), Math.max(a0, tail), dim, 1);
+}
+// 敵の攻撃の斬光：攻撃の範囲を、向きの側へ弧を描いて薙ぐ三日月（外側が色、芯が白）と、後ろへ流れる風切り線
+function drawStrike(b, s) {
+  const k = s.t / s.life, cx0 = (s.x + s.w / 2) / 2, cy0 = (s.y + s.h / 2) / 2;
+  const rx = Math.max(6, s.w / 2 / 2 + 2), ry = Math.max(6, s.h / 2 / 2 + 2);
+  const a0 = -Math.PI / 2 - 0.9, sweep = (Math.PI + 1.8) * Math.min(1, k * 1.8);
+  b.globalAlpha = 1 - k;
+  for (let i = 0; i <= 18; i++) {
+    const a = a0 + sweep * (i / 18), x = cx0 + s.dir * Math.cos(a) * rx, y = cy0 + Math.sin(a) * ry;
+    const thick = s.big ? 3 : 2;
+    rect(b, Math.round(x - thick / 2), Math.round(y - thick / 2), thick, thick, s.color);
+    pset(b, Math.round(x - s.dir), Math.round(y), '#ffffff');
+  }
+  for (let i = 0; i < (s.big ? 5 : 3); i++) { const y = Math.round(cy0 - ry / 2 + (i * ry) / (s.big ? 2.5 : 1.5)); const x = Math.round(cx0 - s.dir * (rx + 4 + k * 12)); rect(b, Math.min(x, x - s.dir * 8), y, 8, 1, s.color); }
+  b.globalAlpha = 1;
 }
 function drawSlash(b, s) {
   const p = s.owner, k = s.t / s.life, f = s.face;
@@ -908,7 +927,19 @@ function outlined(b, group, frame, x, y, face, glow, glowColor, duel) {
     b.globalAlpha = 1;
   }
 }
+// 敵を描く。drawScale があれば足元を中心に拡大して描く（HP の帯は拡大しない）
 function drawEnemy(b, game, e) {
+  const s = e.drawScale || 1;
+  if (s === 1) { drawEnemyBody(b, game, e); hpBar(b, e); return; }
+  const fx = cx(e) / 2, fy = (e.y + e.h) / 2;
+  b.save(); b.translate(fx, fy); b.scale(s, s); b.translate(-fx, -fy);
+  drawEnemyBody(b, game, e);
+  b.restore();
+  // 時の障壁が攻撃を受け止めた瞬間：淡い水色の殻
+  if (e.barrierFx > 0) { b.globalAlpha = Math.min(1, e.barrierFx * 4) * 0.7; circle(b, Math.round(fx), Math.round(fy - e.h * s / 4), Math.round(e.h * s / 4 + 6), '#9fe3ff'); circle(b, Math.round(fx), Math.round(fy - e.h * s / 4), Math.round(e.h * s / 4 + 8), '#cfefff'); b.globalAlpha = 1; }
+  hpBar(b, e, e.y + e.h - e.h * s);
+}
+function drawEnemyBody(b, game, e) {
   const t = game.time;
   const bx = Math.round(cx(e) / 2), by = Math.round((e.y + e.h) / 2), f = e.face;
   const slowGlow = e.slowed ? 0.7 : 0;
@@ -1244,7 +1275,6 @@ function drawEnemy(b, game, e) {
     }
     case 'boss': if (!e.vanished) drawBoss(b, game, e, bx, by, t, flash, slowGlow); break;
   }
-  hpBar(b, e);
 }
 function outlinedImg(b, img, x, y, color) {
   b.save(); b.globalAlpha = 0.8; b.filter = 'none';
@@ -1320,16 +1350,16 @@ function drawBoss(b, game, e, bx, by, t, flash, slowGlow) {
   if (e.state === 'leapWind') rect(b, bx - 12, by - 1, 25, 1, '#ff4a2a');
 }
 
-function hpBar(b, e) {
+function hpBar(b, e, top = e.y) {
   // 弱体の印：錆び（茶の点）・脆さ（紫のひび）・鎖（灰の輪）
   if (e.hp > 0 && (e.rustT > 0 || e.brittleT > 0 || e.snareT > 0)) {
-    let mx = Math.round(cx(e) / 2) - 6; const my = Math.round(e.y / 2) - 11;
+    let mx = Math.round(cx(e) / 2) - 6; const my = Math.round(top / 2) - 11;
     if (e.rustT > 0) { rect(b, mx, my, 3, 3, '#a8652a'); rect(b, mx + 1, my + 1, 1, 1, '#e0a050'); mx += 5; }
     if (e.brittleT > 0) { rect(b, mx, my, 1, 3, '#c07cff'); rect(b, mx + 1, my + 1, 1, 1, '#c07cff'); rect(b, mx + 2, my, 1, 2, '#c07cff'); mx += 5; }
     if (e.snareT > 0) { rect(b, mx, my, 3, 1, '#b8b8c0'); rect(b, mx, my + 2, 3, 1, '#b8b8c0'); rect(b, mx, my, 1, 3, '#b8b8c0'); rect(b, mx + 2, my, 1, 3, '#b8b8c0'); }
   }
   if (e.hp >= e.maxHp || e.boss || e.hp <= 0) return;
-  const w = e.elite ? 24 : 14, x = Math.round(cx(e) / 2 - w / 2), y = Math.round(e.y / 2) - 6;
+  const w = e.elite ? 24 : 14, x = Math.round(cx(e) / 2 - w / 2), y = Math.round(top / 2) - 6;
   rect(b, x - 1, y - 1, w + 2, 4, '#0a0610');
   rect(b, x, y, Math.max(1, Math.round(w * clamp(e.hp / e.maxHp, 0, 1))), 2, e.elite ? '#f2c14e' : '#e35d5d');
 }

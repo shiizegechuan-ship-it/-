@@ -290,3 +290,46 @@ test('守護の強化：不動の構え（立ち止まっている間の被ダ�
   g.room.desc = { ...g.room.desc, type: 'combat' }; g.room.cleared = false; g.clearRoom(true);
   assert.equal(p.hp, 50 + Math.round(p.maxHp * 0.12));
 });
+
+test('敵の大きさ：通常の敵は見た目 1.25 倍・当たり判定 1.12 倍、最後の中ボスと刻守は 1.5 倍（足元の位置は変わらない）', async () => {
+  const { ENEMY_SIZE } = await import('../src/game.js');
+  const { Warden } = await import('../src/enemies.js');
+  const g = sandbox(FLAT);
+  const e = new RustSoldier(300, 300); const w0 = e.w, h0 = e.h, foot = e.y + e.h, mid = e.x + e.w / 2;
+  g.addEnemy(e);
+  assert.equal(e.drawScale, ENEMY_SIZE.look);
+  assert.equal(e.w, Math.round(w0 * 1.12)); assert.equal(e.h, Math.round(h0 * 1.12));
+  assert.ok(Math.abs(e.y + e.h - foot) < 1e-9 && Math.abs(e.x + e.w / 2 - mid) < 1e-9);
+  const wd = new Warden(400, 400); const ww = wd.w; g.addEnemy(wd);
+  assert.equal(wd.drawScale, 1.5); assert.equal(wd.w, Math.round(ww * 1.5));
+  // 二重に大きくならない
+  g.addEnemy(e); assert.equal(e.w, Math.round(w0 * 1.12));
+  const k = new GearKnight(500, 400); const kw = k.w; g.addEnemy(k);
+  assert.ok(!k.drawScale && k.w === kw, 'other mid-bosses keep their size');
+});
+
+test('刻守の時の障壁：強い一撃を続けても、戦った時間ぶんしか削れない（最短約 20 秒）。弱い攻撃には何もしない', async () => {
+  const { BOSS_MIN_TIME } = await import('../src/game.js');
+  const { newGame, Driver } = await import('./helpers.mjs');
+  const g = newGame(31); const d = new Driver(g);
+  g.enterRoom(2, g.run.plan.floors[2].findIndex((r) => r.type === 'boss')); g.modal = null;
+  const b = g.room.boss; b.state = 'idle';
+  const rate = b.maxHp / BOSS_MIN_TIME;
+  // 戦い始めに桁違いの一撃
+  g.dealDamage(b, { base: 1e5, cat: 'combo', dir: 1 });
+  assert.ok(b.maxHp - b.hp <= rate * 1.5 + rate * 0.25 + 1, `first hit ${b.maxHp - b.hp}`);
+  // 10 秒たっても、削れるのは約 10 秒ぶん
+  b.barrier.t = 10;
+  for (let i = 0; i < 30; i++) { b.state = 'idle'; g.dealDamage(b, { base: 1e5, cat: 'combo', dir: 1 }); }
+  assert.ok(b.maxHp - b.hp <= rate * 11.5 + rate * 0.25 * 31 + 1, `after 10s ${b.maxHp - b.hp}`);
+  assert.ok(b.hp > 0 && !b.defeated, 'still standing');
+  // 弱い攻撃（目安より遅いペース）は減らない
+  const h = newGame(32);
+  h.enterRoom(2, h.run.plan.floors[2].findIndex((r) => r.type === 'boss')); h.modal = null;
+  const c = h.room.boss; c.state = 'idle'; c.barrier = { t: 30, dealt: 0 }; h.run.critRng = { next: () => 1 };
+  const hp0 = c.hp; h.dealDamage(c, { base: 10, cat: 'combo', dir: 1 });
+  const plain = newGame(32); plain.enterRoom(2, plain.run.plan.floors[2].findIndex((r) => r.type === 'boss')); plain.modal = null;
+  const pc = plain.room.boss; pc.state = 'idle'; pc.barrier = { t: 1e9, dealt: 0 }; plain.run.critRng = { next: () => 1 };
+  const p0 = pc.hp; plain.dealDamage(pc, { base: 10, cat: 'combo', dir: 1 });
+  assert.equal(hp0 - c.hp, p0 - pc.hp);
+});

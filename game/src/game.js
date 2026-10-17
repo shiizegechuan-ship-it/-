@@ -52,6 +52,10 @@ const GOLD = { summoner: 9, mite: 0, lancer: 7, trapper: 7, clocker: 7, vane: 6,
 // 1 つの階の戦闘部屋（戦闘・試練）で得られる金貨・経験値の総量（夜の深さ 0 のとき）。
 // 基準は改修前のめちゃ簡単の 3 つの階の平均（金貨 約 200・経験値 約 90）。どの階・どの難易度でも同じ
 export const FLOOR_REWARD = { gold: 200, exp: 90 };
+// 敵の大きさ（look：通常の敵の見た目、hit：通常の敵の当たり判定、big：最後の中ボスと刻守）
+export const ENEMY_SIZE = { look: 1.25, hit: 1.12, big: 1.5 };
+// 刻守との戦いの最短の目安（秒）。時の障壁で、これより早く倒れにくくする
+export const BOSS_MIN_TIME = 20;
 // 強化の候補の枚数（通常の選択）と、そこに「仲間を呼ぶ」が混ざる確率
 export const OFFER_N = 6, CALL_IN_OFFER = 0.08;
 export function tapGoal(map, p, wx, wy, easy) {
@@ -313,6 +317,23 @@ export class Game {
     const h = e.boss ? Math.min(1.25, 1 + 0.03 * s) : Math.min(1.4, 1 + 0.05 * s);
     return h * (e.counter === 'dodge' && !e.boss ? 1.15 : 1) * (this.run.diff ? this.run.diff.speed : 1);
   }
+  // 刻守の時の障壁：この戦いでのあなたの平均ダメージ（毎秒）が「最大HP ÷ BOSS_MIN_TIME」を超えるほど、受けるダメージを減らす。
+  // さらに、戦った時間に応じた上限を超えた分は 1 割しか通らない。強い構成でも、戦いが最低でも約 20 秒は続く（弱い構成には何もしない）
+  bossBarrier(e, dmg) {
+    const B = (e.barrier ||= { t: 0, dealt: 0 });
+    B.dealt = e.maxHp - e.hp; // 実際に削れた量（耐性や外殻で防がれた分は数えない）
+    const rate = e.maxHp / BOSS_MIN_TIME, avg = B.dealt / Math.max(1, B.t);
+    let d = dmg;
+    if (B.t > 2 && avg > rate * 1.5) d *= clamp(rate * 1.5 / avg, 0.1, 1); // 目安の 1.5 倍までは減らさない（上限で 20 秒前後にそろう）
+    const avail = Math.max(0, rate * (B.t + 1.5) - B.dealt);
+    if (d > avail) {
+      // 上限を超えた分：1 割、ただし 1 回の攻撃で「毎秒の目安」の 1/4 まで（桁違いの一撃でも削りすぎない）
+      d = avail + Math.min((d - avail) * 0.1, rate * 0.25);
+      e.barrierFx = 0.25;
+      if (!B.msgT || this.run.clock - B.msgT > 1.2) { B.msgT = this.run.clock; this.fx.text(cx(e), e.y - 30, '時の障壁', '#9fe3ff', 12); }
+    }
+    return d;
+  }
   // 中ボス・刻守は、術で一度に削れる量に上限がある（1 秒あたり最大HPの数%。超えた分はごくわずかしか通らない）
   spellGuard(e, dmg) {
     const now = this.run.clock;
@@ -522,12 +543,27 @@ export class Game {
     // 範囲攻撃が多い相手には、範囲攻撃を躱す動きを覚える
     const st = this.run.diff ? this.run.diff.strategy : true;
     if (st === 'always' || (st && (this.run.aoeTendency || this.player.boons.filter((b) => PASSIVE_IDS.includes(b.id)).reduce((a, b) => a + passiveWeight(b), 0) >= 6))) e.aoeDodge = true;
+    // 大きさ：通常の敵は見た目 1.25 倍（当たり判定は少し大きく 1.12 倍）。最後の中ボス（振り子の番人）と刻守は 1.5 倍
+    if (!e.sized) {
+      e.sized = true;
+      const big = e.boss || e.kind === 'warden', normal = !e.elite && !e.boss;
+      if (big || normal) {
+        const k = big ? ENEMY_SIZE.big : ENEMY_SIZE.hit, foot = e.y + e.h, mid = e.x + e.w / 2;
+        e.w = Math.round(e.w * k); e.h = Math.round(e.h * k); e.x = mid - e.w / 2; e.y = foot - e.h;
+        e.drawScale = big ? ENEMY_SIZE.big : ENEMY_SIZE.look;
+      }
+    }
     this.room.enemies.push(e);
     const tellKey = { summoner: 'tell_summoner', mite: 'tell_summoner', lancer: 'tell_lancer', trapper: 'tell_trapper', clocker: 'tell_clocker', vane: 'tell_vane', squire: 'tell_squire', mallet: 'tell_mallet', beamer: 'tell_beamer', chain: 'tell_chain', rat: 'tell_rat', hopper: 'tell_hopper', warden: 'tell_warden', soldier: 'tell_soldier', bat: 'tell_bat', turret: 'tell_turret', knight: 'tell_knight', boss: 'tell_boss', roller: 'tell_roller', archer: 'tell_archer', phantom: 'tell_phantom', bell: 'tell_bell' }[e.kind];
     if (tellKey) e.tellKey = tellKey;
     return e;
   }
-  spawnProjectile(p) { p.dmg = Math.round(p.dmg * this.enemyDmgMul() * ((this.updatingEnemy && this.updatingEnemy.dmgMul) || 1) * this.rustMul(this.updatingEnemy)); this.room.projectiles.push(p); }
+  spawnProjectile(p) {
+    p.dmg = Math.round(p.dmg * this.enemyDmgMul() * ((this.updatingEnemy && this.updatingEnemy.dmgMul) || 1) * this.rustMul(this.updatingEnemy));
+    this.room.projectiles.push(p);
+    // 撃ち出しの閃光：発射口に小さな光の輪と火花
+    if (this.updatingEnemy) { const px = p.x + (p.w || 0) / 2, py = p.y + (p.h || 0) / 2; this.fx.ring(px, py, '#ffb070', 12, 0.18); this.fx.sparks(px, py, '#ffd0a0', 4, 200, sign(p.vx || 0)); }
+  }
   marker(c) { return this.map.markers.find((m) => m.c === c); }
   // パリィの瞬間：一瞬だけ全てがゆっくりになり、金と白の光が弾ける（1 回のパリィ斬りで 1 度だけ）
   parryMoment(e) {
@@ -751,6 +787,13 @@ export class Game {
     for (const e of room.enemies) {
       const edt = (this.timeStopT > 0 && !e.boss ? dt * 0.3 : dt) * this.enemyHaste(e);
       if (e.alive) { this.updatingEnemy = e; e.update(this, edt); this.updatingEnemy = null; }
+      if (e.boss && e.alive && !e.defeated && !e.invuln) { (e.barrier ||= { t: 0, dealt: 0 }).t += dt; if (e.barrierFx > 0) e.barrierFx -= dt; } // 時の障壁の時計
+      // 敵の攻撃が出た瞬間の斬光（1 振りにつき 1 度）
+      if (e.alive && e.attacks && e.attacks.length && e.fxSwing !== e.swing) {
+        e.fxSwing = e.swing;
+        const big = e.boss || e.elite, a = e.attacks[0];
+        this.fx.enemyStrike(a, sign(cx(a) - cx(e)) || e.face, e.boss ? '#ff4a6a' : big ? '#ffb040' : '#ff7a4a', big);
+      }
     }
     this.resolveEnemyAttacks();
     for (const pr of room.projectiles) { updateHoming(pr, this); pr.update(this, this.timeStopT > 0 && !pr.homing ? dt * 0.3 : dt); }
@@ -899,6 +942,7 @@ export class Game {
     if (info.proj && (e.boss || e.elite)) dmg *= e.boss ? 0.5 : 0.7;
     if (e.brittleT > 0) dmg *= 1 + e.brittleK; // 脆くする
     if (info.spell && (e.boss || e.elite)) dmg = this.spellGuard(e, dmg);
+    if (e.boss && !e.defeated) dmg = this.bossBarrier(e, dmg);
     dmg = Math.round(dmg);
     // 刻守は戦いの中でも見切る：HP が 7 割を切った時点で、いちばん受けている種類のダメージを半減する
     if (e.boss && !e.defeated && (!this.run.diff || this.run.diff.strategy)) {
@@ -2195,8 +2239,9 @@ export class Game {
   beginFinalForm(b) {
     b.defeated = false; b.finalForm = true;
     const ox = cx(b), oy = b.y + b.h;
-    b.w = 48; b.h = 82; b.x = ox - b.w / 2; b.y = oy - b.h;
+    b.w = 64; b.h = 110; b.x = ox - b.w / 2; b.y = oy - b.h; // 白き刻守（見た目はさらに 1.5 倍で描く）
     b.maxHp = Math.round(b.maxHp * 1.1); b.hp = b.maxHp;
+    b.barrier = null; // HP が戻ったので、時の障壁も数え直す
     b.poiseDmg = 0; b.cool = 1.2; b.ownVx = 0; b.vx = 0;
     b.setState('transform');
     this.room.projectiles = [];

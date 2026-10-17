@@ -635,6 +635,7 @@ test('剣の道：剣気の斬撃は連撃扱いで刻守の「術の守り」�
   const bi = g.run.plan.floors[2].findIndex((r) => r.type === 'boss');
   g.enterRoom(2, bi); g.modal = null;
   const b = g.room.boss; b.setState('idle');
+  b.barrier = { t: 1e9, dealt: 0 }; // 時の障壁は外して確かめる
   const hp0 = b.hp;
   for (let i = 0; i < 8; i++) g.dealDamage(b, { base: 30, cat: 'combo', knock: 0, dir: 1, proj: true });
   assert.ok(hp0 - b.hp > b.maxHp * 0.12, `melee projectiles are not capped by the spell guard (${hp0 - b.hp})`);
@@ -699,6 +700,7 @@ test('刻守は戦いの中で、いちばん受けているダメージを半�
   const bi = g.run.plan.floors[2].findIndex((r) => r.type === 'boss');
   g.enterRoom(2, bi); g.modal = null;
   const b = g.room.boss; b.setState('idle');
+  b.barrier = { t: 1e9, dealt: 0 }; // 時の障壁は外して確かめる
   for (let i = 0; i < 40 && !b.adapted; i++) g.dealDamage(b, { base: 12, cat: 'combo', knock: 0, dir: 1 });
   assert.ok(b.adapted);
   assert.equal(b.resist.combo <= 0.5, true);
@@ -1256,7 +1258,12 @@ test('仲間技「夜明けの協奏」：3 匹そろって全員が最後の姿
   assert.ok(g.union, 'union fires');
   assert.equal(p.gauge, 0, 'uses the whole gauge');
   assert.ok(g.room.spells.some((s) => s.kind === 'warpslash'), 'together with kokusen');
-  const d = new Driver(g); d.until(() => !g.union, 60 * 8);
+  const d = new Driver(g);
+  // 仲間技の間、お供は画面の上の方へ散らばる（左・中央・右）
+  d.frame(40);
+  const xs = [g.comp, ...g.allies].map((c) => c.x).sort((a, b) => a - b);
+  assert.ok(xs[1] - xs[0] > 100 && xs[2] - xs[1] > 100, `spread ${xs.map(Math.round)}`);
+  d.until(() => !g.union, 60 * 8);
   assert.equal(g.union, null, 'finishes');
   const dealt = g.room.enemies.map((e, i) => hp0[i] - e.hp);
   assert.ok(dealt.every((x) => x > 200), `every enemy takes a big hit ${dealt.map(Math.round)}`);
@@ -1611,7 +1618,7 @@ test('召喚師：予兆（紫の陣）のあと、小さくて弱いちび歯�
   d.until(() => g.room.enemies.some((o) => o.kind === 'mite'), 120);
   const mites = () => g.room.enemies.filter((o) => o.alive && o.kind === 'mite');
   assert.ok(mites().length >= SUMMON.per, `summoned ${mites().length}`);
-  for (const m of mites()) { assert.ok(m.w <= 12 && m.h <= 10, 'small'); assert.ok(m.maxHp < 30, 'weak'); assert.ok(m.minion && m.summoner === e); }
+  for (const m of mites()) { assert.ok(m.w <= 14 && m.h <= 12, 'small (incl. the 1.12x hitbox)'); assert.ok(m.maxHp < 30, 'weak'); assert.ok(m.minion && m.summoner === e); }
   // 何度も呼ぶが、上限を超えない
   for (let i = 0; i < 4; i++) { e.cool = 0; d.frame(100); }
   assert.ok(mites().length <= SUMMON.cap, `cap ${mites().length}`);

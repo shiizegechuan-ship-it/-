@@ -114,6 +114,14 @@ export function updateCompanion(game, dt, c = game.comp, slot = 0) {
     c.x += (tx - c.x) * k; c.y += (ty - c.y) * k;
     if (c.dash.t >= c.dash.hitAt && !c.dash.done) { c.dash.done = true; c.dash.hits.forEach((fn) => fn()); }
     if (c.dash.t > c.dash.life) c.dash = null;
+  } else if (game.union && game.cam) {
+    // 仲間技の間は、画面の上の方へ散らばって並ぶ（左・中央・右）
+    const n = allComps(game).length, k0 = n > 1 ? slot / (n - 1) : 0.5;
+    tx = game.cam.x + 640 * (0.18 + 0.64 * k0) + Math.cos(c.t * 3 + slot) * 6;
+    ty = game.cam.y + 70 + (slot % 2 ? -18 : 12) + Math.sin(c.t * 4 + slot) * 5;
+    const k = Math.min(1, dt * 8);
+    c.x += (tx - c.x) * k; c.y += (ty - c.y) * k;
+    if (Math.abs(tx - c.x) > 2) c.face = sign(tx - c.x);
   } else {
     const a = c.t * 1.6 + slot * Math.PI * 2 / 3; // 仲間どうしは輪の上でずらす
     const side = slot === 2 ? 1 : -1;

@@ -11,6 +11,7 @@ function bossRoom(seed = 3, setup = () => {}) {
   g.modal = null;
   const d = new Driver(g);
   g.player.hp = g.player.maxHp = 99999;
+  g.room.boss.barrier = { t: 1e9, dealt: 0 }; // 時の障壁は別のテストで確かめる（ここでは長く戦った後と同じにして外す）
   return { g, d, b: g.room.boss };
 }
 

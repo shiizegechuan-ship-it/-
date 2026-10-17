@@ -60,9 +60,98 @@ export function gearFrame(r, teeth, color, hole, step, steps = 8) {
   return c;
 }
 
+// 内装の型（各階 3 通り：0 はもとの型）。部屋ごとに替わる
+function interior(fi, v) {
+  const c = makeCanvas(LAYER_W, LAYER_H), m = c.getContext('2d');
+  if (fi === 0 && v === 1) {
+    // 時計店の並ぶ通り：店先の庇と看板、軒先の掛け時計、旗の連なり
+    for (let x = 0; x < LAYER_W; x += 96) {
+      rect(m, x + 4, 70, 84, 200, '#1c1120'); rect(m, x + 4, 70, 84, 2, '#2e1c30');
+      for (let i = 0; i < 84; i++) rect(m, x + 4 + i, 62 + (i % 12 < 6 ? 0 : 2), 1, 8, i % 24 < 12 ? '#4a1a26' : '#2e1220');
+      rect(m, x + 30, 82, 32, 10, '#2a1828'); rect(m, x + 31, 83, 30, 1, '#6a4a3a');
+      circle(m, x + 46, 110, 8, '#c9a052'); line(m, x + 46, 110, x + 46, 105, '#c9a052'); line(m, x + 46, 110, x + 50, 110, '#c9a052');
+      rect(m, x + 14, 120, 20, 26, '#2a1830'); rect(m, x + 58, 120, 20, 26, '#2a1830');
+      rect(m, x + 16, 122, 16, 22, '#6a3a2a'); rect(m, x + 60, 122, 16, 22, '#6a3a2a');
+    }
+    for (let x = 0; x < LAYER_W; x++) { const y = 40 + Math.round(Math.sin(x / 96 * Math.PI) ** 2 * 10); pset(m, x, y, '#1a0f1e'); if (x % 8 < 5 && x % 8 > 0) rect(m, x, y + 1, 1, 6 - Math.abs(x % 8 - 3), (x >> 3) % 3 === 0 ? '#c45a48' : (x >> 3) % 3 === 1 ? '#c9a052' : '#5a7a9a'); }
+  } else if (fi === 0 && v === 2) {
+    // 広場：噴水と、柱から柱へ渡した豆電球、天幕の屋台
+    for (let x = 0; x < LAYER_W; x += 160) {
+      rect(m, x + 60, 150, 50, 8, '#1a0f1e'); rect(m, x + 70, 126, 30, 24, '#1a0f1e'); rect(m, x + 80, 100, 10, 26, '#1a0f1e'); disc(m, x + 85, 98, 6, '#1a0f1e');
+      for (let i = 0; i < 6; i++) pset(m, x + 74 + i * 4, 120 - (i % 2) * 3, '#5aa9e6');
+      rect(m, x + 2, 50, 4, 220, '#1a0f1e');
+      for (let i = 0; i < 154; i++) { const y = 54 + Math.round(Math.sin(i / 154 * Math.PI) * 16); pset(m, x + 6 + i, y, '#1a0f1e'); if (i % 10 === 5) rect(m, x + 6 + i, y + 1, 2, 2, '#ffd27a'); }
+      for (let i = 0; i < 40; i++) rect(m, x + 112 + i, 120 + Math.abs(i - 20) / 2, 1, 30 - Math.abs(i - 20) / 2, i % 10 < 5 ? '#3e1726' : '#5a1f2c');
+    }
+  } else if (fi === 1 && v === 1) {
+    // ボイラー室：大きな釜と計器、蒸気の管
+    for (let x = 10; x < LAYER_W; x += 120) {
+      rect(m, x, 90, 60, 180, '#14262a'); disc(m, x + 30, 90, 30, '#14262a'); rect(m, x + 2, 92, 1, 170, '#24403f');
+      for (let y = 110; y < 260; y += 24) rect(m, x, y, 60, 2, '#0e1c1e');
+      circle(m, x + 30, 130, 9, '#3c6058'); line(m, x + 30, 130, x + 35, 125, '#c94a3a'); disc(m, x + 30, 130, 1, '#c9a052');
+      rect(m, x + 60, 150, 50, 6, '#1d3632'); rect(m, x + 60, 151, 50, 1, '#2f504a'); rect(m, x + 104, 0, 6, 156, '#1d3632');
+    }
+  } else if (fi === 1 && v === 2) {
+    // 振り子の間：天井から下がる大きな振り子と、縦の昇降路のはしご
+    for (let x = 40; x < LAYER_W; x += 140) {
+      line(m, x, 0, x + 18, 150, '#1b3d39', 2); disc(m, x + 19, 158, 12, '#163633'); circle(m, x + 19, 158, 12, '#2f504a'); disc(m, x + 19, 158, 4, '#5a3a24');
+      rect(m, x + 70, 0, 2, 270, '#1d3632'); rect(m, x + 86, 0, 2, 270, '#1d3632');
+      for (let y = 4; y < 270; y += 10) rect(m, x + 70, y, 18, 1, '#2f504a');
+    }
+  } else if (fi === 2 && v === 1) {
+    // 鐘の並ぶ回廊：梁から小さな鐘がいくつも下がる
+    rect(m, 0, 24, LAYER_W, 6, '#121830'); rect(m, 0, 24, LAYER_W, 1, '#2a3358');
+    for (let x = 20; x < LAYER_W; x += 60) {
+      const len = 20 + (x % 120 ? 18 : 0); line(m, x, 30, x, 30 + len, '#2a3358');
+      for (let y = 0; y < 18; y++) { const w = Math.round(4 + Math.pow(y / 18, 1.5) * 9); rect(m, x - w, 30 + len + y, w * 2, 1, '#1a2244'); }
+      rect(m, x - 13, 30 + len + 18, 26, 2, '#38457a');
+    }
+    for (let x = 0; x < LAYER_W; x += 120) rect(m, x, 30, 10, 240, '#121830');
+  } else if (fi === 2 && v === 2) {
+    // ステンドグラスの間：尖った窓に色ガラス
+    for (let x = 30; x < LAYER_W; x += 110) {
+      rect(m, x - 6, 30, 64, 240, '#121830');
+      for (let y = 0; y < 120; y++) {
+        const top = y < 26 ? Math.round(26 - Math.sqrt(26 * 26 - (26 - y) * (26 - y))) : 0;
+        for (let i = top; i < 52 - top; i++) if ((i + y) % 13 && y % 15) pset(m, x + i, 50 + y, ['#221a3a', '#33182a', '#18283a', '#2c2c18'][((i / 13) | 0) + ((y / 15) | 0) & 3]);
+      }
+      rect(m, x + 25, 50, 2, 120, '#121830');
+    }
+  }
+  return c;
+}
+// 夜が進むほど荒れる（2 周目は少し、3 周目からかなり）：壁に穴が開き、梁が折れて垂れ、瓦礫が積もる
+function ruinLayer(src, ruin, seed) {
+  const c = makeCanvas(LAYER_W, LAYER_H), m = c.getContext('2d');
+  m.drawImage(src, 0, 0);
+  const n = ruin === 1 ? 5 : 14;
+  m.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < n; i++) { const x = hash2(i, 1, seed) * LAYER_W, y = 40 + hash2(i, 2, seed) * 180, r = 6 + hash2(i, 3, seed) * (ruin === 1 ? 10 : 22); disc(m, x, y, r, '#000'); disc(m, x + r * 0.8, y + r * 0.4, r * 0.6, '#000'); }
+  m.globalCompositeOperation = 'source-over';
+  const dark = '#0a0710';
+  // 折れた梁：天井から短く太い角材が斜めに垂れる（細い長い線は雨に見えるので描かない）
+  for (let i = 0; i < Math.ceil(n / 2); i++) {
+    const x = hash2(i, 4, seed) * LAYER_W, y = 18 + hash2(i, 5, seed) * 30, len = 10 + hash2(i, 6, seed) * 16, d = hash2(i, 9, seed) < 0.5 ? -1 : 1;
+    for (let k = 0; k < len; k++) rect(m, Math.round(x + d * k * 0.7), Math.round(y + k), 5, 2, k % 5 ? dark : '#221a28');
+  }
+  if (ruin >= 2) for (let x = 0; x < LAYER_W; x += 3) { const h = Math.round(4 + hash2(x, 7, seed) * 10 + Math.sin(x / 30) * 4); rect(m, x, LAYER_H - h, 3, h, hash2(x, 8, seed) < 0.5 ? '#141018' : '#1e1822'); } // 瓦礫
+  return c;
+}
+
 const cache = new Map();
-export function backgroundFor(fi) {
-  if (cache.has(fi)) return cache.get(fi);
+// variant：内装の型（0〜2）。ruin：荒れ具合（0 なし・1 少し・2 かなり）
+export function backgroundFor(fi, variant = 0, ruin = 0) {
+  const key = `${fi}:${variant}:${ruin}`;
+  if (cache.has(key)) return cache.get(key);
+  if (variant || ruin) {
+    const base = backgroundFor(fi), layers = base.layers.slice(), last = layers.length - 1;
+    let mid = variant ? interior(fi, variant) : layers[last].c;
+    if (ruin) mid = ruinLayer(mid, ruin, 31 + fi * 7 + variant);
+    layers[last] = { ...layers[last], c: mid };
+    const out = { ...base, layers, lanterns: variant ? null : base.lanterns, chains: variant === 2 && fi === 1 ? null : base.chains };
+    cache.set(key, out);
+    return out;
+  }
   const mk = () => { const c = makeCanvas(LAYER_W, LAYER_H); return [c, c.getContext('2d')]; };
   let bg;
   if (fi === 0) {
@@ -153,13 +242,13 @@ export function backgroundFor(fi) {
       tiles: makeTiles('night'),
     };
   }
-  cache.set(fi, bg);
+  cache.set(key, bg);
   return bg;
 }
 
 // 背景を描く（camX, camY はドット単位の視点）
-export function drawBackground(ctx, fi, camX, camY, t, maxLayers = 99) {
-  const bg = backgroundFor(fi);
+export function drawBackground(ctx, fi, camX, camY, t, maxLayers = 99, variant = 0, ruin = 0) {
+  const bg = backgroundFor(fi, variant, ruin);
   for (const L of bg.layers.slice(0, maxLayers)) {
     const ox = -Math.round(camX * L.f) % LAYER_W, oy = -Math.round(camY * L.f * 0.6);
     for (let x = ox - LAYER_W; x < PW; x += LAYER_W) if (x + LAYER_W > 0) ctx.drawImage(L.c, x, oy);
