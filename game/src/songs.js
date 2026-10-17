@@ -163,8 +163,9 @@ export function buildSong(id) {
   const chordAt = (step) => chords[Math.floor(step / 16) % bars][step % 16 < 8 ? 0 : 1];
   const tracks = [];
   const lead = song.lead.flatMap(parseBar);
-  tracks.push({ part: 'lead', wave: 'pulse', duty: song.duty || 0.5, notes: lead });
-  if (song.counter) tracks.push({ part: 'counter', wave: 'pulse', duty: 0.25, notes: song.counter.flatMap(parseBar) });
+  // 音色：主旋律は「リード」、副旋律は「うつろ」（どちらも 4 ビットの波形表）。和音は矩形波（声ごとにデューティ比を変える）
+  tracks.push({ part: 'lead', wave: 'reed', notes: lead });
+  if (song.counter) tracks.push({ part: 'counter', wave: 'hollow', notes: song.counter.flatMap(parseBar) });
   const st = CHORD_STYLES[song.style];
   // 三角波の根音（o は 1 オクターブ上）
   const bass = [];
@@ -176,7 +177,7 @@ export function buildSong(id) {
   }
   tracks.push({ part: 'bass', wave: 'triangle', notes: bass });
   // 矩形波の和音（3 度と、5 度か 7 度。7 の和音では 3 度と 7 度で響きの色を出す）。前の音に近い高さを選ぶ
-  st.chord.forEach((pat) => {
+  st.chord.forEach((pat, vi) => {
     const notes = [];
     let prev = 64;
     for (let bar = 0; bar < bars; bar++) for (const [s, len, deg] of pat) {
@@ -185,7 +186,7 @@ export function buildSong(id) {
       const m = nearest(pc, prev, RANGE.chord); prev = m;
       notes.push({ s: bar * 16 + s, len, m });
     }
-    tracks.push({ part: 'chord', wave: 'pulse', duty: 0.25, notes });
+    tracks.push({ part: 'chord', wave: 'pulse', duty: [0.375, 0.25, 0.375][vi], notes });
   });
   // ドラム
   const drum = [];

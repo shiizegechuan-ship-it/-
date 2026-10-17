@@ -82,6 +82,7 @@ function fakeAudio() {
     createBufferSource: () => { const o = { connect() {}, start(t) { o.t0 = t; }, stop(t) { o.t1 = t; } }; nodes.push(o); return o; },
     createBuffer: (ch, len) => ({ getChannelData: () => new Float32Array(len) }),
     createPeriodicWave: () => ({}),
+    createBiquadFilter: () => ({ type: '', frequency: param(), Q: param(), connect() {} }),
   };
   return { ctx, nodes };
 }
@@ -135,4 +136,29 @@ test('BGM の主旋律・副旋律は、同じ高さの音を続けて鳴らさ�
   for (const id of ids) for (const t of melodic(buildSong(id))) for (let i = 1; i < t.notes.length; i++) {
     assert.notEqual(t.notes[i].m, t.notes[i - 1].m, `${id} ${t.part} bar ${Math.floor(t.notes[i].s / 16) + 1}`);
   }
+});
+
+test('BGM の音色とハイカット：主旋律はリード、副旋律はうつろ（4 ビットの波形表）、和音は 25%・37.5% の矩形波。BGM 全体にローパスを通す', async () => {
+  const { HICUT } = await import('../src/music.js');
+  const s = buildSong('boss');
+  assert.equal(s.tracks.find((t) => t.part === 'lead').wave, 'reed');
+  assert.equal(s.tracks.find((t) => t.part === 'counter').wave, 'hollow');
+  assert.deepEqual(s.tracks.filter((t) => t.part === 'chord').map((t) => t.duty), [0.375, 0.25, 0.375]);
+  const filters = [], waves = [];
+  const param = () => ({ value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {} });
+  const ctx = {
+    currentTime: 0, sampleRate: 8000, state: 'running',
+    createGain: () => ({ gain: param(), connect() {}, disconnect() {} }),
+    createOscillator: () => ({ frequency: param(), setPeriodicWave(w) { waves.push(w); }, connect() {}, start() {}, stop() {} }),
+    createBufferSource: () => ({ connect() {}, start() {}, stop() {} }),
+    createBuffer: (ch, len) => ({ getChannelData: () => new Float32Array(len) }),
+    createPeriodicWave: (re, im) => ({ re, im }),
+    createBiquadFilter: () => { const f = { type: '', frequency: param(), Q: param(), connect(to) { f.to = to; } }; filters.push(f); return f; },
+  };
+  const master = { connect() {} };
+  const m = new Music({ ctx, master });
+  for (let i = 0; i < 60; i++) { ctx.currentTime = i / 60; m.update('boss'); }
+  assert.ok(filters.some((f) => f.type === 'lowpass' && f.frequency.value === HICUT && f.to === master), 'hi-cut in front of the output');
+  assert.ok(HICUT <= 6000);
+  for (const k of ['reed', 'hollow', 'triangle', 0.25, 0.375]) assert.ok(waves.includes(m.waves[k]), `uses ${k}`);
 });

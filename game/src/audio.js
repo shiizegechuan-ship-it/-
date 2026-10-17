@@ -14,7 +14,11 @@ export class Sfx {
     this.ctx = new AC();
     this.master = this.ctx.createGain();
     this.master.gain.value = this.vol;
-    this.master.connect(this.ctx.destination);
+    // ハイカット：効果音も BGM も、耳に痛い高すぎる音を落としてから出す
+    this.hicut = this.ctx.createBiquadFilter();
+    this.hicut.type = 'lowpass'; this.hicut.frequency.value = 7000; this.hicut.Q.value = 0.5;
+    this.master.connect(this.hicut);
+    this.hicut.connect(this.ctx.destination);
     // ノイズ素材
     const len = this.ctx.sampleRate * 0.5;
     this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
