@@ -1321,6 +1321,13 @@ function drawBoss(b, game, e, bx, by, t, flash, slowGlow) {
 }
 
 function hpBar(b, e) {
+  // 弱体の印：錆び（茶の点）・脆さ（紫のひび）・鎖（灰の輪）
+  if (e.hp > 0 && (e.rustT > 0 || e.brittleT > 0 || e.snareT > 0)) {
+    let mx = Math.round(cx(e) / 2) - 6; const my = Math.round(e.y / 2) - 11;
+    if (e.rustT > 0) { rect(b, mx, my, 3, 3, '#a8652a'); rect(b, mx + 1, my + 1, 1, 1, '#e0a050'); mx += 5; }
+    if (e.brittleT > 0) { rect(b, mx, my, 1, 3, '#c07cff'); rect(b, mx + 1, my + 1, 1, 1, '#c07cff'); rect(b, mx + 2, my, 1, 2, '#c07cff'); mx += 5; }
+    if (e.snareT > 0) { rect(b, mx, my, 3, 1, '#b8b8c0'); rect(b, mx, my + 2, 3, 1, '#b8b8c0'); rect(b, mx, my, 1, 3, '#b8b8c0'); rect(b, mx + 2, my, 1, 3, '#b8b8c0'); }
+  }
   if (e.hp >= e.maxHp || e.boss || e.hp <= 0) return;
   const w = e.elite ? 24 : 14, x = Math.round(cx(e) / 2 - w / 2), y = Math.round(e.y / 2) - 6;
   rect(b, x - 1, y - 1, w + 2, 4, '#0a0610');

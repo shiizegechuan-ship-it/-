@@ -458,3 +458,17 @@ test('タップ移動：普通以上はタップした x の列のいちばん�
   d.frame(60); d.until(() => p.onGround, 120);
   assert.ok(Math.abs(cx(p) - 30 * TILE - TILE / 2) < 20 && Math.abs(p.y + p.h - 15 * TILE) < 2, 'landed below the tap');
 });
+
+test('1 つの階で得られる金貨・経験値の総量は、どの階・どの難易度でも同じ（改修前のめちゃ簡単が基準）', async () => {
+  const { FLOOR_REWARD } = await import('../src/game.js');
+  for (const diff of ['veryeasy', 'normal', 'nightmare']) {
+    const g = newGame(11); g.meta.difficulty = diff; g.startLoop(); g.modal = null;
+    const lv = 1 + 0.25 * g.run.scale.level;
+    g.run.plan.floors.forEach((fl, fi) => {
+      let gold = 0, exp = 0;
+      fl.forEach((r, ri) => { if (r.type !== 'combat' && r.type !== 'trial') return; g.enterRoom(fi, ri); g.modal = null; gold += g.room.budget.gold * (g.run.diff.goldMul || 1); exp += g.room.budget.exp; });
+      assert.ok(Math.abs(gold - FLOOR_REWARD.gold * lv) < 1e-6, `${diff} floor ${fi} gold ${gold}`);
+      assert.ok(Math.abs(exp - FLOOR_REWARD.exp * lv) < 1e-6, `${diff} floor ${fi} exp ${exp}`);
+    });
+  }
+});

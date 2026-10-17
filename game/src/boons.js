@@ -10,6 +10,7 @@ export const SCHOOLS = {
   legend: { name: '伝説', color: '#ff7ae0' },
   bond: { name: '絆', color: '#7fe0b0' },
   ward: { name: '守護', color: '#9fe3ff' },
+  hex: { name: '弱体', color: '#c9a35a' },
 };
 const pc = (n) => `${Math.round(n)}%`;
 
@@ -114,6 +115,12 @@ export const BOONS = {
   thornmail: { school: 'ward', max: 3, name: '棘の外套', desc: (t) => `[守護] 被弾したとき、受けたダメージの ${[0, 100, 150, 200][t]}% を攻撃してきた敵へ返す` },
   steadfast: { school: 'ward', max: 3, name: '不動', desc: (t) => `[守護] 被弾しても吹き飛ばされにくく、ひるみが短い。被弾後の無敵 +${[0, 0.3, 0.5, 0.7][t]} 秒` },
   laststand: { school: 'ward', max: 3, name: '踏みとどまる', desc: (t) => `[守護] 部屋ごとに 1 度、倒れるほどの一撃を HP1 で耐える${t >= 2 ? '。耐えたあと 2 秒無敵' : ''}${t >= 3 ? '、HP 20% 回復' : ''}` },
+  stance: { school: 'ward', max: 3, name: '不動の構え', desc: (t) => `[守護] 地上で立ち止まっている間、受けるダメージ -${[0, 25, 35, 45][t]}%` },
+  recover: { school: 'ward', max: 3, name: '再生の刻', desc: (t) => `[守護] 部屋を制圧するたび、HP を最大の ${[0, 8, 12, 16][t]}% 回復` },
+  // 弱体：直接攻撃で敵を弱らせる（最大 Lv3。中ボス・刻守には効きが半分）
+  rust: { school: 'hex', max: 3, name: '錆びつかせ', desc: (t) => `[弱体] 直接攻撃が当たった敵は 4 秒間、与えるダメージ -${[0, 20, 30, 40][t]}%` },
+  brittle: { school: 'hex', max: 3, name: '脆くする', desc: (t) => `[弱体] 直接攻撃が当たった敵は 4 秒間、受けるダメージ +${[0, 12, 20, 28][t]}%` },
+  snare: { school: 'hex', max: 3, name: '足止めの鎖', desc: (t) => `[弱体] 重撃が当たった敵を ${[0, 1, 1.5, 2][t]} 秒、鎖で縛ってほとんど動けなくする` },
   // 伝説：行商人の店にごくまれに並ぶ。どれも戦い方が変わるほど強い
   chronarch: { school: 'legend', name: '刻の支配者', desc: () => '10 秒ごとに、ゲージを使わず時歪・刻閃が自動で発動する（敵のいる部屋で）' },
   godspeed: { school: 'legend', name: '神速', desc: () => '攻撃の速さ ×1.4、移動の速さ ×1.25、回避のクールタイムなし' },
@@ -191,6 +198,7 @@ export const RESONANCE = {
   arts: '命中時の秒針ゲージ +50%',
   bond: 'お供の与ダメージ +20%',
   ward: '受けるダメージ -5%',
+  hex: '弱体の効き目が 1.5 倍長く続く',
 };
 // 系統をまたぐ相乗効果（説明用。効果自体は個別の強化の組み合わせで自然に起きるものも含む）
 export const CROSS = [
@@ -201,7 +209,7 @@ export const CROSS = [
 ];
 
 export function schoolCounts(boons) {
-  const c = { haste: 0, stasis: 0, echo: 0, risk: 0, power: 0, arts: 0, rare: 0, legend: 0, bond: 0, ward: 0 };
+  const c = { haste: 0, stasis: 0, echo: 0, risk: 0, power: 0, arts: 0, rare: 0, legend: 0, bond: 0, ward: 0, hex: 0 };
   for (const b of boons) c[BOONS[b.id].school]++;
   return c;
 }
@@ -249,6 +257,8 @@ export function computeStats(boons) {
     comboPer: (0.01 * (1 + t('comboheat')) + (t('thousand') ? 0.01 * (2 + t('thousand')) : 0)) * (t('eternal') ? 2 : 1),
     // 稀少
     phoenix: !!t('phoenix'), compDmg: (1 + 0.3 * t('kizuna')) * (counts.bond >= 2 ? 1.2 : 1), compCd: 1 - 0.12 * t('hayagake'), compResonate: 0.08 * t('kyomei'), compShield: t('mamori') ? 12 - 2 * t('mamori') : 0, compHealKill: 3 * t('iyashi'), compRally: 0.08 * t('kobu'),
+    stance: [0, 0.25, 0.35, 0.45][t('stance')], recover: [0, 0.08, 0.12, 0.16][t('recover')],
+    rust: [0, 0.2, 0.3, 0.4][t('rust')], brittle: [0, 0.12, 0.2, 0.28][t('brittle')], snare: [0, 1, 1.5, 2][t('snare')], hexTime: counts.hex >= 2 ? 1.5 : 1,
     wardShield: [0, 12, 10, 8][t('timeshield')], dmgTaken: (1 - [0, 0.1, 0.18, 0.25][t('ironheart')]) * (counts.ward >= 2 ? 0.95 : 1), thorns: [0, 1, 1.5, 2][t('thornmail')], steadfast: [0, 0.3, 0.5, 0.7][t('steadfast')], lastStand: t('laststand'),
     passiveSpeed: (t('starheart') ? 1.7 : 1) * (t('towerblessing') ? 1.5 : 1), passiveMul: t('towerblessing') ? 2 : 1, goldMul: t('midas') ? 2 : 1, midas: !!t('midas'), chronarch: !!t('chronarch'), stareater: !!t('stareater'), stormstep: !!t('stormstep'), lifesteal: t('lifesteal') ? 0.03 : 0, eternal: !!t('eternal'), wave: !!t('wave'),
     heavyMul: (1 + 0.4 * t('heavyart')) * (t('judgement') ? 2.5 + 0.5 * (t('judgement') - 1) : 1),

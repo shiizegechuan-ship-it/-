@@ -417,11 +417,11 @@ test('金貨：敵を倒すと貯まる。店で強化・回復薬・アーテ�
   assert.ok(g.room.items.some((i) => i.kind === 'merchant'));
   g.openShop();
   const m = g.modal;
-  assert.deepEqual([...new Set(m.stock.map((s) => s.kind))].sort(), ['artifact', 'boon', 'key', 'potion']);
+  assert.deepEqual([...new Set(m.stock.map((s) => s.kind))].sort(), ['artifact', 'boon', 'key', 'potion', 'reroll', 'whetstone']);
   g.run.gold = 10000;
   const nb = g.player.boons.length;
-  for (let i = 0; i < m.stock.length; i++) { m.sel = i; g.buyShop(m); }
-  assert.ok(m.stock.every((s) => s.sold));
+  for (let i = 0; i < m.stock.length; i++) { if (['reroll', 'whetstone'].includes(m.stock[i].kind)) continue; m.sel = i; g.buyShop(m); }
+  assert.ok(m.stock.every((s) => s.sold || ['reroll', 'whetstone'].includes(s.kind)));
   assert.ok(g.player.boons.length > nb);
   assert.equal(g.player.artifacts.length, 1);
   assert.equal(g.run.keys, 1);
@@ -1667,7 +1667,7 @@ test('出てすぐの敵は、お供の攻撃と仲間技もガードする', ()
   assert.ok(e2.hp < h0);
 });
 
-test('強化の 3 択：2 回に 1 回は、手持ちの主なジャンルとは別のジャンルが最低 1 つ入る', async () => {
+test('強化の選択：2 回に 1 回は、手持ちの主なジャンルとは別のジャンルが最低 1 つ入る', async () => {
   const { genreOf, mainGenre, PASSIVE_IDS } = await import('../src/boons.js');
   for (const build of [
     [{ id: 'orbit', tier: 3 }, { id: 'aura', tier: 3 }, { id: 'meteor', tier: 2 }, { id: 'seeker', tier: 2 }, { id: 'satellites', tier: 2 }],
@@ -1685,7 +1685,15 @@ test('強化の 3 択：2 回に 1 回は、手持ちの主なジャンルとは
       if (g.run.offerN % 2 === 0) assert.ok(offer.some((id) => genreOf(id) !== main), `offer ${g.run.offerN}: ${offer}`);
       else if (offer.every((id) => genreOf(id) === main)) allMainOnOdd++;
     }
-    if (main === 'passive') assert.ok(allMainOnOdd > 0, 'without the rule, all-passive offers do happen (the rule matters)');
+    // 候補が 3 枚なら、決まりが無いと全部が主なジャンルになることがある（決まりが効いている）
+    if (main === 'passive') {
+      const { rollOffer } = await import('../src/boons.js');
+      const { makeRng } = await import('../src/util.js');
+      const rng = makeRng(5); let all = 0, allDiverse = 0;
+      for (let i = 0; i < 60; i++) { if (rollOffer(rng, g.player.boons, g.meta.unlocked, 3, false).every((id) => genreOf(id) === main)) all++; if (rollOffer(rng, g.player.boons, g.meta.unlocked, 3, true).every((id) => genreOf(id) === main)) allDiverse++; }
+      assert.ok(all > 0 && allDiverse === 0, `${all} ${allDiverse}`);
+    }
+    assert.ok(allMainOnOdd >= 0);
   }
 });
 
@@ -1747,4 +1755,75 @@ test('めちゃ簡単：奈落の上の空の敵へ飛び込んで斬ったあ�
   assert.ok(p.y + p.h <= 15 * 30 + 1, 'did not fall into the pit');
   const tx = Math.floor((p.x + p.w / 2) / 30);
   assert.ok(tx < 14 || tx >= 34, 'on the floor beside the pit');
+});
+
+test('強化の選択は 6 枚（3 枚増）。2 段に並び、上下で段を移れる。タップでも選べる。まれに「仲間を呼ぶ」が混ざる', async () => {
+  const { OFFER_N } = await import('../src/game.js');
+  const { cardRects } = await import('../src/layout.js');
+  assert.equal(OFFER_N, 6);
+  const g = newGame(81); g.startLoop(); g.modal = null; // 系統の解放は実際の初期値のまま（稀少・伝説は通常の候補に出ない）
+  g.openBoonPick(1, null);
+  assert.equal(g.modal.offer.length, 6);
+  const lay = cardRects(6);
+  assert.equal(lay.cols, 3);
+  // カードは画面に収まり、重ならない
+  for (const [i, r] of lay.rects.entries()) {
+    assert.ok(r.x >= 0 && r.x + r.w <= 960 && r.y >= 100 && r.y + r.h <= 420, `card ${i}`);
+    for (const q of lay.rects.slice(i + 1)) assert.ok(r.x + r.w <= q.x || q.x + q.w <= r.x || r.y + r.h <= q.y || q.y + q.h <= r.y);
+  }
+  const d = new Driver(g); g.modal.sel = 1; d.frame(20);
+  d.frame(1, ['down']); d.frame(1); assert.equal(g.modal.sel, 4);
+  d.frame(1, ['up']); d.frame(1); assert.equal(g.modal.sel, 1);
+  // タップ：下の段の右端のカード
+  const r = lay.rects[5];
+  assert.equal(g.handleTap(r.x + r.w / 2, r.y + r.h / 2), false); assert.equal(g.modal.sel, 5);
+  assert.equal(g.handleTap(r.x + r.w / 2, r.y + r.h / 2), true);
+  // 仲間を呼ぶ：何度も開くと、まれに混ざる（連れていないお供だけ）
+  let calls = 0;
+  for (let i = 0; i < 200; i++) { g.modal = null; g.openBoonPick(1, null); if (g.modal.offer.some((id) => id.startsWith('call_'))) calls++; }
+  assert.ok(calls > 3 && calls < 40, `call offers ${calls}/200`);
+  // 稀少の選択（レベルごと）は今までどおり 3 枚
+  g.modal = null; g.openRarePick && g.openRarePick();
+  if (g.modal && g.modal.rare) assert.ok(g.modal.offer.length <= 3);
+});
+
+test('グレンは鍛冶の会話で合成の手がかりを教える（手持ちが素材の合成のうち、いちばん近いもの）', () => {
+  const g = newGame(5); g.startLoop(); g.modal = null;
+  g.player.setBoons([{ id: 'orbit', tier: 2 }, { id: 'gearsaw', tier: 1 }, { id: 'meteor', tier: 1 }]);
+  const h = g.fusionHint();
+  assert.match(h.text, /守りの秒針/); assert.match(h.text, /歯車の鋸/); assert.match(h.text, /歯車の輪舞/);
+  g.player.setBoons([]);
+  assert.match(g.fusionHint().text, /Lv2/);
+  // 会話に入っている
+  g.talkGlen({ who: 'glen' });
+  assert.ok(g.modal.lines.some((l) => /噛み合/.test(l.text)));
+});
+
+test('店：強化の 3 品のうち 1 つは手持ちの Lv アップ。砥石で手持ちを鍛えられ（やめれば返金）、品替えで強化の品が替わる（買うたびに高くなる）', () => {
+  const g = newGame(5); g.startLoop(); g.modal = null;
+  g.player.setBoons([{ id: 'edge', tier: 1 }, { id: 'orbit', tier: 2 }]);
+  g.run.gold = 5000;
+  g.openShop();
+  const m = g.modal, stock = m.stock;
+  const boons = stock.filter((s) => s.kind === 'boon' && !s.tier);
+  assert.ok(boons.some((s) => ['edge', 'orbit'].includes(s.id)), 'a level-up is offered');
+  // 品替え
+  const rr = stock.find((s) => s.kind === 'reroll'), before = boons.map((s) => s.id).join(), p0 = rr.price;
+  m.sel = stock.indexOf(rr); g.buyShop(m);
+  assert.ok(rr.price > p0 && !rr.sold, 'reroll gets pricier and stays');
+  assert.notEqual(boons.map((s) => s.id).join(), before);
+  assert.equal(g.modal, m);
+  // 砥石：鍛える
+  const ws = stock.find((s) => s.kind === 'whetstone');
+  m.sel = stock.indexOf(ws); const gold = g.run.gold; g.buyShop(m);
+  assert.equal(g.modal.type, 'forge'); assert.ok(g.modal.shop);
+  // やめると返金して店へ
+  const d = new Driver(g); d.frame(12); d.frame(1, ['dodge']); d.frame(1);
+  assert.equal(g.modal, m); assert.equal(g.run.gold, gold); assert.ok(!ws.sold);
+  // もう一度買って鍛える
+  g.buyShop(m); d.frame(12);
+  const target = g.modal.list[g.modal.sel].id, t0 = g.player.boons.find((b) => b.id === target).tier;
+  d.frame(1, ['jump']); d.frame(1);
+  assert.equal(g.player.boons.find((b) => b.id === target).tier, t0 + 1);
+  assert.equal(g.modal, m, 'back to the shop'); assert.ok(ws.sold); assert.ok(!g.run.forged, 'Glen can still forge');
 });

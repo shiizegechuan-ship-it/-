@@ -83,7 +83,7 @@ export function newMeta(seed = (Date.now() & 0x7fffffff)) {
     wedges: [],
     knowledge: {}, // key -> 知った周回
     code: [r.int(1, 9), r.int(1, 9), r.int(1, 9)], // セーブ固定（周回では変わらない）
-    unlocked: ['haste', 'echo', 'risk', 'power', 'arts', 'bond', 'ward'],
+    unlocked: ['haste', 'echo', 'risk', 'power', 'arts', 'bond', 'ward', 'hex'],
     companion: 'hotaru', // お供（巻き戻り画面・中断メニューで替えられる）
     shards: 0, // 時の欠片（恒久強化の通貨）
     upgrades: {}, // 刻印（恒久強化）の Lv
@@ -140,7 +140,7 @@ export function autoInherit(m, boons) {
 function migrate(m) {
   m.slots = Math.max(m.slots || 0, 3); // 古いセーブも 3 つに
   m.shards ??= 0; m.upgrades ??= {}; m.inherit ??= []; m.artifacts ??= []; m.compStage ??= {}; m.bonds ??= []; m.allies ??= [];
-  for (const k of ['power', 'arts', 'bond', 'ward']) if (!m.unlocked.includes(k)) m.unlocked.push(k);
+  for (const k of ['power', 'arts', 'bond', 'ward', 'hex']) if (!m.unlocked.includes(k)) m.unlocked.push(k);
   m.companion ??= 'hotaru';
   return m;
 }

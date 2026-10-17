@@ -8,7 +8,7 @@ import { ARTIFACTS, ARTIFACT_COLOR } from './artifacts.js';
 import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritLabel, DAWN_STEPS, dawnProgress } from './meta.js';
 import { FLOOR_NAMES } from './world.js';
 import { expToNext, LEVEL } from './level.js';
-import { LB, lbStart, rewindGrid } from './layout.js';
+import { LB, lbStart, rewindGrid, cardRects } from './layout.js';
 export { LB, lbRowAt, rewindGrid } from './layout.js';
 
 // ドット文字（DotGothic16）。読み込めない環境では OS の日本語フォントで表示される
@@ -278,16 +278,17 @@ function drawBoonPick(ctx, game, m) {
   const p = game.player;
   text(ctx, m.rare ? `レベル ${game.run.level} ― 稀少の強化を選ぶ` : m.school ? '書庫の祭壇 ―「停滞」の強化' : '強化を選ぶ', VIEW_W / 2, 92, { size: 22, align: 'center', bold: true, font: SERIF, color: C.gold });
   if (m.count > 1) text(ctx, `あと ${m.count} つ`, VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });
-  const cw = m.offer.length > 3 ? 214 : 250, ch = 270, gap = 18;
-  const total = m.offer.length * cw + (m.offer.length - 1) * gap;
+  const lay = cardRects(m.offer.length);
   m.offer.forEach((id, i) => {
     const def = BOONS[id], sc = SCHOOLS[def.school];
     // 1枚ずつ滑り込む
     const appear = clamp((m.t - i * 0.07) / 0.2, 0, 1);
     if (appear <= 0) return;
     ctx.globalAlpha = appear;
-    const x = VIEW_W / 2 - total / 2 + i * (cw + gap), y = 140 - (i === m.sel ? 8 : 0) + (1 - appear) * 24;
+    const R = lay.rects[i], cw = R.w, ch = R.h;
+    const x = R.x, y = R.y - (i === m.sel ? (lay.big ? 8 : 4) : 0) + (1 - appear) * 24;
     const sel = i === m.sel;
+    if (!lay.big) { drawBoonCardSmall(ctx, p, id, x, y, cw, ch, sel); ctx.globalAlpha = 1; return; }
     panel(ctx, x, y, cw, ch, sel ? sc.color : 'rgba(255,255,255,0.15)', sel ? 'rgba(24,18,32,0.98)' : 'rgba(14,11,20,0.95)');
     if (sel) { ctx.lineWidth = 2; ctx.strokeStyle = sc.color; ctx.strokeRect(x + 1, y + 1, cw - 2, ch - 2); }
     ctx.fillStyle = sc.color; ctx.fillRect(x, y, cw, 5);
@@ -318,7 +319,7 @@ function drawBoonPick(ctx, game, m) {
     if (!fus.length && !hints.length && RESONANCE[def.school] && !schoolCounts(p.boons)[def.school]) text(ctx, `同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted });
     ctx.globalAlpha = 1;
   });
-  text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定', VIEW_W / 2, 428, { size: 12, align: 'center', color: C.muted });
+  text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : lay.big ? '← → 選ぶ　Z 決定' : '←→↑↓ 選ぶ　Z 決定', VIEW_W / 2, 428, { size: 12, align: 'center', color: C.muted });
   // 現在の手持ち。選んでいるカードと合成の組になるものは、その合成の色で光らせる
   if (p.boons.length) {
     const pair = new Map(fusionsFor(m.offer[m.sel], p.boons).map((f) => [f.other, f.color]));
@@ -332,8 +333,29 @@ function drawBoonPick(ctx, game, m) {
   }
 }
 
+// 2 段に並べるときの小さなカード：系統・名前・Lv・説明（3 行まで）・合成の相手（1 行）
+function drawBoonCardSmall(ctx, p, id, x, y, cw, ch, sel) {
+  const def = BOONS[id], sc = SCHOOLS[def.school];
+  panel(ctx, x, y, cw, ch, sel ? sc.color : 'rgba(255,255,255,0.15)', sel ? 'rgba(24,18,32,0.98)' : 'rgba(14,11,20,0.95)');
+  if (sel) { ctx.lineWidth = 2; ctx.strokeStyle = sc.color; ctx.strokeRect(x + 1, y + 1, cw - 2, ch - 2); }
+  ctx.fillStyle = sc.color; ctx.fillRect(x, y, cw, 4);
+  const own = p.boons.find((b) => b.id === id), nt = own ? own.tier + 1 : 1;
+  text(ctx, sc.name, x + 12, y + 20, { size: 11, color: sc.color, bold: true });
+  if (def.max) text(ctx, own ? `Lv${own.tier} → ${nt}` : 'Lv1', x + cw - 12, y + 20, { size: 12, align: 'right', color: own ? '#ffe14a' : C.muted });
+  text(ctx, def.name, x + 12, y + 44, { size: 18, bold: true, font: SERIF });
+  const fus = fusionsFor(id, p.boons);
+  const lines = wrap(ctx, own ? (forgeDiff(id, own.tier).diff || def.desc(nt)) : def.desc(nt), cw - 24, 13);
+  const maxL = fus.length ? 3 : 4;
+  lines.slice(0, maxL).forEach((l, j) => text(ctx, j === maxL - 1 && lines.length > maxL ? l.slice(0, -1) + '…' : l, x + 12, y + 66 + j * 17, { size: 13, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0' }));
+  if (fus.length) {
+    const f = fus[0], ready = f.otherLv >= 2;
+    ctx.fillStyle = f.color; ctx.fillRect(x + 8, y + ch - 24, 3, 16);
+    text(ctx, `合成 ▶ ${BOONS[f.to].name}（＋${BOONS[f.other].name}${f.otherLv ? ` Lv${f.otherLv}${ready ? ' ✓' : ''}` : '・未所持'}）`, x + 16, y + ch - 11, { size: 11, color: f.color, bold: true });
+  }
+}
+
 function drawShop(ctx, game, m) {
-  const items = m.stock.map((s) => { const l = game.shopLabel(s); const can = !s.sold && game.run.gold >= s.price; return { label: l.name, color: s.sold ? '#5a5260' : s.tier === 'legend' ? '#ff7ae0' : s.tier === 'rare' ? '#ffd84a' : s.kind === 'key' ? '#ffd84a' : s.kind === 'artifact' ? '#7fe0d0' : '#d8d0c4', right: s.sold ? '売り切れ' : `${s.price} G`, rightColor: s.sold ? '#5a5260' : can ? '#ffd84a' : '#8a6a7a', desc: l.desc, rainbow: s.tier === 'legend' && !s.sold }; });
+  const items = m.stock.map((s) => { const l = game.shopLabel(s); const can = !s.sold && game.run.gold >= s.price; return { label: l.name, color: s.sold ? '#5a5260' : s.tier === 'legend' ? '#ff7ae0' : s.tier === 'rare' ? '#ffd84a' : s.kind === 'key' ? '#ffd84a' : s.kind === 'artifact' ? '#7fe0d0' : s.kind === 'whetstone' ? '#f2c14e' : s.kind === 'reroll' ? '#9fe3ff' : '#d8d0c4', right: s.sold ? '売り切れ' : `${s.price} G`, rightColor: s.sold ? '#5a5260' : can ? '#ffd84a' : '#8a6a7a', desc: l.desc, rainbow: s.tier === 'legend' && !s.sold }; });
   drawLightbox(ctx, game, { title: '行商人の店', right: `● 金貨 ${game.run.gold}`, items, sel: m.sel, color: '#ffd84a', st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: game.touch ? 'タップで選択、もう一度タップで買う／枠の外で閉じる' : '↑↓ 選ぶ　Z 買う　C 閉じる' });
 }
 
@@ -399,7 +421,7 @@ function drawCompanionPick(ctx, game, m) {
 function drawForge(ctx, game, m) {
   // 鍛えると何がどう変わるかを、選ぶ前に数字で見せる（例：35%→50%）
   const items = m.list.map((b) => { const d = BOONS[b.id], nt = (b.tier || 1) + 1, f = forgeDiff(b.id, b.tier || 1); return { label: d.name, right: d.max ? `Lv${b.tier} → ${nt}` : '→ II', rightColor: '#ffe14a', desc: f.diff ? '鍛えると：' + f.diff : `今：${f.now}／鍛えると：${f.next}` }; });
-  drawLightbox(ctx, game, { title: m.hourglass ? '砂時計 ― 時を進めて、どれを鍛える？' : 'グレンの鍛冶 ― どれを鍛える？', items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: m.hourglass ? (game.touch ? '項目をタップで選択、もう一度タップで鍛える' : '↑↓ 選ぶ　Z 鍛える') : undefined });
+  drawLightbox(ctx, game, { title: m.hourglass ? '砂時計 ― 時を進めて、どれを鍛える？' : m.shop ? '砥石 ― どれを鍛える？（やめれば代金を返す）' : 'グレンの鍛冶 ― どれを鍛える？', items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: m.hourglass ? (game.touch ? '項目をタップで選択、もう一度タップで鍛える' : '↑↓ 選ぶ　Z 鍛える') : undefined });
 }
 
 function drawCode(ctx, game, m) {

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sandbox, Driver, FLAT } from './helpers.mjs';
 import { RustSoldier, GearKnight, PendulumBat } from '../src/enemies.js';
+import { cx } from '../src/util.js';
 
 function withEnemy(E, dx = 50) {
   const g = sandbox(FLAT); const d = new Driver(g);
@@ -238,4 +239,54 @@ test('守護の強化：時の盾・鉄の心・棘の外套・不動・踏み�
   assert.ok(r.state !== 'dead' && r.hp >= 1 + 20 - 1, `survived with ${r.hp}`);
   r.iframeT = 0; r.hp = 5; g.damagePlayer(50, { fromX: r.x + 20 });
   assert.equal(r.state, 'dead', 'only once per room');
+});
+
+test('弱体の強化：錆びつかせ（敵の与ダメージ減）・脆くする（受けるダメージ増）・足止めの鎖（重撃で縛る）。中ボス以上は半分', async () => {
+  const { sandbox, Driver, FLAT } = await import('./helpers.mjs');
+  const { RustSoldier } = await import('../src/enemies.js');
+  const mk = (boons) => {
+    const g = sandbox(FLAT); const d = new Driver(g); g.player.setBoons(boons);
+    const e = new RustSoldier(g.player.x + 40, g.player.y + g.player.h - 40); e.hp = e.maxHp = 1e5; e.cool = 99; g.addEnemy(e);
+    e.spawnT = -10; e.age = 99; return { g, d, e };
+  };
+  // 脆くする：同じ一撃のダメージが増える
+  const hit = (boons, pre) => { const { g, e } = mk(boons); g.run.critRng = { next: () => 1 }; if (pre) pre(g, e); const h0 = e.hp; g.dealDamage(e, { base: 100, cat: 'combo', dir: 1 }); return { dmg: h0 - e.hp, e, g }; };
+  const base = hit([]).dmg;
+  const { e: be } = hit([{ id: 'brittle', tier: 3 }]);
+  assert.ok(be.brittleT > 3.5 && be.brittleK === 0.28, 'brittle applied by a direct hit');
+  const second = hit([{ id: 'brittle', tier: 3 }], (g, e) => { e.brittleT = 4; e.brittleK = 0.28; }).dmg;
+  assert.ok(Math.abs(second / base - 1.28) < 0.03, `${second} vs ${base}`);
+  // 錆びつかせ：敵の攻撃が弱まる
+  const { g: rg, e: re } = hit([{ id: 'rust', tier: 2 }]);
+  assert.ok(re.rustT > 0 && Math.abs(rg.rustMul(re) - 0.7) < 1e-9);
+  // 中ボス以上は半分
+  const { g: eg, e: ee } = mk([{ id: 'rust', tier: 2 }]); ee.elite = true; eg.run.critRng = { next: () => 1 };
+  eg.dealDamage(ee, { base: 10, cat: 'combo', dir: 1 }); assert.ok(Math.abs(eg.rustMul(ee) - 0.85) < 1e-9);
+  // 足止めの鎖：重撃で縛られ、ほとんど動けない
+  const { g: sg, e: se } = mk([{ id: 'snare', tier: 2 }]); sg.run.critRng = { next: () => 1 };
+  sg.dealDamage(se, { base: 10, cat: 'combo', dir: 1 }); assert.ok(!(se.snareT > 0), 'normal hit does not snare');
+  sg.dealDamage(se, { base: 10, cat: 'heavy', heavy: true, dir: 1 }); assert.ok(se.snareT >= 1.4 && se.timeScale === 0.15);
+  // 錆びた敵の攻撃で受けるダメージ
+  const { g: dg, e: de } = mk([]);
+  const hp0 = dg.player.hp; de.rustT = 4; de.rustK = 0.4; dg.attacker = de;
+  dg.hitPlayer({ x: dg.player.x, y: dg.player.y, w: 10, h: 10, dmg: 20 }, Math.round(20 * dg.rustMul(de)), cx(de), 'x', 0);
+  assert.ok(hp0 - dg.player.hp <= 12, `rusted hit ${hp0 - dg.player.hp}`);
+});
+
+test('守護の強化：不動の構え（立ち止まっている間の被ダメージ減）・再生の刻（制圧で回復）', async () => {
+  const { sandbox, Driver, FLAT } = await import('./helpers.mjs');
+  const g = sandbox(FLAT); const d = new Driver(g); d.frame(10);
+  const p = g.player;
+  let h = p.hp; g.damagePlayer(40, { fromX: cx(p) }); const plain = h - p.hp;
+  p.hp = p.maxHp; p.iframeT = 0; p.state = 'normal'; d.frame(60);
+  p.setBoons([{ id: 'stance', tier: 3 }]); p.iframeT = 0; p.state = 'normal'; p.vx = 0; d.frame(1);
+  h = p.hp; g.damagePlayer(40, { fromX: cx(p) }); const stood = h - p.hp;
+  assert.ok(stood <= Math.ceil(plain * 0.56), `${stood} vs ${plain}`);
+  // 走っている間は減らない
+  p.hp = p.maxHp; p.state = 'normal'; p.iframeT = 0; p.vx = 200; p.onGround = true;
+  h = p.hp; g.damagePlayer(40, { fromX: cx(p) }); assert.equal(h - p.hp, plain);
+  // 再生の刻
+  p.setBoons([{ id: 'recover', tier: 2 }]); p.state = 'normal'; p.hp = 50;
+  g.room.desc = { ...g.room.desc, type: 'combat' }; g.room.cleared = false; g.clearRoom(true);
+  assert.equal(p.hp, 50 + Math.round(p.maxHp * 0.12));
 });
