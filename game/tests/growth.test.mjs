@@ -1724,3 +1724,24 @@ test('部屋に入った時の敵も、増援と同じように常時の術と�
     assert.ok(e.hp < h, `${type}: guard ends`);
   }
 });
+
+test('めちゃ簡単：奈落の上の空の敵へ飛び込んで斬ったあと、近くの足場へ回って降り立つ（落ちない）', () => {
+  // 床の真ん中に大きな奈落（14〜33 列）
+  const rows = FLAT.map((r, y) => (y >= 15 ? r.slice(0, 14) + '.'.repeat(20) + r.slice(34) : r));
+  const g = sandbox(rows); const d = new Driver(g); d.frame(2);
+  g.run.diff = { ...g.run.diff, id: 'veryeasy', autoAim: true };
+  const p = g.player; p.x = 9 * 30; d.frame(20);
+  const bat = new PendulumBat(18 * 30, 300); g.addEnemy(bat); bat.hp = bat.maxHp = 1e5; bat.cool = 99; bat.gravity = false;
+  const pin = () => { bat.x = 18 * 30; bat.y = 300; bat.vx = bat.vy = 0; };
+  pin(); d.frame(1);
+  d.frame(1, ['attack']); pin();
+  assert.equal(p.state, 'autodash');
+  let traveled = false, minFeet = 0;
+  for (let i = 0; i < 240; i++) { pin(); d.frame(1); if (p.state === 'travel') traveled = true; minFeet = Math.max(minFeet, p.y + p.h); }
+  assert.ok(bat.hp < bat.maxHp, 'hit the bat');
+  assert.ok(traveled, 'spun over to a footing');
+  assert.ok(p.onGround, 'standing');
+  assert.ok(p.y + p.h <= 15 * 30 + 1, 'did not fall into the pit');
+  const tx = Math.floor((p.x + p.w / 2) / 30);
+  assert.ok(tx < 14 || tx >= 34, 'on the floor beside the pit');
+});

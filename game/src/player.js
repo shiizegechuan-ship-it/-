@@ -1,6 +1,6 @@
 import { PLAYER as P, ATTACKS, F, TILE } from './config.js';
 import { approach, sign, cx, cy } from './util.js';
-import { moveBody, standingOnOneway, SOLID } from './tilemap.js';
+import { moveBody, standingOnOneway, SOLID, ONEWAY } from './tilemap.js';
 import { computeStats } from './boons.js';
 import { applyArtifacts } from './artifacts.js';
 import { spawnWave, MELEE } from './arts.js';
@@ -97,6 +97,11 @@ export class Player {
     if (this.rootT > 0) this.rootT -= dt;
     const dirX = this.rootT > 0 ? 0 : input.dirX ? input.dirX() : (input.down('right') ? 1 : 0) - (input.down('left') ? 1 : 0);
 
+    // めちゃ簡単の飛び込みのあと、宙に浮いたまま攻撃が終わったら、近くの足場へくるくる回って降り立つ（奈落へ落ちないように）
+    if (this.autoLand && this.state === 'normal') {
+      this.autoLand = false;
+      if (!this.onGround) { const f = this.nearestFooting(game.map); if (f) this.startTravel(f.x, f.y); }
+    }
     switch (this.state) {
       case 'normal': this.updateNormal(game, input, dt, dirX); break;
       case 'attack': this.updateAttack(game, input, dt, dirX); break;
@@ -354,7 +359,24 @@ export class Player {
     for (let h = 24; h <= 360; h += 16) { if (clear(h)) return h; if (clear(-h)) return -h; }
     return 48; // 回り込めない時は、軽く弧を描いてそのまますり抜ける
   }
+  // 近くの足場（床かすり抜け床の上で、体が収まる所）。真下のすぐ近くに床があれば、そのまま落ちればよいので null
+  nearestFooting(map) {
+    const px = this.x + this.w / 2, foot = this.y + this.h;
+    if (map.groundBelow(px, foot) - foot < 3 * TILE && map.groundBelow(px, foot) < map.pxH) return null;
+    const ptx = Math.floor(px / TILE), pty = Math.floor(foot / TILE);
+    let best = null, bd = Infinity;
+    for (let ty = Math.max(1, pty - 8); ty <= Math.min(map.h - 1, pty + 10); ty++) for (let tx = Math.max(0, ptx - 14); tx <= Math.min(map.w - 1, ptx + 14); tx++) {
+      const t = map.get(tx, ty);
+      if (t !== SOLID && t !== ONEWAY) continue;
+      const x = tx * TILE + (TILE - this.w) / 2, y = ty * TILE - this.h;
+      if (!this.boxFree(map, x, y)) continue;
+      const d = Math.hypot(x + this.w / 2 - px, y + this.h - foot) + (ty * TILE < foot ? 20 : 0); // 同じくらいなら下の足場
+      if (d < bd) { bd = d; best = { x, y }; }
+    }
+    return best;
+  }
   startAutoDash(game, tgt) {
+    this.autoLand = true;
     const side = Math.sign(this.x + this.w / 2 - cx(tgt)) || -this.face;
     const g = this.autoDashGoal(game.map, tgt, side);
     const arc = this.autoDashArc(game.map, this.x, this.y, g);
