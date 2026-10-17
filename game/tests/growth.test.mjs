@@ -162,7 +162,9 @@ test('夜明けへの道：段階が順に進み、次にすることが分か�
   p = dawnProgress(m); assert.equal(p.done, 3); assert.equal(p.next.title, '師の日誌を読む');
   learnK2(m, 'master_reason'); m.slots = 3; addW2(m, { target: 'lira' }); learnK2(m, 'lira_message');
   p = dawnProgress(m); assert.equal(p.next.title, '夜明けの決闘に勝つ');
-  m.flags.ending = true;
+  m.flags.ending = true; m.flags.endings = { sleep: 2 };
+  p = dawnProgress(m); assert.equal(p.next.title, '夜明けの決闘に勝つ', 'another ending does not count as the true one');
+  m.flags.endings.true = 3;
   p = dawnProgress(m); assert.equal(p.done, 7); assert.equal(p.next, null);
 });
 
@@ -866,11 +868,13 @@ test('番号の入力：スティックを斜めに倒しても、強く倒し�
 });
 
 test('夜ごとの様相：夜が進むと天気・色・ひびが変わり、夜のはじめに一言が出る', () => {
-  const looks = [1, 2, 4, 6].map((loop) => nightLook({ loop, flags: {} }));
+  const looks = [1, 2, 3, 4].map((loop) => nightLook({ loop, flags: {} }));
   assert.equal(looks[0].weather, null);
-  assert.deepEqual(looks.slice(1).map((l) => l.weather), ['rain', 'ash', 'shards']);
-  assert.ok(looks[3].cracks > looks[1].cracks);
-  const g = newGame(74); g.meta.loop = 4; g.startLoop();
+  // 第 2 夜は青く沈み、最後の夜（第 3 夜から）は雨も色の濁りも無い澄んだ空と光の帯。塔はかなり荒れる
+  assert.deepEqual(looks.slice(1).map((l) => l.weather), ['rain', 'clear', 'clear']);
+  assert.ok(looks[2].aurora && looks[2].tint === null && looks[2].bigMoon);
+  assert.ok(looks[2].cracks > looks[1].cracks);
+  const g = newGame(74); g.meta.loop = 3; g.startLoop();
   assert.ok(g.nightNote && g.nightNote.text.length > 0);
 });
 
@@ -1826,4 +1830,32 @@ test('店：強化の 3 品のうち 1 つは手持ちの Lv アップ。砥石�
   d.frame(1, ['jump']); d.frame(1);
   assert.equal(g.player.boons.find((b) => b.id === target).tier, t0 + 1);
   assert.equal(g.modal, m, 'back to the shop'); assert.ok(ws.sold); assert.ok(!g.run.forged, 'Glen can still forge');
+});
+
+test('最後の夜（第 3 夜）は新しい力「暁の剣」を授かる：5 秒ごとに部屋じゅうの敵へ光の剣が降り、直接攻撃 +25%。店には出ない', async () => {
+  const { LEGEND_IDS } = await import('../src/boons.js');
+  assert.ok(!LEGEND_IDS.includes('dawnblade'));
+  const g = newGame(31); g.meta.loop = 3; g.startLoop(); g.modal = null;
+  assert.ok(g.player.boons.some((b) => b.id === 'dawnblade'));
+  const g2 = newGame(31); g2.meta.loop = 2; g2.startLoop();
+  assert.ok(!g2.player.boons.some((b) => b.id === 'dawnblade'));
+  const { g: a, d, e } = arena(RustSoldier, 300);
+  e.hp = e.maxHp = 1e6; e.cool = 99;
+  const far = new RustSoldier(a.player.x + 600, e.y); far.hp = far.maxHp = 1e6; far.cool = 99; a.addEnemy(far);
+  a.player.setBoons([{ id: 'dawnblade', tier: 1 }]);
+  d.frame(60 * 6);
+  assert.ok(e.hp < e.maxHp && far.hp < far.maxHp, 'light swords hit near and far foes');
+});
+
+test('刻の支配者：10 秒ごとに、今装着している発動の術を自動で放つ（術が無ければ刻閃）', () => {
+  const { g, d, e } = arena(RustSoldier, 80);
+  e.hp = e.maxHp = 1e6; e.cool = 99;
+  g.player.setBoons([{ id: 'chronarch', tier: 1 }, { id: 'belltoll', tier: 1 }]);
+  d.frame(60 * 10 + 5);
+  assert.ok(g.room.spells.some((s) => s.kind === 'toll') || g.fx.texts.some((t) => t.str === '鐘鳴'), 'cast the held art');
+  assert.ok(!g.room.spells.some((s) => s.kind === 'warpslash'));
+  // 持ち替えると、持ち替えた術
+  g.player.setBoons([{ id: 'chronarch', tier: 1 }]);
+  g.player.passiveT.chronarch = 9.9; d.frame(10);
+  assert.ok(g.room.spells.some((s) => s.kind === 'warpslash'), 'no art: warp slash');
 });

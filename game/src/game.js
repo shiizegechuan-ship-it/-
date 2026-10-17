@@ -18,7 +18,7 @@ import { nightLook } from './nightlook.js';
 import { FLOOR_NAMES, buildPlan, layoutRows, extraEnemyTypes } from './world.js';
 import {
   newMeta, serialize, deserialize, endLoop, learn, knows, hasWedge, addWedge, removeWedge, freeSlots,
-  bossCounter, trueEndReady, finalReady, FINAL_NIGHT, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
+  bossCounter, trueEndReady, finalReady, FINAL_NIGHT, LAST_NIGHT, asksDecision, alwaysDecisive, endingFor, ENDING_IDS, PERSON_MAX, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
   upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount, inheritLabel, habitAnalysis, dawnProgress, MOB_COUNTERS} from './meta.js';
 
 const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
@@ -203,6 +203,8 @@ export class Game {
     const allyIds = (meta.allies || []).filter((id) => id !== meta.companion && COMPANIONS[id]);
     const cst = stOf(meta.companion);
     this.player.compMods = combinedMods([{ id: meta.companion, stage: cst }, ...allyIds.map((id) => ({ id, stage: stOf(id) }))]);
+    // 最後の夜（第 3 夜から）は、新しい力「暁の剣」を授かる
+    if (meta.loop >= LAST_NIGHT && !meta.flags.ending && !wedgedBoons.some((b) => b.id === 'dawnblade')) wedgedBoons.push({ id: 'dawnblade', tier: 1 });
     this.player.setBoons(wedgedBoons);
     this.player.hp = this.player.maxHp;
     this.player.gauge = Math.min(PC.gaugeMax, 20 * upLv(meta, 'gauge'));
@@ -219,7 +221,8 @@ export class Game {
     // 夜ごとの様相の一言（天気や塔の変化）
     const note = nightLook(meta).note;
     this.nightNote = note ? { text: note, t: 0 } : null;
-    if (finalReady(meta) && !meta.flags.ending) this.fx.setBanner(`第 ${meta.loop} 夜 ― 最終夜`, '鐘楼で、リラの言葉を師に届けよ', '#ffd38a', 3);
+    if (alwaysDecisive(meta) && !meta.flags.ending) this.fx.setBanner(`第 ${meta.loop} 夜 ― 最後の夜`, finalReady(meta) ? '鐘楼で、リラの言葉を師に届けよ' : '刻守との戦いが、決着になる', '#ffd38a', 3);
+    else if (asksDecision(meta) && !meta.flags.ending) this.fx.setBanner(`第 ${meta.loop} 夜 ― 決着を選べる夜`, finalReady(meta) ? 'リラの言葉はそろった。鐘楼で決着を' : '刻守の部屋の前で、決着を着けるかを選べる', '#ffd38a', 3);
     else this.fx.setBanner(`第 ${meta.loop} 夜`, pr.next ? `夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}` : `終わらない夜　深さLv${this.run.scale.level}`, '#f2c14e', 2.6);
     if (meta.loop === 1 && !meta.flags.ending) this.openDialog([
       { who: '', text: 'あなたは時計塔の主「刻守」の弟子。この町は、同じ夜を繰り返している。' },
@@ -657,9 +660,28 @@ export class Game {
     else lines.push({ who: '刻守（師）', text: '弟子よ、時戻しは禁忌だ。代償は私の命で払っている。お前が背負うものではない……下がっていろ。' });
     if (counter) lines.push({ who: '刻守（師）', text: `前の夜、お前は${COUNTERS[counter].habit}に頼りすぎた。もう通じんぞ。` });
     if (hasWedge(this.meta, 'brake')) lines.push({ who: '刻守（師）', text: '歯止めに楔を……！ 私の教えた技で、私を止めるか。ならば力で応えよう！', note: '時止め封印／第2段階が早まり、技が速くなる' });
+    // 決着：第 2 夜は「ここで決着を着けるか」を聞く。第 3 夜からは必ず決着の戦い
+    let choices = null;
+    this.run.decisive = false;
+    if (!this.meta.flags.ending && alwaysDecisive(this.meta)) {
+      this.run.decisive = true;
+      lines.push({ who: '', text: '最後の夜。鐘はもう、夜を戻せない。この戦いで決着がつく。', note: '倒れても、次の夜にもう一度挑める' });
+    } else if (!this.meta.flags.ending && asksDecision(this.meta)) {
+      lines.push({ who: '', text: 'ここで決着を着けますか？', note: 'はい：この戦いで物語が終わる（勝てば結末へ）／いいえ：夜が戻り、第 3 夜（最後の夜）へ' });
+      choices = [
+        { label: 'はい（ここで決着を着ける）', fn: () => { this.run.decisive = true; this.fx.setBanner('決着の戦い', '鐘はもう鳴らさせない', '#ffd38a', 2); } },
+        { label: 'いいえ（もう一夜、準備する）', fn: () => this.postponeDecision() },
+      ];
+    }
     // 前の夜の戦い方の分析を先に見せる
-    if (counter) this.modal = { type: 'analysis', a: habitAnalysis(this.meta.lastLoop), counter, next: lines, t: 0 };
-    else this.openDialog(lines);
+    if (counter) this.modal = { type: 'analysis', a: habitAnalysis(this.meta.lastLoop), counter, next: lines, nextChoices: choices, t: 0 };
+    else this.openDialog(lines, choices);
+  }
+  // 決着を先へ延ばす：師が鐘を鳴らし、夜が戻って最後の夜へ
+  postponeDecision() {
+    this.fx.setBanner('鐘が鳴る', '――決着は、最後の夜に', '#f2c14e', 2);
+    this.sfx.play('bossBell');
+    this.endRun('wait');
   }
 
   // ───────── 毎フレーム ─────────
@@ -860,6 +882,7 @@ export class Game {
       if (info.parry || run.critRng.next() < st.critChance + 0.02 * upLv(this.meta, 'crit') + levelBonus(run.level || 1).crit) { crit = true; dmg *= st.critMul; }
       if (info.parry) { this.fx.text(cx(e), e.y - 34, 'パリィ', '#ffe14a', 16); this.parryMoment(e); }
       if (direct && p.afterT > 0 && st.afterimageMul > 1) { dmg *= st.afterimageMul; p.afterT = 0; this.fx.text(cx(e), e.y - 18, '残影', '#5fd18b', 12); }
+      if (direct && st.dawnblade) dmg *= 1.25; // 暁の剣
       if (direct && p.empowerNext > 1) { dmg *= p.empowerNext; p.empowerNext = 1; this.fx.text(cx(e), e.y - 30, '×3', '#e35d5d', 14); }
       if (info.heavy && e.slowed && st.shatterMul > 1) {
         dmg *= st.shatterMul; info.breaks = true;
@@ -1946,7 +1969,7 @@ export class Game {
   }
   wedgeChoices(target, it) {
     if (hasWedge(this.meta, target)) return [];
-    return [{ label: `楔を打つ（残り ${freeSlots(this.meta)} 本）`, fn: () => this.doWedge({ target }, it) }];
+    return [{ label: `楔を打つ（人の楔 残り ${freeSlots(this.meta, 'person')} 本）`, fn: () => this.doWedge({ target }, it) }];
   }
   talkGlen(it) {
     const run = this.run;
@@ -2028,7 +2051,7 @@ export class Game {
         b.vanished = true;
         this.fx.shake(18, 0.9);
         this.fx.screenFlash('#ffffff', 0.9);
-        this.fx.pillar(cx(b), b.y + b.h, room.trueEnd ? '#ffd38a' : '#f2c14e');
+        this.fx.pillar(cx(b), b.y + b.h, room.finale ? '#ffd38a' : '#f2c14e');
         for (const r of [60, 120, 200, 300]) this.fx.ring(cx(b), cy(b), r === 300 ? '#ffffff' : '#f2c14e', r, 0.5 + r / 600);
         this.fx.sparks(cx(b), cy(b), '#ffe14a', 50, 520);
         this.fx.sparks(cx(b), cy(b), '#ffffff', 30, 380);
@@ -2037,7 +2060,7 @@ export class Game {
         this.slowT = 0.5; this.slowScale = 0.35;
       }
       if (room.bossOutroT > 4.4 && !run.ended) {
-        if (room.trueEnd) this.startEnding();
+        if (room.finale) this.startEnding(room.finale);
         else this.endRun('bell');
       }
     }
@@ -2065,7 +2088,7 @@ export class Game {
     ];
     if (first && !this.meta.flags.diaryRead) {
       this.meta.flags.diaryRead = true;
-      if (this.meta.slots < MAX_SLOTS) { this.meta.slots++; lines.push({ who: '', text: '師の想いを知り、あなたの楔が強くなった。', note: '楔の枠が1つ増えた' }); }
+      if (this.meta.personSlots < PERSON_MAX) { this.meta.personSlots++; lines.push({ who: '', text: '師の想いを知り、あなたの楔が強くなった。', note: '人の楔の枠が1つ増えた' }); }
       this.save();
     }
     this.openDialog(lines);
@@ -2082,8 +2105,9 @@ export class Game {
   }
 
   doWedge(w, it) {
-    if (freeSlots(this.meta) <= 0) {
-      this.openDialog([{ who: '', text: '楔の枠が足りない。', note: '巻き戻りのときに、打った楔を外して枠を空けられる' }]);
+    const kind = w.target === 'boon' ? 'boon' : 'person';
+    if (freeSlots(this.meta, kind) <= 0) {
+      this.openDialog([{ who: '', text: kind === 'person' ? '人の楔が足りない。' : '技の楔が足りない。', note: '巻き戻りのときに、打った楔を外して枠を空けられる（人の楔と技の楔は別の枠）' }]);
       this.sfx.play('deny');
       return;
     }
@@ -2158,8 +2182,8 @@ export class Game {
       this.fx.setBanner('第三楽章', '', '#f2c14e', 1.2);
       this.learnK('lira_name');
       const lines = [{ who: '刻守（師）', text: 'リラ……もう一度だけ、あの子が家にいる夜を……！' }];
-      if (trueEndReady(this.meta) && !finalReady(this.meta)) lines.push({ who: '', text: `（リラの言葉を伝えようとしたが、師の耳には届かない。まだその夜ではない――第${FINAL_NIGHT}夜を待て）` });
-      if (finalReady(this.meta)) {
+      if (trueEndReady(this.meta) && !this.run.decisive) lines.push({ who: '', text: '（リラの言葉を伝えようとしたが、鐘の音にかき消された。決着の戦いでなければ、師の耳には届かない）' });
+      if (finalReady(this.meta) && this.run.decisive) {
         b.setState('talk');
         this.openDialog(lines, [
           { label: '「リラは覚えている」と伝える', fn: () => this.beginTrueDuel(b) },
@@ -2211,8 +2235,13 @@ export class Game {
     this.fx.burst(cx(b), cy(b), '#f2c14e', 40);
     this.hitstop = 0.2;
     if (b.trueDuel) {
-      this.room.trueEnd = true;
+      this.room.finale = 'true';
       this.fx.setBanner('夜明け', '', '#ffd38a', 3);
+    } else if (this.run.decisive) {
+      // 決着の戦い：鐘は鳴らない。結末は、知ったことで決まる
+      this.room.finale = endingFor(this.meta, false);
+      this.learnK('boss_bell', true);
+      this.fx.setBanner('鐘が砕ける', '――夜は、もう戻らない', '#ffd38a', 3);
     } else {
       this.learnK('boss_bell');
       this.sfx.play('bossBell');
@@ -2250,13 +2279,21 @@ export class Game {
   }
 
   // ───────── 結末 ─────────
-  startEnding() {
+  startEnding(id = 'true') {
+    const m = this.meta;
     this.run.ended = true;
-    this.meta.flags.ending = true;
+    m.flags.ending = true;
+    m.flags.endings ||= {};
+    if (!m.flags.endings[id]) m.flags.endings[id] = m.loop;
     this.save();
     this.scene = 'ending';
-    this.ending = { t: 0, page: 0 };
-    this.emit('ending');
+    const pages = ENDINGS[id].pages.slice();
+    // グレンを助けていたら、どの結末にも鍛冶場の朝が添えられる
+    if (this.run.glen === 'saved' || hasWedge(m, 'glen')) pages.splice(pages.length - 1, 0, ['鍛冶場から、槌の音が聞こえる。', 'グレンは今日も、誰かの剣を打っている。']);
+    const seen = ENDING_IDS.filter((k) => m.flags.endings[k]).length;
+    pages.push(['クリア', `結末 ${seen}/${ENDING_IDS.length} を見た`, seen < ENDING_IDS.length ? 'ほかの結末を探すことも、続けて「終わらない夜」に挑むこともできる。' : 'すべての結末を見た。続けて「終わらない夜」に挑むこともできる。']);
+    this.ending = { t: 0, page: 0, id, pages, tone: ENDINGS[id].tone };
+    this.emit('ending', { id });
   }
   updateEnding(input) {
     const e = this.ending;
@@ -2264,7 +2301,7 @@ export class Game {
     if (e.t > 0.8 && (input.pressed('confirm') || input.pressed('attack') || input.pressed('jump'))) {
       e.page++; e.t = 0;
       this.sfx.play('select');
-      if (e.page >= ENDING_PAGES.length) { this.scene = 'title'; this.titleSel = 0; this.save(); }
+      if (e.page >= e.pages.length) { this.scene = 'title'; this.titleSel = 0; this.save(); }
     }
   }
 
@@ -2467,7 +2504,7 @@ export class Game {
     const m = this.modal;
     if (!m) return false;
     switch (m.type) {
-      case 'analysis': if (m.t > 0.4) this.openDialog(m.next); return false;
+      case 'analysis': if (m.t > 0.4) this.openDialog(m.next, m.nextChoices || null); return false;
       case 'dialog': {
         const last = m.idx >= m.lines.length - 1;
         if (last && m.choices) { const n = m.choices.length; const i = row(472 - n * 28, 28, n, 26); if (i < 0) return false; m.sel = i; return true; }
@@ -2600,7 +2637,7 @@ export class Game {
         break;
       }
       case 'analysis':
-        if (m.t > 0.4 && ok) { this.sfx.play('confirm'); input.consume('attack'); input.consume('jump'); this.openDialog(m.next); }
+        if (m.t > 0.4 && ok) { this.sfx.play('confirm'); input.consume('attack'); input.consume('jump'); this.openDialog(m.next, m.nextChoices || null); }
         break;
       case 'boon': {
         if (m.t < 0.25) return; // 誤選択防止
@@ -2771,12 +2808,28 @@ export function fmtNum(n) {
   return n.toLocaleString('en-US');
 }
 
-export const ENDING_PAGES = [
-  ['刻守――師は、剣を下ろした。', '鐘楼の窓の外が、白みはじめている。'],
-  ['師の髪は、すっかり白くなっていた。', 'それでも胸の時計は、まだ静かに動いている。'],
-  ['「リラは覚えている、か」', '「怖かったのは朝ではない。あの子を見送ることだったのだな」'],
-  ['鐘は鳴らなかった。', '夜は戻らず、塔に、はじめての朝が来た。'],
-  ['駅のホームで、少女が手を振っている。見送るのは、父だ。', '――いってきます、お父さん。'],
-  ['夜明けの楔', '遊んでくれてありがとう。'],
-  ['クリア', 'ここで物語は完結です。', '続けて遊ぶと「終わらない夜」――敵がさらに強くなる挑戦です。'],
-];
+// 結末（tone は背景の明るさ：1 で夜明けの色、低いほど灰色の朝）
+export const ENDINGS = {
+  true: { name: '夜明けの楔', tone: 1, pages: [
+    ['刻守――師は、剣を下ろした。', '鐘楼の窓の外が、白みはじめている。'],
+    ['師の髪は、すっかり白くなっていた。', 'それでも胸の時計は、まだ静かに動いている。'],
+    ['「リラは覚えている、か」', '「怖かったのは朝ではない。あの子を見送ることだったのだな」'],
+    ['鐘は鳴らなかった。', '夜は戻らず、塔に、はじめての朝が来た。'],
+    ['駅のホームで、少女が手を振っている。見送るのは、父だ。', '――いってきます、お父さん。'],
+    ['結末「夜明けの楔」', '遊んでくれてありがとう。'],
+  ] },
+  sleep: { name: '師の眠り', tone: 0.6, pages: [
+    ['刻守――師は、膝をついた。', '鐘を鳴らす力は、もう残っていなかった。'],
+    ['「わかっていたのだ。夜を買っても、あの子は朝を待っている」', '師はそう言って、静かに目を閉じた。'],
+    ['鐘は鳴らなかった。', '塔に朝が来た。師は、深い眠りについたまま。'],
+    ['駅のホームで、少女がひとり、塔を見上げている。', '――いってきます。お父さん、起きたら手紙を書くね。'],
+    ['結末「師の眠り」', 'リラの言葉を師に届けていたら、別の朝があったかもしれない。'],
+  ] },
+  silence: { name: '鐘の沈黙', tone: 0.35, pages: [
+    ['刻守――師は、崩れ落ちた。', '鐘楼の鐘に、ひびが走る。'],
+    ['あなたは鐘を打ち砕いた。', '師がなぜ夜を戻していたのか、分からないまま。'],
+    ['夜は戻らなかった。', '塔に朝が来た。けれど、師は二度と目を覚まさなかった。'],
+    ['朝の汽車が出ていく。', '窓辺の少女は、誰かを探すように塔を見ていた。'],
+    ['結末「鐘の沈黙」', '師の日誌や、市場の少女のことを調べると、違う朝があるかもしれない。'],
+  ] },
+};

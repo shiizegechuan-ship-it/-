@@ -32,13 +32,18 @@ test('揺らぎと因果：夜が変わると戦闘部屋は揺らぐが、因�
   assert.ok(distinct.size >= 3, 'combat rooms vary per loop');
 });
 
-test('楔：枠の上限・重複不可・抜くと戻る', () => {
+test('楔：人の楔と技の楔は別の枠・枠の上限・重複不可・抜くと戻る', () => {
   const m = newMeta(1);
-  assert.equal(m.slots, 3, 'every difficulty starts with 3');
-  m.slots = 1;
+  assert.equal(m.slots, 3, 'every difficulty starts with 3 skill wedges');
+  assert.equal(m.personSlots, 2, 'and 2 person wedges');
+  m.personSlots = 1;
   assert.ok(addWedge(m, { target: 'lira' }));
-  assert.ok(!addWedge(m, { target: 'glen' }), 'no free slot');
-  m.slots = 2;
+  assert.ok(!addWedge(m, { target: 'glen' }), 'no free person slot');
+  // 技の楔は人の楔の枠を使わない
+  assert.ok(addWedge(m, { target: 'boon', boon: { id: 'echo', tier: 1 } }));
+  m.slots = 1;
+  assert.ok(!addWedge(m, { target: 'boon', boon: { id: 'gale', tier: 1 } }), 'no free skill slot');
+  m.personSlots = 2;
   assert.ok(!addWedge(m, { target: 'lira' }), 'duplicate');
   assert.ok(addWedge(m, { target: 'glen' }));
   const w = removeWedge(m, 0);

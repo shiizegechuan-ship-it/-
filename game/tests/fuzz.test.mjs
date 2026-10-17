@@ -35,7 +35,7 @@ function fuzz(seed, frames) {
       assert.ok(p.hp >= 0 && p.hp <= p.maxHp, `hp range @${f}: ${p.hp}/${p.maxHp}`);
       assert.ok(p.gauge >= 0 && p.gauge <= 100.001, `gauge @${f}`);
       for (const e of g.room.enemies) assert.ok(Number.isFinite(e.x) && Number.isFinite(e.y), `enemy pos @${f}`);
-      assert.ok(g.meta.wedges.length <= g.meta.slots, 'wedges within slots');
+      assert.ok(g.meta.wedges.filter((w) => w.target === 'boon').length <= g.meta.slots && g.meta.wedges.filter((w) => w.target !== 'boon').length <= g.meta.personSlots, 'wedges within slots');
     }
   }
   return { g, scenes, rooms };

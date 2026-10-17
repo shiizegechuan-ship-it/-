@@ -126,6 +126,8 @@ export const BOONS = {
   godspeed: { school: 'legend', name: '神速', desc: () => '攻撃の速さ ×1.4、移動の速さ ×1.25、回避のクールタイムなし' },
   stareater: { school: 'legend', name: '星喰らい', desc: () => '敵を倒すたび、近くの敵 3 体へ流星が降る（各70）' },
   towerblessing: { school: 'legend', name: '時計塔の加護', desc: () => '常時の術のダメージ ×2、発動の速さ ×1.5' },
+  // 最後の夜（第 3 夜）にだけ授かる力（店や候補には出ない）
+  dawnblade: { school: 'legend', special: true, name: '暁の剣', desc: () => '最後の夜の力。5 秒ごとに、部屋じゅうの敵（8 体まで）へ暁の光の剣が降る（各 90）。直接攻撃 +25%' },
   midas: { school: 'legend', name: '黄金律', desc: () => '敵から得る金貨 ×2。金貨を拾うたびに秒針ゲージ +2、HP +1' },
   // 仲間を呼ぶ（稀少）：選ぶと、そのお供がもう 1 匹ついてくる（夜をまたいで残る）
   call_hotaru: { school: 'rare', name: '仲間：ホタル', desc: () => 'お供のホタル（光の弾・光の帯・星火の雨）が仲間に加わる。夜が戻っても残る' },
@@ -223,6 +225,7 @@ export function computeStats(boons) {
   const s = {
     has,
     counts,
+    dawnblade: !!t('dawnblade'),
     dmgMul: (t('sandglass') ? 1.4 : 1) * (t('crown') ? 1.5 : 1) * (t('swordsaint') ? 1.7 + 0.15 * (t('swordsaint') - 1) : 1),
     maxHpMul: t('sandglass') ? 0.7 : 1,
     afterimageTime: t('afterimage') ? (t('afterimage') > 1 ? 0.8 : 0.6) : 0,
@@ -325,7 +328,7 @@ export function rollOffer(rng, owned, unlockedSchools, n = 3, diverse = false) {
 
 // 稀少の候補（まだ持っていないものから 3 つ）
 export const RARE_IDS = Object.keys(BOONS).filter((id) => BOONS[id].school === 'rare');
-export const LEGEND_IDS = Object.keys(BOONS).filter((id) => BOONS[id].school === 'legend');
+export const LEGEND_IDS = Object.keys(BOONS).filter((id) => BOONS[id].school === 'legend' && !BOONS[id].special);
 export function rollRare(rng, owned, n = 3, exclude = []) {
   return rng.shuffle(RARE_IDS.filter((id) => !owned.some((b) => b.id === id) && !exclude.includes(id))).slice(0, n);
 }

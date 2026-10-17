@@ -5,7 +5,8 @@ import { COMPANIONS, allComps, unionReady } from './companion.js';
 import { BOONS, forgeDiff, SCHOOLS, RESONANCE, synergyHints, schoolCounts, fusionsFor } from './boons.js';
 import { ACTIVE_ARTS } from './arts.js';
 import { ARTIFACTS, ARTIFACT_COLOR } from './artifacts.js';
-import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritLabel, DAWN_STEPS, dawnProgress } from './meta.js';
+import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritLabel, DAWN_STEPS, dawnProgress, ENDING_IDS } from './meta.js';
+import { ENDINGS } from './game.js';
 import { FLOOR_NAMES } from './world.js';
 import { expToNext, LEVEL } from './level.js';
 import { LB, lbStart, rewindGrid, cardRects } from './layout.js';
@@ -133,23 +134,19 @@ export function drawHud(ctx, game) {
     ctx.beginPath(); ctx.arc(sx + i * dotW, 52, i === run.ri ? 4 : 3, 0, Math.PI * 2); ctx.fill();
   });
 
-  // 右上：楔の枠
-  const slots = meta.slots;
+  // 右上：楔の枠（上の段が人の楔、下の段が技の楔。打った楔は塗りつぶし）
   const bx = VIEW_W - 18;
-  text(ctx, '楔', bx, 24, { size: 11, align: 'right', color: C.gold, bold: true });
-  for (let i = 0; i < 3; i++) {
-    const x = bx - 30 - i * 22, y = 14;
-    const w = meta.wedges[i];
-    if (i >= slots) { ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.strokeRect(x - 7, y, 14, 22); continue; }
-    if (w) {
-      ctx.fillStyle = C.gold;
-      ctx.beginPath(); ctx.moveTo(x - 6, y); ctx.lineTo(x + 6, y); ctx.lineTo(x + 2, y + 6); ctx.lineTo(x, y + 22); ctx.lineTo(x - 2, y + 6); ctx.closePath(); ctx.fill();
-    } else {
-      ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(x - 6, y); ctx.lineTo(x + 6, y); ctx.lineTo(x + 2, y + 6); ctx.lineTo(x, y + 22); ctx.lineTo(x - 2, y + 6); ctx.closePath(); ctx.stroke();
+  const wedgeRow = (label, used, slots, y, col) => {
+    text(ctx, label, bx, y + 12, { size: 10, align: 'right', color: col, bold: true });
+    for (let i = 0; i < slots; i++) {
+      const x = bx - 22 - i * 13;
+      ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y); ctx.lineTo(x + 1, y + 4); ctx.lineTo(x, y + 14); ctx.lineTo(x - 1, y + 4); ctx.closePath();
+      if (i < used) { ctx.fillStyle = col; ctx.fill(); } else { ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke(); }
     }
-  }
-  meta.wedges.forEach((w, i) => text(ctx, shortWedge(w), VIEW_W - 18, 52 + i * 13, { size: 10, align: 'right', color: '#d8b968' }));
+  };
+  wedgeRow('人', meta.wedges.filter((w) => w.target !== 'boon').length, meta.personSlots || 2, 10, '#ffb070');
+  wedgeRow('技', meta.wedges.filter((w) => w.target === 'boon').length, meta.slots, 28, C.gold);
+  meta.wedges.forEach((w, i) => text(ctx, shortWedge(w), VIEW_W - 18, 58 + i * 13, { size: 10, align: 'right', color: w.target === 'boon' ? '#d8b968' : '#ffb070' }));
 
   // 左下：強化
   const counts = schoolCounts(p.boons);
@@ -494,7 +491,7 @@ export function drawJournal(ctx, game, m) {
     if (m.tab === 0) {
       // 楔の状態もここで確認できる
       yy += 6;
-      text(ctx, `楔（${meta.wedges.length}/${meta.slots}）`, x + 28, yy, { size: 13, bold: true, color: C.gold }); yy += 18;
+      text(ctx, `楔（${wedgeCount(meta)}）`, x + 28, yy, { size: 13, bold: true, color: C.gold }); yy += 18;
       for (const wd of meta.wedges) { text(ctx, `◆ ${wedgeLabel(wd)}：${wd.target === 'boon' ? WEDGE_TARGETS.boon.effect : WEDGE_TARGETS[wd.target].effect}`, x + 40, yy, { size: 12, color: '#d8b968' }); yy += 16; }
     }
   } else {
@@ -527,7 +524,7 @@ export function drawTitle(ctx, game) {
   const opts = game.titleOptions();
   opts.forEach((o, i) => text(ctx, (i === game.titleSel ? '▶ ' : '') + o.label, VIEW_W / 2, 400 + i * 26, { size: 16, align: 'center', color: i === game.titleSel ? (o.id === 'diff' ? game.difficulty().color : C.gold) : o.id === 'diff' ? game.difficulty().color : '#bbb' }));
   text(ctx, game.touch ? 'タップで選ぶ' : '↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　術 V　調べる ↑', VIEW_W / 2, VIEW_H - 18, { size: 11, align: 'center', color: C.muted });
-  if (game.meta && game.meta.flags.ending) text(ctx, '★ クリア済み ― 夜明けを迎えた', VIEW_W / 2, 506, { size: 12, align: 'center', color: '#ffd38a' });
+  if (game.meta && game.meta.flags.ending) { const en = game.meta.flags.endings || {}; text(ctx, `★ クリア済み ― 結末 ${ENDING_IDS.filter((k) => en[k]).length}/${ENDING_IDS.length}（${ENDING_IDS.filter((k) => en[k]).map((k) => ENDINGS[k].name).join('・') || '夜明け'}）`, VIEW_W / 2, 506, { size: 12, align: 'center', color: '#ffd38a' }); }
   else if (game.meta) drawDawnStrip(ctx, game, 506);
 }
 
@@ -545,7 +542,7 @@ export function drawRewind(ctx, game) {
   ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(VIEW_W / 2, VIEW_H / 2); ctx.lineTo(VIEW_W / 2 + Math.cos(spin) * 190, VIEW_H / 2 + Math.sin(spin) * 190); ctx.stroke();
   ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(VIEW_W / 2, VIEW_H / 2); ctx.lineTo(VIEW_W / 2 + Math.cos(spin / 12) * 120, VIEW_H / 2 + Math.sin(spin / 12) * 120); ctx.stroke();
   ctx.restore();
-  const causeText = rep.cause === 'bell' ? '鐘が鳴った。夜が戻る。' : 'あなたは倒れた。夜が戻る。';
+  const causeText = rep.cause === 'bell' ? '鐘が鳴った。夜が戻る。' : rep.cause === 'wait' ? '決着を延ばした。鐘が鳴り、夜が戻る。' : 'あなたは倒れた。夜が戻る。';
   text(ctx, causeText + `　（第 ${rep.loop} 夜 → 第 ${meta.loop} 夜）`, VIEW_W / 2, 50, { size: 19, align: 'center', font: SERIF, color: rep.cause === 'bell' ? C.gold : '#efe6d2' });
   // 夜ごとに変わる語り（時間の経過と、師の変化）
   if (rep.story) { ctx.globalAlpha = clamp(t / 0.8, 0, 1); text(ctx, rep.story, VIEW_W / 2, 80, { size: 14, align: 'center', font: SERIF, color: '#d9c7a8' }); ctx.globalAlpha = 1; }
@@ -588,7 +585,7 @@ export function drawRewind(ctx, game) {
       if (on) { ctx.fillStyle = 'rgba(242,193,78,0.16)'; ctx.fillRect(bx - 6, byy - 24, g.cw, g.rowH - 6); }
       text(ctx, (on ? '▶ ' : '　') + o.label, bx, byy, { size: 17, color: on ? C.gold : '#d8d0c4' });
     });
-    text(ctx, `楔 ${meta.wedges.length}/${meta.slots}`, VIEW_W - 24, VIEW_H - 12, { size: 12, align: 'right', color: C.gold });
+    text(ctx, `楔 ${wedgeCount(meta)}`, VIEW_W - 24, VIEW_H - 12, { size: 12, align: 'right', color: C.gold });
     drawDawnStrip(ctx, game, VIEW_H - 12, 'left');
   } else if (r.mode === 'pull' || r.mode === 'wedgeBoon') {
     const pull = r.mode === 'pull';
@@ -601,7 +598,7 @@ export function drawRewind(ctx, game) {
     const autoW = !pull && game.carryAll();
     drawLightbox(ctx, game, {
       title: pull ? '楔を抜く ― 抜いた対象は次の夜、元に戻る' : autoW ? '強化の楔 ― めちゃ簡単：すべて自動で打たれている' : '強化に楔を打つ ― 次の夜も持ったまま始まる',
-      right: autoW ? `自動 ${items.length}` : `楔 ${meta.wedges.length}/${meta.slots}`,
+      right: autoW ? `自動 ${items.length}` : `楔 ${wedgeCount(meta)}`,
       items, sel: r.sub, color: C.gold, desc: autoW && r.lockedT > 0 ? 'めちゃ簡単では、すべての強化に自動で楔が打たれています（外せません。楔の枠は使いません）' : items[r.sub] ? items[r.sub].desc : '', st: r,
       hint: autoW ? (game.touch ? '枠の外で戻る' : '↑↓ 見る　C 戻る') : undefined,
     });
@@ -612,19 +609,20 @@ export function drawRewind(ctx, game) {
 }
 
 // ───────── 結末 ─────────
-import { ENDING_PAGES } from './game.js';
+// 楔の数の表示：人 1/2・技 0/3
+const wedgeCount = (meta) => `人 ${meta.wedges.filter((w) => w.target !== 'boon').length}/${meta.personSlots || 2}・技 ${meta.wedges.filter((w) => w.target === 'boon').length}/${meta.slots}`;
 export function drawEnding(ctx, game) {
-  const e = game.ending;
-  const k = clamp(e.page / (ENDING_PAGES.length - 1), 0, 1);
+  const e = game.ending, PAGES = e.pages;
+  const k = clamp(e.page / (PAGES.length - 1), 0, 1) * (e.tone ?? 1);
   const g = ctx.createLinearGradient(0, 0, 0, VIEW_H);
   g.addColorStop(0, `rgb(${30 + k * 200},${20 + k * 140},${40 + k * 60})`);
   g.addColorStop(1, `rgb(${10 + k * 90},${8 + k * 50},${14 + k * 20})`);
   ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  const page = ENDING_PAGES[Math.min(e.page, ENDING_PAGES.length - 1)];
+  const page = PAGES[Math.min(e.page, PAGES.length - 1)];
   const a = clamp(e.t / 0.8, 0, 1);
   ctx.globalAlpha = a;
-  page.forEach((l, i) => text(ctx, l, VIEW_W / 2, VIEW_H / 2 - 10 + i * 34, { size: i === 0 && e.page === ENDING_PAGES.length - 1 ? 36 : 20, align: 'center', font: SERIF, color: '#fff6e0' }));
-  if (e.page === ENDING_PAGES.length - 1) {
+  page.forEach((l, i) => text(ctx, l, VIEW_W / 2, VIEW_H / 2 - 10 + i * 34, { size: i === 0 && e.page === PAGES.length - 1 ? 36 : 20, align: 'center', font: SERIF, color: '#fff6e0' }));
+  if (e.page === PAGES.length - 1) {
     const m = game.meta;
     text(ctx, `${m.loop} 夜／倒れた回数 ${m.stats.deaths}／偽りの勝利 ${m.stats.falseWins}`, VIEW_W / 2, VIEW_H / 2 + 90, { size: 12, align: 'center', color: '#fff6e0' });
   }
