@@ -1537,7 +1537,7 @@ test('常時の術で部屋の敵が一瞬で全滅したら、その夜は常�
   assert.ok(!g.run.passiveResist);
 });
 
-test('めちゃ簡単の自動の飛び込みは画面全体：画面に映っていれば遠くの敵にも飛び込み、画面の外の敵は狙わない', () => {
+test('めちゃ簡単の自動の飛び込みはフロア全体：遠くの敵にも、画面の外の敵にも飛び込む', () => {
   const rows = FLAT.map((r) => r + '#'.repeat(0));
   const g = sandbox(rows); const d = new Driver(g); d.frame(2);
   g.run.diff = { ...g.run.diff, id: 'veryeasy', autoAim: true };
@@ -1551,10 +1551,13 @@ test('めちゃ簡単の自動の飛び込みは画面全体：画面に映っ�
   d.frame(1, ['attack']); assert.equal(p.state, 'autodash');
   d.until(() => far.hp < far.maxHp, 90);
   assert.ok(far.hp < far.maxHp);
-  // 画面の外へ置くと狙わない
+  // 画面の外へ置いても狙い、飛び込んで斬る
   d.frame(30); p.state = 'normal'; p.x = 60; d.frame(30);
-  far.x = g.cam.x + 640 + 200; far.vx = 0;
-  assert.ok(cx(far) > g.cam.x + 640 + 10); assert.equal(p.autoTarget(g), null);
+  far.x = g.cam.x + 640 + 200; far.vx = 0; far.hp = far.maxHp;
+  assert.ok(cx(far) > g.cam.x + 640 + 10); assert.equal(p.autoTarget(g), far, 'off screen');
+  d.frame(1, ['attack']); assert.equal(p.state, 'autodash');
+  d.until(() => far.hp < far.maxHp, 120);
+  assert.ok(far.hp < far.maxHp, 'reached the off-screen foe');
 });
 
 test('戦闘部屋に入った時、画面の中の主人公から離れた所に必ず 1 体いる（すべての難易度・すべての戦闘部屋）', async () => {

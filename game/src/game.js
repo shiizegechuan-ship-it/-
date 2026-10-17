@@ -10,6 +10,7 @@ import { castArt, castWarpSlash, updateSpells, updatePassives, PROCS, ACTIVE_ART
 import { ARTIFACTS, rollArtifacts } from './artifacts.js';
 import { Fx } from './fx.js';
 import { NullSfx } from './audio.js';
+import { AXIS } from './input.js';
 import { BOONS, LEGEND_IDS, rollOffer, rollRare, boonMax, canForge, PASSIVE_IDS, passiveWeight, readyFusions, countsForThreat } from './boons.js';
 import { expToNext, expFor, levelBonus, LEVEL } from './level.js';
 import { rewindGrid, lbRowAt } from './layout.js';
@@ -46,6 +47,30 @@ export const ENTRY_GUARD = 0.6 + SPAWN_GUARD;
 // 常時の術で部屋の敵が一瞬で全滅するようになったら、その夜の間、常時の術を 7 割防ぐ
 export const PASSIVE_WIPE = { within: 2.5, share: 0.7, resist: 0.7 };
 const GOLD = { summoner: 9, mite: 0, lancer: 7, trapper: 7, clocker: 7, vane: 6, squire: 2, mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
+
+// タップ移動の行き先（主人公の左上の座標）。x の列ごとに、いちばん下の「上に体が収まる床」を探す
+export function tapGoal(map, p, wx, wy, easy) {
+  const free = (x, y) => p.boxFree(map, x, y);
+  const lowest = (col) => {
+    const x = col * TILE + (TILE - p.w) / 2;
+    for (let ty = map.h - 1; ty >= 1; ty--) {
+      if (map.get(col, ty) !== EMPTY && map.get(col, ty - 1) === EMPTY && free(x, ty * TILE - p.h)) return { x, y: ty * TILE - p.h, top: ty * TILE };
+    }
+    return null;
+  };
+  const c0 = clamp(Math.floor(wx / TILE), 0, map.w - 1);
+  for (let k = 0; k < map.w; k++) for (const col of k ? [c0 - k, c0 + k] : [c0]) {
+    if (col < 0 || col >= map.w) continue;
+    const f = lowest(col);
+    if (!f) continue;
+    if (!easy) return { x: f.x, y: f.y };
+    // 簡単以下：その列の床の上の空中（タップした高さ。床より下や壁の中なら、床の少し上）
+    let ay = clamp(wy - p.h / 2, 4, f.y);
+    while (ay < f.y && !free(f.x, ay)) ay += 4;
+    return { x: f.x, y: Math.min(ay, f.y) };
+  }
+  return null;
+}
 
 export class Game {
   constructor(opts = {}) {
@@ -630,6 +655,7 @@ export class Game {
   // ───────── 毎フレーム ─────────
   tick(input) {
     this.time += DT;
+    input.vertical = !!(this.modal && this.modal.type === 'code'); // 暗号の入力中は、スティックの上下を広く受け付ける
     if (this.scene === 'title') this.updateTitle(input);
     else if (this.scene === 'play') this.updatePlay(input);
     else if (this.scene === 'rewind') this.updateRewind(input);
@@ -678,7 +704,11 @@ export class Game {
       const it = this.nearestInteractable();
       if (it && this.interactPrompt(it)) { input.consume('jump'); input.consume('confirm'); p.bufferT = 0; this.tryInteract(); }
       // 部屋を終えたら（報酬を取り、仕掛けも済んだら）、跳ぶボタンで扉の横までくるくる回って移動し、落ちている金貨なども拾う
+      // 部屋を終えて報酬（ひし形）が出ていたら、まず報酬の所までくるくる回って移動する
+      else if (this.rewardTravelGoal()) { input.consume('jump'); input.consume('confirm'); p.bufferT = 0; const g = this.rewardTravelGoal(); p.startTravel(g.x, g.y); this.sfx.play('dodge'); }
       else if (this.canAutoTravel()) { input.consume('jump'); input.consume('confirm'); p.bufferT = 0; this.autoTravel(); }
+      // 戦いの無い部屋：跳ぶボタンで、右にある最寄りの調べられる所へ移動する（部屋ごとに 1 回・左から右へだけ）
+      else if (this.eventHopGoal()) { input.consume('jump'); input.consume('confirm'); p.bufferT = 0; const g = this.eventHopGoal(); this.room.hopUsed = true; p.startTravel(g.x, g.y); this.sfx.play('dodge'); }
     }
     p.update(this, input, pdt);
     if (p.wallSlam) this.onWallSlam();
@@ -1643,6 +1673,48 @@ export class Game {
     }
     return { gx: bx, gy: feet };
   }
+  // タップで移動（タッチ操作）。x・y は画面の座標（960×540）。
+  // 普通以上：タップした x の列のいちばん下の床へ降り立つ（床が無ければ、いちばん近い x の列のいちばん下の床）。
+  // 簡単以下：タップした所に近い、床がある所の上の空中へ（着いたら落ちて、その床に乗る）
+  tapMove(x, y) {
+    const p = this.player, map = this.map;
+    if (this.scene !== 'play' || this.modal || !p || !['normal', 'attack'].includes(p.state) || !this.room) return false;
+    const wx = this.cam.x + x / ZOOM, wy = this.cam.y + y / ZOOM;
+    const easy = DIFF_ORDER.indexOf(this.difficulty().id) <= DIFF_ORDER.indexOf('easy');
+    const goal = tapGoal(map, p, wx, wy, easy);
+    if (!goal || Math.hypot(goal.x - p.x, goal.y - p.y) < 8) return false;
+    p.startTravel(goal.x, goal.y, { air: easy });
+    this.sfx.play('dodge');
+    return true;
+  }
+  // 戦い終えた部屋の報酬（ひし形）の真下の床。報酬に重なる所へ降り立つ
+  rewardTravelGoal() {
+    const room = this.room, p = this.player;
+    if (this.modal || p.state !== 'normal' || room.enemies.some((e) => e.alive && !(e.boss && e.defeated))) return null;
+    const rw = room.items.find((it) => it.kind === 'reward' && !it.taken);
+    if (!rw || overlap(rw, p)) return null;
+    const x = clamp(cx(rw) - p.w / 2, 4, this.map.pxW - p.w - 4);
+    const y = this.map.groundBelow(cx(rw), rw.y + rw.h - 4) - p.h;
+    if (!(y < this.map.pxH) || y + p.h < rw.y || y > rw.y + rw.h + 8) return null; // 報酬が床から離れすぎていたら動かない
+    return { x, y };
+  }
+  // 戦いの無い部屋で、右側にある最寄りのイベント地点（話す・読む・店・祠など）の前
+  eventHopGoal() {
+    const room = this.room, p = this.player;
+    if (room.hopUsed || this.modal || p.state !== 'normal' || !p.onGround) return null;
+    if (['combat', 'trial', 'elite', 'elite2', 'boss', 'golden'].includes(room.desc.type) || room.enemies.some((e) => e.alive)) return null;
+    let best = null;
+    for (const it of room.items) {
+      if (it.kind === 'door' || it.kind === 'reward' || (it.vault && !this.run.vaultOpen) || !this.interactPrompt(it)) continue;
+      if (cx(it) < cx(p) + 40) continue; // 左から右へだけ（右から左へは戻らない）
+      if (!best || cx(it) < cx(best)) best = it;
+    }
+    if (!best) return null;
+    const x = clamp(cx(best) - p.w / 2, 4, this.map.pxW - p.w - 4);
+    const y = this.map.groundBelow(cx(best), best.y + best.h - 6) - p.h;
+    if (!(y < this.map.pxH) || this.map.solidAt(x + p.w / 2, y + p.h / 2)) return null;
+    return { x, y };
+  }
   canAutoTravel() {
     const room = this.room, p = this.player;
     if (!room.doorsOpen || this.modal || p.state !== 'normal') return false;
@@ -2264,6 +2336,7 @@ export class Game {
     if (!a) return true;
     const mx = Math.abs(a.x), my = Math.abs(a.y);
     if (mx < 0.2 && my < 0.2) return true; // 十字キー・キーボード
+    if (input.vertical) return dir === 'left' || dir === 'right' ? mx > my * AXIS.vSide : my > mx * AXIS.vUp; // 暗号：上下を広く
     return dir === 'left' || dir === 'right' ? mx >= my : my > mx;
   }
   difficulty() { return DIFFICULTY[(this.meta && this.meta.difficulty) || this.settings.difficulty || 'normal'] || DIFFICULTY.normal; }

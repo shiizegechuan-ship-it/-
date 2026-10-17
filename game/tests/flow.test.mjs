@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cx } from '../src/util.js';
-import { newGame, Driver } from './helpers.mjs';
+import { newGame, Driver, sandbox } from './helpers.mjs';
 import { addWedge, learn } from '../src/meta.js';
 import { MIN_FIGHT } from '../src/game.js';
 
@@ -372,4 +372,89 @@ test('増援は戦闘部屋だけ：中ボス部屋は全滅で即制圧のま�
   for (const e of g.room.enemies) if (!e.boss) { e.hp = 0; e.alive = false; }
   d.frame(3);
   assert.ok(!g.room.incoming || g.room.incoming.length === 0);
+});
+
+import { tapGoal } from '../src/game.js';
+import { TILE } from '../src/config.js';
+test('跳ぶボタン：戦いを終えて報酬（ひし形）が出たら、報酬の所までくるくる回って移動して取る', () => {
+  const g = newGame(5); const d = new Driver(g);
+  g.enterRoom(0, g.run.plan.floors[0].findIndex((r) => r.type === 'combat')); g.modal = null;
+  for (const e of g.room.enemies) { e.alive = false; }
+  g.room.enemies = []; g.room.t = 99; g.room.incoming = [];
+  g.clearRoom(false);
+  const rw = g.room.items.find((it) => it.kind === 'reward');
+  assert.ok(rw);
+  const p = g.player;
+  d.until(() => p.onGround, 60);
+  if (Math.abs(cx(rw) - cx(p)) < 60) p.x = cx(rw) + 200 < g.map.pxW - 40 ? cx(rw) + 200 : cx(rw) - 200;
+  d.frame(20);
+  assert.ok(g.rewardTravelGoal(), 'goal');
+  d.frame(1, ['jump']);
+  assert.equal(p.state, 'travel');
+  d.frame(70);
+  assert.ok(rw.taken || g.modal, 'reward taken');
+});
+
+test('跳ぶボタン：戦いの無い部屋では、右にある最寄りのイベント地点へ 1 回だけ移動する（右から左へは戻らない）', () => {
+  const g = newGame(5); const d = new Driver(g);
+  const fi = g.run.plan.floors.findIndex((fl) => fl.some((r) => r.type === 'shop'));
+  g.enterRoom(fi, g.run.plan.floors[fi].findIndex((r) => r.type === 'shop')); g.modal = null;
+  const p = g.player, shop = g.room.items.find((it) => it.kind === 'merchant');
+  d.until(() => p.onGround, 60); d.frame(5);
+  if (cx(shop) < cx(p) + 60) { p.x = Math.max(40, shop.x - 200); d.until(() => p.onGround, 60); d.frame(5); }
+  assert.ok(g.eventHopGoal(), 'hop goal');
+  d.frame(1, ['jump']);
+  assert.equal(p.state, 'travel');
+  d.frame(70);
+  assert.ok(Math.abs(cx(p) - cx(shop)) < 30, 'arrived at the merchant');
+  assert.equal(g.nearestInteractable(), shop);
+  // もう一度跳ぶと、普通に跳ぶ（部屋ごとに 1 回）
+  p.x = Math.max(40, shop.x - 200); d.until(() => p.onGround, 60); d.frame(5);
+  assert.equal(g.eventHopGoal(), null);
+  const y0 = p.y; d.frame(1, ['jump']); d.frame(5);
+  assert.ok(p.y < y0 - 5, 'normal jump');
+  // 右から左へは移動しない
+  const g2 = newGame(5); const d2 = new Driver(g2);
+  g2.enterRoom(fi, g2.run.plan.floors[fi].findIndex((r) => r.type === 'shop')); g2.modal = null;
+  const s2 = g2.room.items.find((it) => it.kind === 'merchant');
+  g2.player.x = Math.min(g2.map.pxW - 60, s2.x + s2.w + 120); d2.until(() => g2.player.onGround, 60); d2.frame(5);
+  const right = g2.room.items.some((it) => it.kind !== 'door' && g2.interactPrompt(it) && cx(it) > cx(g2.player) + 40);
+  if (!right) assert.equal(g2.eventHopGoal(), null);
+});
+
+test('タップ移動：普通以上はタップした x の列のいちばん下の床へ、簡単以下は床の上の空中へ。床の無い列ではいちばん近い列', () => {
+  const rows = [
+    '################################################',
+    ...Array.from({ length: 8 }, () => '#..............................................#'),
+    '#....=========.................................#',
+    ...Array.from({ length: 4 }, () => '#..............................................#'),
+    '#P.............................................#',
+    '##########.....#################################',
+    '##########.....#################################',
+    '##########.....#################################',
+  ];
+  const g = sandbox(rows); const p = g.player;
+  // 板の真上をタップ：普通以上は板ではなく、その列のいちばん下の床
+  let goal = tapGoal(g.map, p, 8 * TILE, 5 * TILE, false);
+  assert.equal(goal.y + p.h, 15 * TILE);
+  assert.equal(Math.floor((goal.x + p.w / 2) / TILE), 8);
+  // 穴（床の無い列）をタップ：いちばん近い床のある列
+  // （その列に板しか無ければ、板がその列のいちばん下の床）
+  goal = tapGoal(g.map, p, 12 * TILE + 5, 10 * TILE, false);
+  assert.equal(goal.y + p.h, 9 * TILE);
+  goal = tapGoal(g.map, p, 14 * TILE + 5, 10 * TILE, false);
+  const col = Math.floor((goal.x + p.w / 2) / TILE);
+  assert.ok(col === 13 || col === 15, `nearest column with floor: ${col}`);
+  assert.ok(g.map.get(col, Math.floor((goal.y + p.h) / TILE)) !== 0, 'stands on a floor');
+  // 簡単以下：タップした高さの空中（床のある列の上）
+  goal = tapGoal(g.map, p, 30 * TILE, 6 * TILE, true);
+  assert.ok(goal.y + p.h < 15 * TILE - 60, 'in the air');
+  assert.equal(Math.floor((goal.x + p.w / 2) / TILE), 30);
+  // 実際に動く：画面の座標でタップすると移動して、着いたら落ちて床に乗る
+  g.run.diff = { ...g.run.diff, id: 'easy' }; g.meta.difficulty = 'easy';
+  const d = new Driver(g); d.frame(5);
+  assert.ok(g.tapMove((30 * TILE - g.cam.x) * 1.5, (6 * TILE - g.cam.y) * 1.5));
+  assert.equal(p.state, 'travel');
+  d.frame(60); d.until(() => p.onGround, 120);
+  assert.ok(Math.abs(cx(p) - 30 * TILE - TILE / 2) < 20 && Math.abs(p.y + p.h - 15 * TILE) < 2, 'landed below the tap');
 });

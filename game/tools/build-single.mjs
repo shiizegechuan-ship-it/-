@@ -16,7 +16,7 @@ const js = readFileSync(tmp, 'utf8');
 if (js.includes('</script')) throw new Error('bundle contains </script');
 
 const html = `<title>夜明けの楔</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,14 +24,16 @@ const html = `<title>夜明けの楔</title>
 <style>
 /* 1画面のゲーム。夜の時計塔に合わせた暗い単一テーマ */
 :root { --night: #050408; --stage: #0d0b14; --ink: #efe6d2; --gold: #f2c14e; --veil: rgba(5,4,8,0.82); color-scheme: dark; }
-html, body { height: 100%; margin: 0; }
+html, body { height: 100%; margin: 0; -webkit-text-size-adjust: 100%; }
+/* 長押しでの選択・虫めがね・メニューを出さない（指を置いたままでも操作と音が止まらないように） */
+html, body, canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
 body { background: var(--night); color: var(--ink); overflow: hidden; overscroll-behavior: none;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0;
   font-family: 'DotGothic16', 'Hiragino Sans', 'Yu Gothic', sans-serif; }
 #stage { position: fixed; top: 8px; bottom: 8px; left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
   display: flex; align-items: center; justify-content: center; }
-body.touch { touch-action: none; user-select: none; -webkit-user-select: none; }
+html.touch, body.touch { touch-action: none; user-select: none; -webkit-user-select: none; }
 body.touch-portrait #stage { bottom: 280px; align-items: flex-end; }
 #game { display: block; image-rendering: pixelated; background: var(--stage); max-width: 100%; outline: none; touch-action: none; }
 #game:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
@@ -49,11 +51,14 @@ ${js}
 (function () {
   var c = document.getElementById('game'), f = document.getElementById('focus');
   if (document.body.classList.contains('touch')) document.getElementById('focus-hint').textContent = '画面の下のスティックとボタンで操作します。横向きがおすすめです';
-  function go() { f.hidden = true; c.focus(); }
+  // タッチの端末では画面へフォーカスを移さない（iPhone でフォーカスした要素へ画面がスクロールし、ページがずれることがある）
+  var touch = document.body.classList.contains('touch');
+  function focusGame() { if (!touch) c.focus({ preventScroll: true }); }
+  function go() { f.hidden = true; focusGame(); }
   f.addEventListener('click', go);
   f.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') go(); });
-  c.addEventListener('pointerdown', function () { c.focus(); });
-  window.addEventListener('blur', function () { if (!document.body.classList.contains('touch')) f.hidden = false; });
+  c.addEventListener('pointerdown', focusGame);
+  window.addEventListener('blur', function () { if (!touch) f.hidden = false; });
 })();
 </script>
 `;

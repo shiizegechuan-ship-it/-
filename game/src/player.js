@@ -1,6 +1,6 @@
 import { PLAYER as P, ATTACKS, F, TILE } from './config.js';
 import { approach, sign, cx, cy } from './util.js';
-import { moveBody, standingOnOneway, SOLID, ONEWAY } from './tilemap.js';
+import { moveBody, dropShift, standingOnOneway, SOLID, ONEWAY } from './tilemap.js';
 import { computeStats } from './boons.js';
 import { applyArtifacts } from './artifacts.js';
 import { spawnWave, MELEE } from './arts.js';
@@ -163,7 +163,7 @@ export class Player {
   tryJump(game, input) {
     if (this.bufferT > 0 && this.coyoteT > 0) {
       // 下＋ジャンプですり抜け床を降りる
-      if (input.down('down') && this.onGround && standingOnOneway(this, game.map)) {
+      if (input.down('down') && this.onGround && this.readyDrop(game.map)) {
         this.dropT = 0.2; this.bufferT = 0; this.coyoteT = 0; this.onGround = false; this.y += 1;
         return true;
       }
@@ -187,6 +187,14 @@ export class Player {
     return false;
   }
 
+  // すり抜け床を降りられるなら、壁の床に掛かった片足を外して true（降りられないなら何もしない）
+  readyDrop(map) {
+    const dx = dropShift(this, map);
+    if (dx === null) return false;
+    this.x += dx;
+    return true;
+  }
+
   horizontal(dirX, dt, speedMul = 1) {
     const max = P.runSpeed * this.stats.moveMul * speedMul;
     if (dirX !== 0) {
@@ -203,10 +211,11 @@ export class Player {
   tryDropSpin(game, input, dt) {
     const a = input.padAxis;
     const downOnly = input.down('down') && (!a || Math.abs(a.y) > Math.abs(a.x) || (Math.abs(a.x) < 0.2 && Math.abs(a.y) < 0.2));
-    if (!downOnly || !this.onGround || !standingOnOneway(this, game.map) || input.down('attack') || input.down('jump')) { this.downHoldT = 0; return false; }
+    if (!downOnly || !this.onGround || dropShift(this, game.map) === null || input.down('attack') || input.down('jump')) { this.downHoldT = 0; return false; }
     this.downHoldT = (this.downHoldT || 0) + dt;
     if (this.downHoldT < 0.1) return false;
     this.downHoldT = 0;
+    this.readyDrop(game.map);
     this.dropT = 0.25; this.coyoteT = 0; this.onGround = false; this.y += 1; this.vy = 80;
     this.startAttack(game, 0, 'dropSpin');
     game.fx.ring(this.x + this.w / 2, this.y + this.h / 2, '#cfe8ff', 30, 0.25);
@@ -295,13 +304,11 @@ export class Player {
     const d = game.run && game.run.diff;
     if (!d || !d.autoAim || !game.room) return null;
     let best = null, bd = Infinity;
-    // 画面に映っている敵なら、どれだけ離れていても飛び込む（画面全体）
-    const cam = game.cam || { x: cx(this) - 320, y: cy(this) - 180 }, vw = 640, vh = 360;
+    // 部屋（フロア）じゅうの敵が対象。画面の外にいても、いちばん近い敵へ飛び込む
     for (const e of game.room.enemies) {
       if (!e.alive || (e.boss && (e.defeated || e.invuln))) continue;
       // 枠の外の敵や、横に降り立てる空きの無い敵には飛び込まない（戻って来られなくなる）
       if (cx(e) < 0 || cx(e) > game.map.pxW || cy(e) < 0 || cy(e) > game.map.pxH) continue;
-      if (cx(e) < cam.x - 4 || cx(e) > cam.x + vw + 4 || cy(e) < cam.y - 4 || cy(e) > cam.y + vh + 4) continue;
       const dd = Math.hypot(cx(e) - this.x - this.w / 2, cy(e) - this.y - this.h / 2);
       if (dd < bd) { bd = dd; best = e; }
     }
@@ -313,9 +320,10 @@ export class Player {
     return gapX <= 34 && Math.abs(cy(e) - (this.y + this.h / 2)) < e.h / 2 + 14;
   }
   // 部屋を終えたあと、扉の横までくるくる回りながら飛んでいく（壁は抜ける）
-  startTravel(tx, ty) {
+  // air：行き先は空中（着いたら、そのまま落ちる）
+  startTravel(tx, ty, { air = false } = {}) {
     this.state = 'travel'; this.stateT = 0; this.atk = null;
-    this.travel = { x0: this.x, y0: this.y, tx, ty, t: 0, dur: Math.min(0.9, 0.35 + Math.hypot(tx - this.x, ty - this.y) / 900) };
+    this.travel = { x0: this.x, y0: this.y, tx, ty, t: 0, air, dur: Math.min(0.9, 0.35 + Math.hypot(tx - this.x, ty - this.y) / 900) };
     this.face = Math.sign(tx - this.x) || this.face;
   }
   updateTravel(game, dt) {
@@ -328,7 +336,11 @@ export class Player {
     this.iframeT = Math.max(this.iframeT, 0.1);
     this.flipT = 0.34 - ((tr.t * 2.6) % 1) * 0.34;
     if (Math.floor(tr.t / 0.06) !== Math.floor((tr.t - dt) / 0.06)) game.fx.afterimage(this);
-    if (k >= 1) { this.x = tr.tx; this.y = tr.ty; this.state = 'normal'; this.stateT = 0; this.flipT = 0; this.onGround = true; this.travel = null; game.fx.landPuff(this.x + this.w / 2, this.y + this.h, 0.5); }
+    if (k >= 1) {
+      this.x = tr.tx; this.y = tr.ty; this.state = 'normal'; this.stateT = 0; this.flipT = 0; this.travel = null;
+      if (tr.air) { this.onGround = false; return; }
+      this.onGround = true; game.fx.landPuff(this.x + this.w / 2, this.y + this.h, 0.5);
+    }
   }
   // めちゃ簡単の飛び込み：壁や床とは当たらない（すり抜ける）。間に壁があれば、弧を描いて回り込むように飛ぶ
   boxFree(map, x, y) {
@@ -382,7 +394,7 @@ export class Player {
     const arc = this.autoDashArc(game.map, this.x, this.y, g);
     const dist = Math.hypot(g.x - this.x, g.y - this.y) + Math.abs(arc) * 1.2;
     this.state = 'autodash'; this.stateT = 0; this.atk = null;
-    this.autoDash = { e: tgt, t: 0, x0: this.x, y0: this.y, side, arc, dur: Math.min(0.5, 0.14 + dist / 1100) };
+    this.autoDash = { e: tgt, t: 0, x0: this.x, y0: this.y, side, arc, dur: Math.min(0.75, 0.14 + dist / 1100) }; // 画面の外の遠い敵へは少し長く
     this.vx = 0; this.vy = 0;
     this.iframeT = Math.max(this.iframeT, 0.12);
     this.face = Math.sign(cx(tgt) - (this.x + this.w / 2)) || this.face;

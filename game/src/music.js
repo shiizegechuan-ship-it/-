@@ -9,7 +9,7 @@ const FRAME = 1 / 60;
 const ENV = {
   lead: [13, 12, 11, 10, 10, 9],
   counter: [10, 9, 9, 8, 8, 7],
-  chord: [9, 8, 7, 6, 6, 5, 5, 4],
+  chord: [12, 11, 10, 9, 9, 8, 8, 7],
   bass: [15],
   k: [15, 13, 10, 7, 4, 2, 0],
   s: [14, 12, 10, 8, 6, 5, 4, 3, 2, 1, 0],
@@ -17,12 +17,15 @@ const ENV = {
   o: [8, 7, 6, 6, 5, 4, 3, 2, 2, 1, 0],
 };
 // 声部ごとの音量のつり合い
-const MIX = { lead: 0.15, counter: 0.1, bass: 0.2, chord: 0.06, drum: 0.15, echo: 0.3 };
+const MIX = { lead: 0.15, counter: 0.1, bass: 0.2, chord: 0.075, drum: 0.15, echo: 0.3 };
 // ノイズの細かさ（1 秒あたりの切り替わり）と、短い周期（金属的な音）かどうか
 const NOISE = { k: [1800, false], s: [11000, false], h: [42000, true], o: [42000, true] };
 const VIB = [0, 1, 2, 1, 0, -1, -2, -1]; // 1 コマごとの音程のずれ（段）
 const VIB_STEP = 0.0045; // 1 段あたり（約 8 セント）
 export const HICUT = 4200; // BGM のハイカット（Hz）
+// 先読みの長さ。描画（requestAnimationFrame）が長押しなどで一瞬止まっても、曲が途切れないように長めにとり、
+// 描画とは別のタイマーからも予約する
+export const LOOKAHEAD = 0.6;
 
 const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -44,6 +47,7 @@ export class Music {
     const c = this.ctx;
     if (!c || c.state !== 'running') return;
     if (!this.waves) this.init();
+    if (!this.timer && typeof setInterval === 'function') { this.timer = setInterval(() => { if (this.cur && this.ctx.state === 'running') this.schedule(); }, 100); if (this.timer.unref) this.timer.unref(); }
     if (quiet !== this.quiet) { this.quiet = quiet; this.applyGain(); }
     if ((this.cur ? this.cur.id : null) !== want) { this.stop(); if (want) this.start(want); }
     if (this.cur) this.schedule();
@@ -108,11 +112,11 @@ export class Music {
     setTimeout(() => g.disconnect(), 900);
     this.cur = null;
   }
-  // 少し先（0.25 秒）までの音を予約する。タブを離れて遅れたら、今から鳴らし直す
+  // 少し先（LOOKAHEAD 秒）までの音を予約する。タブを離れて遅れたら、今から鳴らし直す
   schedule() {
     const cur = this.cur, now = this.ctx.currentTime;
     if (cur.t < now - 0.1) cur.t = now + 0.05;
-    while (cur.t < now + 0.25) {
+    while (cur.t < now + LOOKAHEAD) {
       for (const { tr, n } of cur.song.byStep[cur.step % cur.song.steps]) this.play(tr, n, cur.t, n.len * cur.sd, cur);
       cur.step++; cur.t += cur.sd;
     }
@@ -125,7 +129,8 @@ export class Music {
       const g = c.createGain();
       this.env(g.gain, t, dur, ENV[n.hit], MIX.drum);
       src.connect(g); g.connect(cur.gain);
-      src.start(t, (cur.step * 0.137) % 0.5); // 打つたびに少し違う所から（ゲームの乱数は使わない） src.stop(t + dur);
+      src.start(t, (cur.step * 0.137) % 0.5); // 打つたびに少し違う所から（ゲームの乱数は使わない）
+      src.stop(t + dur); // ループする音源なので、止めないと鳴らないまま溜まり続ける
       src.part = 'drum';
       return src;
     }

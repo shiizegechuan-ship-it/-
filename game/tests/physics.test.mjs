@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sandbox, Driver, FLAT } from './helpers.mjs';
+import { sandbox, Driver, FLAT, newGame } from './helpers.mjs';
 import { PLAYER } from '../src/config.js';
 
 const LEDGE = [
@@ -161,6 +161,57 @@ test('ゲームパッド：先頭に動かない仮想デバイスがいても�
   // 非標準配置の十字キー（軸 6）
   const ns = { connected: true, mapping: '', index: 2, axes: [0, 0, 0, 0, 0, 0, 1, 0], buttons: [] };
   assert.ok(readPads([ns], {}).right);
+});
+
+test('暗号の入力中は、スティックの上下を広く・左右を狭く受け付ける（斜めに倒しても数字が変わる）', () => {
+  const pad = (axes) => ({ connected: true, mapping: 'standard', index: 0, axes, buttons: [] });
+  // 普段：やや斜め上（x 0.7・y -0.45）は右だけ
+  let r = readPads([pad([0.7, -0.45])], {});
+  assert.ok(r.right && !r.up);
+  // 暗号：同じ倒し方で上（左右は、はっきり横へ倒したときだけ）
+  r = readPads([pad([0.7, -0.45])], {}, true);
+  assert.ok(r.up && !r.right);
+  r = readPads([pad([0.9, -0.3])], {}, true);
+  assert.ok(r.right && !r.up);
+  // 画面側：暗号の画面を開いている間だけ input.vertical が立つ
+  const g = newGame(3); const d = new Driver(g);
+  d.frame(1); assert.ok(!d.in.vertical);
+  g.openCode(); d.frame(1); assert.ok(d.in.vertical);
+  g.modal = null; d.frame(1); assert.ok(!d.in.vertical);
+});
+
+test('タッチの指がすべて離れたら、その入力源の押下はまとめて離す（方向が押されたままにならない）', () => {
+  const inp = new Input();
+  inp.set('right', true, 'touch'); inp.set('attack', true, 'touch'); inp.set('right', true, 'kb'); inp.step();
+  inp.releaseSource('touch'); inp.step();
+  assert.ok(inp.down('right'), 'keyboard still holds right');
+  assert.ok(!inp.down('attack'));
+  inp.set('right', false, 'kb'); inp.step();
+  assert.ok(!inp.down('right'));
+});
+
+test('すり抜け床の端が壁の床と接していて片足が掛かっていても、↓で降りられる（体の真ん中が床の上なら）', () => {
+  const rows = [
+    '################################################',
+    ...Array.from({ length: 8 }, () => '#..............................................#'),
+    '#....=========#######========..................#',
+    ...Array.from({ length: 4 }, () => '#..............................................#'),
+    '#P.............................................#',
+    '################################################', '################################################', '################################################',
+  ];
+  for (const how of [['down', 'jump'], ['down']]) for (const x of [14 * 30 - 22, 21 * 30 + 6]) {
+    const g = sandbox(rows); const d = new Driver(g); const p = g.player;
+    p.x = x; p.y = 9 * 30 - p.h; d.frame(5);
+    const y0 = p.y;
+    d.frame(how.length > 1 ? 1 : 20, ['down']); if (how.length > 1) d.frame(1, how);
+    d.frame(30);
+    assert.ok(p.y > y0 + 20, `drop at ${x} with ${how}`);
+  }
+  // 体の大半が壁の床の上なら降りない
+  const g = sandbox(rows); const d = new Driver(g); const p = g.player;
+  p.x = 14 * 30 - 2; p.y = 9 * 30 - p.h; d.frame(5);
+  const y0 = p.y; d.frame(20, ['down']); d.frame(20);
+  assert.ok(Math.abs(p.y - y0) < 1);
 });
 
 test('地上の回避は底なしの穴の手前で止まる（空中の回避は止まらない）', () => {

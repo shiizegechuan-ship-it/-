@@ -2,15 +2,17 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>夜明けの楔</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap">
 <style>
-  html, body { margin: 0; height: 100%; background: #050408; overflow: hidden; overscroll-behavior: none; }
+  html, body { margin: 0; height: 100%; background: #050408; overflow: hidden; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+  /* 長押しでの選択・虫めがね・メニューを出さない（指を置いたままでも操作と音が止まらないように） */
+  html, body, canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
   #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
-  body.touch { touch-action: none; user-select: none; -webkit-user-select: none; }
+  html.touch, body.touch { touch-action: none; user-select: none; -webkit-user-select: none; }
   body.touch-portrait #stage { bottom: 280px; align-items: flex-end; padding-bottom: 12px; box-sizing: border-box; }
   canvas { display: block; image-rendering: pixelated; background: #0d0b14; outline: none; touch-action: none; }
   #err { position: fixed; left: 8px; bottom: 8px; color: #ff8a6a; font: 12px monospace; white-space: pre-wrap; max-width: 90vw; }

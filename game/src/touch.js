@@ -1,3 +1,4 @@
+import { AXIS } from './input.js';
 // スマホ用のタッチ操作。左に仮想スティック、右に行動ボタン。入力は 'touch' 入力源としてキーボードと合流する。
 const CSS = `
 #touch { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
@@ -72,10 +73,13 @@ export function setupTouch(input, root) {
   let padId = null;
   const setDir = (dx, dy) => {
     const dead = 16;
-    input.set('left', dx < -dead, 'touch');
-    input.set('right', dx > dead, 'touch');
-    input.set('up', dy < -30 && Math.abs(dy) > Math.abs(dx) * 0.7, 'touch');
-    input.set('down', dy > 30 && Math.abs(dy) > Math.abs(dx) * 0.7, 'touch');
+    // 暗号の入力など（input.vertical）では、上下を広く・左右を狭く受け付ける
+    const v = !!input.vertical, ax = Math.abs(dx), ay = Math.abs(dy);
+    const side = v ? ax > ay * AXIS.vSide : true, upk = v ? AXIS.vUp : AXIS.side, upDead = v ? 20 : 30;
+    input.set('left', dx < -dead && side, 'touch');
+    input.set('right', dx > dead && side, 'touch');
+    input.set('up', dy < -upDead && ay > ax * upk, 'touch');
+    input.set('down', dy > upDead && ay > ax * upk, 'touch');
     const len = Math.hypot(dx, dy), max = 40, k = len > max ? max / len : 1;
     knob.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
   };
@@ -83,12 +87,19 @@ export function setupTouch(input, root) {
     const r = pad.getBoundingClientRect();
     setDir(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
   };
-  pad.addEventListener('pointerdown', (e) => { padId = e.pointerId; try { pad.setPointerCapture(e.pointerId); } catch { /* 合成イベントなど */ } pad.classList.add('on'); padMove(e); e.preventDefault(); });
+  // 2 本目の指がスティックに触れても、最初の指を追い続ける（指が入れ替わると、離した知らせを見失って押されたままになる）
+  pad.addEventListener('pointerdown', (e) => { if (padId !== null && padId !== e.pointerId) return; padId = e.pointerId; try { pad.setPointerCapture(e.pointerId); } catch { /* 合成イベントなど */ } pad.classList.add('on'); padMove(e); e.preventDefault(); });
   pad.addEventListener('pointermove', (e) => { if (e.pointerId === padId) padMove(e); });
   const padEnd = (e) => { if (e.pointerId !== padId) return; padId = null; pad.classList.remove('on'); setDir(0, 0); };
   pad.addEventListener('pointerup', padEnd);
   pad.addEventListener('pointercancel', padEnd);
   pad.addEventListener('lostpointercapture', padEnd);
+  // 指がスティックの外で離れたり、OS のジェスチャで知らせが途切れたりしても、方向を押したままにしない
+  window.addEventListener('pointerup', padEnd);
+  window.addEventListener('pointercancel', padEnd);
+  const allUp = (e) => { if (e.touches && e.touches.length === 0) { padId = null; pad.classList.remove('on'); setDir(0, 0); input.releaseSource('touch'); for (const { el } of btnEls) el.classList.remove('on'); } };
+  window.addEventListener('touchend', allUp, { passive: true });
+  window.addEventListener('touchcancel', allUp, { passive: true });
 
   const btnEls = [];
   const addBtn = (b, cls = 't-btn') => {

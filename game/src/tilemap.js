@@ -84,6 +84,22 @@ export function moveBody(e, map, dt, opts = {}) {
   return res;
 }
 
+// すり抜け床の端が壁の床と接している所では、片足が壁の床に乗っていて降りられないことがある。
+// 体の真ん中がすり抜け床の上なら、壁の床から外れるまで横へずらす量を返す（降りられないときは null）
+export function dropShift(e, map) {
+  if (standingOnOneway(e, map)) return 0;
+  const ty = Math.floor((e.y + e.h + 0.5) / TILE);
+  if (map.get(Math.floor((e.x + e.w / 2) / TILE), ty) !== ONEWAY) return null;
+  const left = Math.floor(e.x / TILE), right = Math.floor((e.x + e.w - 0.01) / TILE);
+  const dx = map.get(left, ty) === SOLID ? (left + 1) * TILE - e.x + 0.01 : map.get(right, ty) === SOLID ? right * TILE - (e.x + e.w) - 0.01 : 0;
+  if (!dx || Math.abs(dx) > e.w / 2 + 1) return null;
+  const moved = { x: e.x + dx, y: e.y, w: e.w, h: e.h };
+  if (!standingOnOneway(moved, map)) return null;
+  // ずらした先で体が壁にめり込まないか
+  const t0 = Math.floor(e.y / TILE), t1 = Math.floor((e.y + e.h - 0.01) / TILE);
+  for (let y = t0; y <= t1; y++) for (let x = Math.floor(moved.x / TILE); x <= Math.floor((moved.x + e.w - 0.01) / TILE); x++) if (map.get(x, y) === SOLID) return null;
+  return dx;
+}
 // 足元がすり抜け床だけかどうか（下＋ジャンプで降りられるか）
 export function standingOnOneway(e, map) {
   const ty = Math.floor((e.y + e.h + 0.5) / TILE);

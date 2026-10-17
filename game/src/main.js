@@ -49,9 +49,29 @@ function fit() {
 window.addEventListener('resize', fit);
 if (window.ResizeObserver) new ResizeObserver(fit).observe(stage);
 
+// iPhone：ボタンを素早く 2 回たたくと、ブラウザの「ダブルタップで拡大・移動」が働いて、ページ全体がずれることがある。
+// ゲームの画面と操作盤の上では、ブラウザの既定のジェスチャを止め、ずれたスクロールは元へ戻す
+function guardGestures() {
+  const stop = (e) => { if (e.cancelable) e.preventDefault(); };
+  let lastEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = performance.now();
+    if (now - lastEnd < 350) stop(e); // 2 回目のタップの終わり：ダブルタップの拡大にさせない
+    lastEnd = now;
+  }, { passive: false });
+  document.addEventListener('dblclick', stop, { passive: false });
+  for (const g of ['gesturestart', 'gesturechange']) document.addEventListener(g, stop, { passive: false }); // ピンチで拡大しない
+  const unscroll = () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); };
+  window.addEventListener('scroll', unscroll, { passive: true });
+  if (window.visualViewport) { window.visualViewport.addEventListener('resize', () => { unscroll(); fit(); }); window.visualViewport.addEventListener('scroll', unscroll); }
+  canvas.removeAttribute('tabindex'); // 触れた要素へのフォーカスで、画面がスクロールしないように
+}
+
 let touchUI = null;
 if (isTouchDevice()) {
   document.body.classList.add('touch');
+  document.documentElement.classList.add('touch');
+  guardGestures();
   game.touch = true;
   touchUI = setupTouch(input, document.body);
 }
@@ -61,8 +81,18 @@ fit();
 canvas.addEventListener('pointerdown', (e) => {
   const r = canvas.getBoundingClientRect();
   const x = (e.clientX - r.left) * VIEW_W / r.width, y = (e.clientY - r.top) * VIEW_H / r.height;
-  if (game.handleTap(x, y)) { input.set('confirm', true, 'tap'); input.set('confirm', false, 'tap'); }
+  if (game.handleTap(x, y)) { input.set('confirm', true, 'tap'); input.set('confirm', false, 'tap'); return; }
+  // タッチ操作：画面をタップした所へ移動する。操作盤やボタンの周り（押し損ねやすい所）は反応しない
+  if (touchUI && !nearControls(e.clientX, e.clientY)) game.tapMove(x, y);
 });
+const DEAD_ZONE = 28; // 操作盤・ボタンの縁から、この幅（CSS の px）はタップ移動にしない
+function nearControls(x, y) {
+  for (const el of touchUI.querySelectorAll('.t-pad, .t-btn')) {
+    const r = el.getBoundingClientRect();
+    if (r.width && x > r.left - DEAD_ZONE && x < r.right + DEAD_ZONE && y > r.top - DEAD_ZONE && y < r.bottom + DEAD_ZONE) return true;
+  }
+  return false;
+}
 // 別のアプリへ切り替えたら中断する
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { input.clear(); if (game.scene === 'play' && !game.modal && game.player && game.player.state !== 'dead') game.openPause(); }

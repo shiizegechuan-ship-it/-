@@ -162,3 +162,27 @@ test('BGM の音色とハイカット：主旋律はリード、副旋律はう�
   assert.ok(HICUT <= 6000);
   for (const k of ['reed', 'hollow', 'triangle', 0.25, 0.375]) assert.ok(waves.includes(m.waves[k]), `uses ${k}`);
 });
+
+test('BGM：ドラムの音源は打つたびに止める（ループ音源が止まらずに溜まると、音が途切れ途切れになる）', () => {
+  const { ctx, nodes } = fakeAudio();
+  const m = new Music({ ctx, master: { connect() {} } });
+  for (let i = 0; i < 60 * 10; i++) { ctx.currentTime = i / 60; m.update('market'); }
+  const drums = nodes.filter((n) => n.part === 'drum');
+  assert.ok(drums.length > 20);
+  assert.ok(drums.every((n) => n.t1 > n.t0), 'every drum hit stops');
+  // 描画が止まっても曲が続くよう、描画とは別のタイマーからも予約する
+  assert.ok(m.timer, 'scheduler timer');
+  clearInterval(m.timer);
+});
+
+test('BGM の主旋律には、コードの音どうしを半音でつなぐ経過音がある（拍の裏の短い音）', () => {
+  for (const id of ids) {
+    const lead = buildSong(id).tracks.find((t) => t.part === 'lead').notes;
+    let n = 0;
+    for (let i = 1; i + 1 < lead.length; i++) {
+      const a = lead[i - 1], b = lead[i], c = lead[i + 1];
+      if (b.len <= 1 && b.s % 4 !== 0 && Math.abs(b.m - a.m) === 1 && Math.abs(c.m - b.m) === 1 && Math.sign(b.m - a.m) === Math.sign(c.m - b.m)) n++;
+    }
+    assert.ok(n >= 1, `${id}: chromatic passing tones`);
+  }
+});

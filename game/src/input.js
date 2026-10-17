@@ -57,6 +57,8 @@ export class Input {
   // メニュー等が入力を消費したときに使う
   consume(a) { this.prev[a] = this.cur[a]; if (this.pressedNow) this.pressedNow[a] = false; }
   clear() { for (const a of ACTIONS) { this.raw[a] = false; } this.sources = {}; this.pressBuffer = {}; }
+  // ひとつの入力源だけを全部離す（タッチの指がすべて離れたときなど。離した知らせが届かなくても押されたままにならない）
+  releaseSource(src) { const m = this.sources[src]; if (!m) return; for (const a in m) if (m[a]) this.set(a, false, src); }
 }
 
 export function attachKeyboard(input, target) {
@@ -79,7 +81,9 @@ export function attachKeyboard(input, target) {
 // ゲームパッド。接続中のすべてのパッドをまとめて読む（仮想デバイスが先頭にいても動くように）
 const PAD = { jump: 0, attack: 2, dodge: 1, skill: 3, interact: 5, pause: 9, journal: 8 };
 const ON = 0.15, OFF = 0.1; // スティックの遊び（中心から反応しない範囲）。押す／離す判定に差をつけて境目でぶれないようにする
-export function readPads(pads, stickAll) {
+// vertical：上下を広く・左右を狭く受け付ける（暗号の入力など、上下で値を変える画面）
+export const AXIS = { side: 0.7, vSide: 1.8, vUp: 0.55 };
+export function readPads(pads, stickAll, vertical = false) {
   const out = { left: false, right: false, up: false, down: false, confirm: false, back: false };
   for (const k of Object.keys(PAD)) out[k] = false;
   let any = false, best = 0;
@@ -98,9 +102,10 @@ export function readPads(pads, stickAll) {
       dl ||= p.axes[6] < -0.5; dr ||= p.axes[6] > 0.5; du ||= p.axes[7] < -0.5; dd ||= p.axes[7] > 0.5;
     }
     const hx = (dir, v, was) => (was ? v * dir > OFF : v * dir > ON);
-    stick.left = hx(-1, ax, stick.left); stick.right = hx(1, ax, stick.right);
-    stick.up = hx(-1, ay, stick.up) && Math.abs(ay) > Math.abs(ax) * 0.7;
-    stick.down = hx(1, ay, stick.down) && Math.abs(ay) > Math.abs(ax) * 0.7;
+    const side = vertical ? Math.abs(ax) > Math.abs(ay) * AXIS.vSide : true, upk = vertical ? AXIS.vUp : AXIS.side;
+    stick.left = hx(-1, ax, stick.left) && side; stick.right = hx(1, ax, stick.right) && side;
+    stick.up = hx(-1, ay, stick.up) && Math.abs(ay) > Math.abs(ax) * upk;
+    stick.down = hx(1, ay, stick.down) && Math.abs(ay) > Math.abs(ax) * upk;
     out.left ||= dl || stick.left; out.right ||= dr || stick.right;
     out.up ||= du || stick.up; out.down ||= dd || stick.down;
     for (const [a, i] of Object.entries(PAD)) out[a] ||= b(i);
@@ -111,7 +116,7 @@ export function readPads(pads, stickAll) {
 export function pollGamepad(input) {
   const pads = (typeof navigator !== 'undefined' && navigator.getGamepads) ? Array.from(navigator.getGamepads() || []) : [];
   input.padStick ||= {};
-  const st = readPads(pads, input.padStick);
+  const st = readPads(pads, input.padStick, !!input.vertical);
   if (!st) return false;
   input.padAxis = { x: st.ax, y: st.ay };
   for (const [a, v] of Object.entries(st)) if (a !== 'ax' && a !== 'ay') input.set(a, v, 'pad');
