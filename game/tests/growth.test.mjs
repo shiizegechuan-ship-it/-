@@ -1837,6 +1837,10 @@ test('店：強化の 3 品のうち 1 つは手持ちの Lv アップ。砥石�
   d.frame(1, ['jump']); d.frame(1);
   assert.equal(g.player.boons.find((b) => b.id === target).tier, t0 + 1);
   assert.equal(g.modal, m, 'back to the shop'); assert.ok(ws.sold); assert.ok(!g.run.forged, 'Glen can still forge');
+  // 強化の品がすべて売り切れなら、品替えは金貨を取らない
+  for (const x of stock) if (x.kind === 'boon') x.sold = true;
+  const g0 = g.run.gold; m.sel = stock.indexOf(rr); g.buyShop(m);
+  assert.equal(g.run.gold, g0);
 });
 
 test('最後の夜（第 3 夜）は新しい力「暁の剣」を授かる：5 秒ごとに部屋じゅうの敵へ光の剣が降り、直接攻撃 +25%。店には出ない', async () => {

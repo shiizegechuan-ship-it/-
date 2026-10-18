@@ -583,3 +583,26 @@ test('黄金の部屋（戦いの無い部屋）でも、跳ぶボタンで右�
   d.frame(1, ['jump']); d.until(() => p.state !== 'travel', 90);
   assert.equal(g.nearestInteractable(), chest);
 });
+
+test('結末のあと（終わらない夜）も、刻守の部屋で決着を選べ、ほかの結末へ行ける。「いいえ」なら決着を着けずに戦う', () => {
+  const g = newGame(12); const d = new Driver(g);
+  g.meta.flags.ending = true; g.meta.flags.endings = { silence: 3 }; g.meta.loop = 4;
+  learn(g.meta, 'master_reason');
+  g.startLoop(); g.modal = null;
+  assert.ok(g.player.boons.some((b) => b.id === 'dawnblade'), 'the dawn sword stays after an ending');
+  // いいえ：決着ではない（倒すと鐘が鳴って夜が戻る）
+  enterBoss(g, d, 1);
+  assert.equal(g.scene, 'play'); assert.ok(!g.run.decisive);
+  // はい：別の結末（日誌を読んだので「師の眠り」）
+  const h = newGame(12); const e = new Driver(h);
+  h.meta.flags.ending = true; h.meta.flags.endings = { silence: 3 }; h.meta.loop = 4;
+  learn(h.meta, 'master_reason');
+  h.startLoop(); h.modal = null;
+  enterBoss(h, e, 0);
+  assert.ok(h.run.decisive);
+  while (h.modal) { e.frame(10); e.frame(1, ['confirm']); }
+  const b = h.room.boss; b.phase = 3; b.hp = 1; b.state = 'idle'; b.takeHit(h, { dmg: 5, dir: 1, knock: 0, cat: 'combo' });
+  e.until(() => h.scene === 'ending', 60 * 8);
+  assert.equal(h.ending.id, 'sleep');
+  assert.match(h.ending.pages[h.ending.pages.length - 1][1], /結末 2\/3/);
+});

@@ -48,7 +48,6 @@ export const ENTRY_GUARD = 0.6 + SPAWN_GUARD;
 export const PASSIVE_WIPE = { within: 2.5, share: 0.7, resist: 0.7 };
 const GOLD = { summoner: 9, mite: 0, lancer: 7, trapper: 7, clocker: 7, vane: 6, squire: 2, mallet: 8, beamer: 7, chain: 7, rat: 4, hopper: 8, soldier: 6, bat: 5, turret: 4, roller: 7, archer: 6, phantom: 8, bell: 9, knight: 50 };
 
-// タップ移動の行き先（主人公の左上の座標）。x の列ごとに、いちばん下の「上に体が収まる床」を探す
 // 1 つの階の戦闘部屋（戦闘・試練）で得られる金貨・経験値の総量（夜の深さ 0 のとき）。
 // 基準は改修前のめちゃ簡単の 3 つの階の平均（金貨 約 200・経験値 約 90）。どの階・どの難易度でも同じ
 export const FLOOR_REWARD = { gold: 200, exp: 90 };
@@ -60,6 +59,7 @@ export const BOSS_MIN_TIME = 20;
 export const OFFER_N = 6, CALL_IN_OFFER = 0.08;
 // タップ移動のあと、次のタップ移動を受け付けるまでの間（秒）
 export const TAP_MOVE_CD = 0.4;
+// タップ移動の行き先（主人公の左上の座標）。x の列ごとに、いちばん下の「上に体が収まる床」を探す
 export function tapGoal(map, p, wx, wy, easy) {
   const free = (x, y) => p.boxFree(map, x, y);
   const lowest = (col) => {
@@ -210,7 +210,7 @@ export class Game {
     const cst = stOf(meta.companion);
     this.player.compMods = combinedMods([{ id: meta.companion, stage: cst }, ...allyIds.map((id) => ({ id, stage: stOf(id) }))]);
     // 最後の夜（第 3 夜から）は、新しい力「暁の剣」を授かる
-    if (meta.loop >= LAST_NIGHT && !meta.flags.ending && !wedgedBoons.some((b) => b.id === 'dawnblade')) wedgedBoons.push({ id: 'dawnblade', tier: 1 });
+    if (meta.loop >= LAST_NIGHT && !wedgedBoons.some((b) => b.id === 'dawnblade')) wedgedBoons.push({ id: 'dawnblade', tier: 1 });
     this.player.setBoons(wedgedBoons);
     this.player.hp = this.player.maxHp;
     this.player.gauge = Math.min(PC.gaugeMax, 20 * upLv(meta, 'gauge'));
@@ -704,7 +704,14 @@ export class Game {
     if (!this.meta.flags.ending && alwaysDecisive(this.meta)) {
       this.run.decisive = true;
       lines.push({ who: '', text: '最後の夜。鐘はもう、夜を戻せない。この戦いで決着がつく。', note: '倒れても、次の夜にもう一度挑める' });
-    } else if (!this.meta.flags.ending && asksDecision(this.meta)) {
+    } else if (this.meta.flags.ending) {
+      // 結末を見たあと（終わらない夜）：毎回、決着を着けるかを選べる（ほかの結末を探せるように）
+      lines.push({ who: '', text: 'ここで決着を着けますか？', note: 'はい：決着の戦い（勝てば、今そろっている条件の結末へ）／いいえ：決着を着けずに戦う（夜は戻り、終わらない夜が続く）' });
+      choices = [
+        { label: 'はい（決着を着ける）', fn: () => { this.run.decisive = true; this.fx.setBanner('決着の戦い', '鐘はもう鳴らさせない', '#ffd38a', 2); } },
+        { label: 'いいえ（決着を着けずに戦う）', fn: () => {} },
+      ];
+    } else if (asksDecision(this.meta)) {
       lines.push({ who: '', text: 'ここで決着を着けますか？', note: 'はい：この戦いで物語が終わる（勝てば結末へ）／いいえ：夜が戻り、第 3 夜（最後の夜）へ' });
       choices = [
         { label: 'はい（ここで決着を着ける）', fn: () => { this.run.decisive = true; this.fx.setBanner('決着の戦い', '鐘はもう鳴らさせない', '#ffd38a', 2); } },
@@ -1228,6 +1235,7 @@ export class Game {
     if (run.gold < s.price) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 30, '金貨が足りない', '#9a8fa6', 12); return; }
     if (s.kind === 'artifact' && p.artifacts.includes(s.id)) { this.sfx.play('deny'); return; }
     if (s.kind === 'whetstone' && !p.boons.some(canForge)) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 30, '鍛えられる強化が無い', '#9a8fa6', 12); return; }
+    if (s.kind === 'reroll' && !m.stock.some((x) => x.kind === 'boon' && !x.sold)) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 30, '入れ替える品が無い', '#9a8fa6', 12); return; }
     run.gold -= s.price;
     if (s.kind === 'reroll') { this.rerollShop(m, s); return; }
     s.sold = true;
@@ -1675,9 +1683,9 @@ export class Game {
   clearRoom(quiet) {
     const room = this.room;
     room.cleared = true;
-    // 再生の刻：制圧するたび回復
+    // 再生の刻：戦って制圧したときだけ回復（敵のいない部屋は入った時に静かに制圧扱いになるので、quiet では回復しない）
     const p = this.player, rc = p.stats.recover;
-    if (rc && p.state !== 'dead' && p.hp < p.maxHp) { const a = Math.round(p.maxHp * rc * (p.stats.healMul || 1)); p.hp = Math.min(p.maxHp, p.hp + a); this.fx.text(cx(p), p.y - 24, `再生 +${a}`, '#9fe3ff', 13); }
+    if (rc && !quiet && p.state !== 'dead' && p.hp < p.maxHp) { const a = Math.round(p.maxHp * rc * (p.stats.healMul || 1)); p.hp = Math.min(p.maxHp, p.hp + a); this.fx.text(cx(p), p.y - 24, `再生 +${a}`, '#9fe3ff', 13); }
     const t = room.desc.type;
     let reward = null;
     if (t === 'combat') reward = this.run.nextReward || 'boon';
@@ -2052,7 +2060,7 @@ export class Game {
     if (!cands.length) return { who: 'グレン', text: '覚えときな。強化には噛み合う組がある。決まった二つを両方 Lv2 まで上げりゃ、合わさって上の強化に化ける。', note: '合成：素材の 2 つを両方 Lv2 以上で持つと、上位の強化に合成できる' };
     const { f } = cands[0];
     const st = (id) => (lv[id] ? `今 Lv${lv[id]}` : 'まだ持ってねえ');
-    return { who: 'グレン', text: `お前の${name(f.a)}と${name(f.b)}――両方 Lv2 まで上げりゃ、噛み合って${name(f.to)}になるぜ。${name(f.a)}は${st(f.a)}、${name(f.b)}は${st(f.b)}だな。`, note: `合成の手がかり：${BOONS[f.a].name}（Lv2）＋${BOONS[f.b].name}（Lv2）→ ${BOONS[f.to].name}` };
+    return { who: 'グレン', text: `${name(f.a)}と${name(f.b)}――両方 Lv2 まで上げりゃ、噛み合って${name(f.to)}になるぜ。${name(f.a)}は${st(f.a)}、${name(f.b)}は${st(f.b)}だな。`, note: `合成の手がかり：${BOONS[f.a].name}（Lv2）＋${BOONS[f.b].name}（Lv2）→ ${BOONS[f.to].name}` };
   }
   onGlenSaved() {
     const room = this.room;

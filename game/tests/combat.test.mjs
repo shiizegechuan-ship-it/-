@@ -287,8 +287,14 @@ test('守護の強化：不動の構え（立ち止まっている間の被ダ�
   h = p.hp; g.damagePlayer(40, { fromX: cx(p) }); assert.equal(h - p.hp, plain);
   // 再生の刻
   p.setBoons([{ id: 'recover', tier: 2 }]); p.state = 'normal'; p.hp = 50;
-  g.room.desc = { ...g.room.desc, type: 'combat' }; g.room.cleared = false; g.clearRoom(true);
+  g.room.desc = { ...g.room.desc, type: 'combat' }; g.room.cleared = false; g.clearRoom(false);
   assert.equal(p.hp, 50 + Math.round(p.maxHp * 0.12));
+  // 敵のいない部屋（店・入口など）に入っただけでは回復しない
+  const { newGame } = await import('./helpers.mjs');
+  const s2 = newGame(5); s2.player.setBoons([{ id: 'recover', tier: 3 }]); s2.player.hp = 50;
+  const fi = s2.run.plan.floors.findIndex((fl) => fl.some((r) => r.type === 'shop'));
+  s2.enterRoom(fi, s2.run.plan.floors[fi].findIndex((r) => r.type === 'shop'));
+  assert.ok(s2.room.cleared); assert.equal(s2.player.hp, 50);
 });
 
 test('敵の大きさ：通常の敵は見た目 1.25 倍・当たり判定 1.12 倍、最後の中ボスと刻守は 1.5 倍（足元の位置は変わらない）', async () => {

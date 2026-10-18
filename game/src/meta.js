@@ -144,6 +144,10 @@ export function autoInherit(m, boons) {
 function migrate(m) {
   m.slots = Math.max(m.slots || 0, 3); // 古いセーブも 3 つに
   m.personSlots ??= PERSON_SLOTS; m.flags.endings ??= {};
+  // 古いセーブ：人物・残骸・仕掛けに打ってあった楔は外さない（枠をその本数まで広げる）
+  m.personSlots = Math.max(m.personSlots, m.wedges.filter(isPersonWedge).length);
+  // 以前の版で夜明けを迎えたセーブは、真の結末を見たことにする（以前の結末は 1 つだけだった）
+  if (m.flags.ending && !Object.keys(m.flags.endings).length) m.flags.endings.true = m.loop;
   m.shards ??= 0; m.upgrades ??= {}; m.inherit ??= []; m.artifacts ??= []; m.compStage ??= {}; m.bonds ??= []; m.allies ??= [];
   for (const k of ['power', 'arts', 'bond', 'ward', 'hex']) if (!m.unlocked.includes(k)) m.unlocked.push(k);
   m.companion ??= 'hotaru';
@@ -331,9 +335,12 @@ export function nightStory(m) {
   return n - 2 >= STORY.length ? `第${n}夜。${line}` : line;
 }
 // 物語の進み具合に応じた一言（あれば巻き戻りの助言の代わりに出す）
+// 巻き戻り画面で出す（夜の番号が増える前に呼ばれる）ので、「次の夜」を見て言う
 function progressLine(m) {
-  if (finalReady(m)) return 'リラの言葉を、師に届ける時が来た。決着の戦いで、第三楽章まで戦い抜け。';
-  if (m.loop === FINAL_NIGHT) return '今夜、刻守の部屋の前で決着を着けるかを選べる。まだ準備が足りなければ、もう一夜だけ待てる。';
+  const next = m.loop + 1;
+  if (trueEndReady(m) && next >= FINAL_NIGHT) return 'リラの言葉を、師に届ける時が来た。次の夜の決着の戦いで、第三楽章まで戦い抜け。';
+  if (next === FINAL_NIGHT) return '次の夜は、刻守の部屋の前で決着を着けるかを選べる。まだ準備が足りなければ、もう一夜だけ待てる。';
+  if (next === LAST_NIGHT && !m.flags.ending) return '次は最後の夜。刻守との戦いが、決着になる。';
   if (hasWedge(m, 'lira') && !knows(m, 'lira_message')) return 'リラだけが、この夜を覚えている。名前で呼びかけてみよう。';
   if (knows(m, 'master_reason') && !hasWedge(m, 'lira')) return '師は命と引き換えに夜を買っている。止められるのは、師が守ろうとしている娘の言葉だけかもしれない。';
   return null;

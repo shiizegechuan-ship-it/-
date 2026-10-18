@@ -418,3 +418,22 @@ test('めちゃ簡単の巻き戻り画面：継承の刻印は ∞（刻めな�
   n.player.setBoons(all.map((b) => ({ ...b }))); n.endRun('death');
   assert.ok(n.rewindOptions().some((o) => o.label.startsWith('継承する強化を選ぶ')));
 });
+
+test('古いセーブ：人物・残骸に打った楔が人の楔の枠より多くても外れない。以前に夜明けを迎えた記録は真の結末として残る', () => {
+  const m = newMeta(3);
+  delete m.personSlots; delete m.flags.endings;
+  m.wedges = [{ target: 'lira' }, { target: 'glen' }, { target: 'knight' }];
+  m.flags.ending = true; m.loop = 6;
+  const r = deserialize(serialize(m));
+  assert.equal(r.personSlots, 3);
+  assert.equal(r.wedges.length, 3);
+  assert.equal(r.flags.endings.true, 6);
+});
+
+test('巻き戻り画面の助言は「次の夜」に合っている（第 1 夜の後は楔の案内、第 2 夜の後は最後の夜）', () => {
+  const m = newMeta(4);
+  let r = endLoop(m, { cause: 'death', floor: 1, boons: [], dmgByCat: {}, learned: [] });
+  assert.equal(m.loop, 2); assert.match(r.tip, /楔を打つ/, 'after night 1 the wedge tutorial comes first');
+  r = endLoop(m, { cause: 'wait', floor: 3, boons: [], dmgByCat: {}, learned: [] });
+  assert.equal(m.loop, 3); assert.match(r.tip, /最後の夜/);
+});
