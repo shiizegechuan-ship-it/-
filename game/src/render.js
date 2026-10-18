@@ -80,9 +80,9 @@ function renderPlay(ctx, game) {
     ctx.drawImage(buf, 0, 0, VIEW_W, VIEW_H);
     return;
   }
-  drawBackground(b, fi, camPX, camPY, game.time, 99, roomInterior(game), ruinLevel(game.meta)); // 内装は上層だけ部屋ごとに 3 通り、荒れ具合は夜で
+  drawBackground(b, fi, camPX, camPY, game.time, 99, roomInterior(game), ruinLevel(game.meta), game.map.pxW / 2, game.map.pxH / 2); // 内装は上層だけ部屋ごとに 3 通り、荒れ具合は夜で
   game.look = nightLook(game.meta);
-  drawSkyLook(b, game.look, PW, PH, game.time);
+  if (!backgroundFor(fi, roomInterior(game), ruinLevel(game.meta)).indoor) drawSkyLook(b, game.look, PW, PH, game.time); // 屋内の 1 枚絵の部屋には月や光の帯を描かない
   b.save();
   b.translate(-camPX, -camPY);
   drawTiles(b, game, fi);
