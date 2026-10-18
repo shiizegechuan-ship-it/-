@@ -198,3 +198,11 @@ test('難易度で、中ボス・刻守の攻撃と攻撃の間（休み）が�
   }
   assert.ok(rest.veryeasy > rest.easy && rest.easy > rest.normal && rest.normal > rest.hard && rest.hard > rest.nightmare, JSON.stringify(rest));
 });
+
+test('激ムズ・第 3 段階の怒った刻守と白き刻守：どの技にも、無傷で済む動き方がある（回避の待ち時間・無敵時間は実際のまま）', async () => {
+  const { canAvoid, BASE, FINAL } = await import('../tools/dev/avoid.mjs');
+  for (const m of [...BASE, ...FINAL]) for (const offset of [-170, 70]) {
+    const n = canAvoid([m], { final: FINAL.includes(m), brake: m !== 'stop', offset, tries: 80 });
+    assert.ok(n > 0, `${m} at ${offset}: no way to avoid`);
+  }
+});
