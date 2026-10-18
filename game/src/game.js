@@ -122,7 +122,7 @@ export class Game {
     this.saveSettings();
   }
   saveSettings() {
-    if (this.storage && this.storage.saveSettings) { try { this.storage.saveSettings(JSON.stringify({ difficulty: this.settings.difficulty, shake: this.settings.shake, volume: this.settings.volume, bgm: this.settings.bgm, textSize: this.settings.textSize })); } catch { /* 保存できなくても遊べる */ } }
+    if (this.storage && this.storage.saveSettings) { try { this.storage.saveSettings(JSON.stringify({ difficulty: this.settings.difficulty, shake: this.settings.shake, volume: this.settings.volume, bgm: this.settings.bgm, textSize: this.settings.textSize, calmFlash: !!this.settings.calmFlash })); } catch { /* 保存できなくても遊べる */ } }
   }
 
   // ───────── 進行 ─────────
@@ -2548,12 +2548,14 @@ export class Game {
     return [
       { id: 'text', label: `文字の大きさ：${{ normal: '標準', large: '大', xlarge: '特大' }[this.settings.textSize || 'normal']}`, right: '決定で切り替え' },
       { id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}`, right: '決定で切り替え' },
+      { id: 'flash', label: `光の点滅を抑える：${this.settings.calmFlash ? 'あり' : 'なし'}`, right: '決定で切り替え' },
       { id: 'about', label: 'ゲームについて', right: '' },
     ];
   }
   pickSetting(id) {
     if (id === 'text') this.cycleTextSize();
     else if (id === 'shake') { this.settings.shake = !this.settings.shake; this.saveSettings(); }
+    else if (id === 'flash') { this.settings.calmFlash = !this.settings.calmFlash; this.saveSettings(); }
     else if (id === 'about') { this.titleSettings.about = true; this.titleSettings.t = 0; }
   }
   // メニューの方向入力：スティックで斜めに倒れたときは、強く倒れている軸の向きだけを受け付ける
@@ -2907,6 +2909,7 @@ export class Game {
           else if (o.id === 'journal') this.openJournal();
           else if (o.id === 'companion') this.openCompanionPick();
           else if (o.id === 'shake') { this.settings.shake = !this.settings.shake; this.saveSettings(); }
+          else if (o.id === 'flash') { this.settings.calmFlash = !this.settings.calmFlash; this.saveSettings(); }
           else if (o.id === 'diff') this.cycleDifficulty();
           else if (o.id === 'text') this.cycleTextSize();
           else if (o.id === 'bgm') { this.settings.bgm = ((Math.round(this.settings.bgm * 10) + 2) % 12) / 10; this.saveSettings(); }
@@ -2927,6 +2930,12 @@ export class Game {
       }
     }
   }
+  // 今、回避ボタンを押せば回避できるか（タッチの回避ボタンの明るさに使う）
+  dodgeReady() {
+    const p = this.player;
+    if (this.scene !== 'play' || this.modal || !p) return true;
+    return p.dodgeCd <= 0 && !(p.airDodgeUsed && !p.onGround) && p.state !== 'dead';
+  }
   pauseOptions() {
     return [
       { id: 'resume', label: '再開' },
@@ -2934,6 +2943,7 @@ export class Game {
       { id: 'companion', label: `お供：${COMPANIONS[this.meta.companion] ? COMPANIONS[this.meta.companion].name : 'なし'}（替える）` },
       { id: 'diff', label: `難易度：${this.difficulty().name}（次の夜から）` },
       { id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}` },
+      { id: 'flash', label: `光の点滅を抑える：${this.settings.calmFlash ? 'あり' : 'なし'}` },
       { id: 'vol', label: `音量：${Math.round(this.settings.volume * 10)}` },
       { id: 'bgm', label: `音楽：${this.settings.bgm > 0 ? Math.round(this.settings.bgm * 10) : 'なし'}` },
       { id: 'text', label: `文字の大きさ：${{ normal: '標準', large: '大', xlarge: '特大' }[this.settings.textSize || 'normal']}` },

@@ -24,7 +24,8 @@ export class Fx {
     mag *= 1.25; // 画面の揺れは全体に 1.25 倍
     if (mag >= this.shakeMag || this.shakeT <= 0) { this.shakeMag = mag; this.shakeT = t; }
   }
-  screenFlash(color, a = 0.5) { this.flash = a; this.flashColor = color; }
+  // 光の点滅を抑える設定（calmFlash）では、画面全体の光を弱くする
+  screenFlash(color, a = 0.5) { this.flash = this.settings.calmFlash ? Math.min(a, 0.12) : a; this.flashColor = color; }
   sparks(x, y, color, n = 8, speed = 260, dir = 0) {
     for (let i = 0; i < n; i++) {
       const ang = dir ? Math.atan2(0, dir) + (this.rand() - 0.5) * 1.6 : this.rand() * Math.PI * 2;

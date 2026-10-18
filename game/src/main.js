@@ -111,7 +111,7 @@ function draw() {
   // BGM：場面に合った曲を流す（メニューを開いている間は小さく）
   if (music.level !== game.settings.bgm) music.setLevel(game.settings.bgm);
   music.update(musicFor(game), { quiet: !!game.modal });
-  if (touchUI) touchUI.radar(game.modal ? [] : game.enemyBearings());
+  if (touchUI) { touchUI.radar(game.modal ? [] : game.enemyBearings()); touchUI.setDodgeReady(game.dodgeReady()); }
 }
 
 function frame(now) {

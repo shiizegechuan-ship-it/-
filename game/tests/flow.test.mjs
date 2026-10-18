@@ -754,6 +754,7 @@ test('タイトル：左上の設定ボタン（↑で選べる・タップで�
   d.frame(1, ['confirm']); d.frame(1); assert.ok(g.titleSettings, 'settings open');
   const shake = g.settings.shake;
   d.frame(1, ['down']); d.frame(1); d.frame(1, ['confirm']); d.frame(1); assert.equal(g.settings.shake, !shake, 'shake toggled');
+  d.frame(1, ['down']); d.frame(1); d.frame(1, ['confirm']); d.frame(1); assert.ok(g.settings.calmFlash, 'calm flash toggled');
   d.frame(1, ['down']); d.frame(1); d.frame(1, ['confirm']); d.frame(1); assert.ok(g.titleSettings.about, 'about opens');
   d.frame(1, ['back']); d.frame(1); assert.ok(g.titleSettings && !g.titleSettings.about, 'about closes back to settings');
   // × で設定を閉じる
@@ -763,4 +764,18 @@ test('タイトル：左上の設定ボタン（↑で選べる・タップで�
   // 本文：原案・ChatGPT・Claude・フィクション・関係ない
   const all = ABOUT_LINES.map((l) => l.h || l.t).join('\n');
   for (const k of ['原案', 'ChatGPT', 'Claude', 'フィクション', '一切関係ありません']) assert.ok(all.includes(k), k);
+});
+
+test('回避：待ち時間は難易度で短く（めちゃ簡単・簡単 6 割・普通 8 割）、ジャスト回避なら 0。使えない間は回避ボタンが暗くなる（dodgeReady）。光の点滅を抑える設定', async () => {
+  const { PLAYER: P } = await import('../src/config.js');
+  const cd = (id) => { const g = newGame(3); g.meta.difficulty = id; g.startLoop(); g.modal = null; const p = g.player; const d = new Driver(g); d.until(() => p.onGround, 60); d.frame(2); assert.ok(g.dodgeReady()); d.frame(1, ['dodge']); assert.equal(p.state, 'dodge'); assert.ok(!g.dodgeReady(), 'not ready right after'); return p.dodgeCd; };
+  const near = (a, b) => Math.abs(a - b) < 0.02;
+  assert.ok(near(cd('nightmare'), P.dodgeCooldown + P.dodgeTime));
+  assert.ok(near(cd('hard'), P.dodgeCooldown + P.dodgeTime));
+  assert.ok(near(cd('normal'), P.dodgeCooldown * 0.8 + P.dodgeTime));
+  assert.ok(near(cd('easy'), P.dodgeCooldown * 0.6 + P.dodgeTime));
+  assert.ok(near(cd('veryeasy'), P.dodgeCooldown * 0.6 + P.dodgeTime));
+  // 点滅を抑える
+  const g = newGame(4); g.fx.screenFlash('#fff', 0.7); assert.equal(g.fx.flash, 0.7);
+  g.settings.calmFlash = true; g.fx.screenFlash('#fff', 0.7); assert.ok(g.fx.flash <= 0.12);
 });

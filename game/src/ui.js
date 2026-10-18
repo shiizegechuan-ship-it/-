@@ -640,7 +640,7 @@ export const ABOUT_LINES = [
 function drawTitleSettings(ctx, game, ts) {
   if (!ts.about) {
     const items = game.settingsOptions().map((o) => ({ label: o.label, right: o.right, rightColor: C.muted }));
-    drawLightbox(ctx, game, { title: '設定', items, sel: ts.sel, color: C.gold, st: ts, desc: ts.sel === 2 ? '原案・制作・おことわりなど' : '', hint: game.touch ? 'タップで選択、もう一度タップで決定／×で閉じる' : '↑↓ 選ぶ　Z 決定　C 閉じる' });
+    drawLightbox(ctx, game, { title: '設定', items, sel: ts.sel, color: C.gold, st: ts, desc: { about: '原案・制作・おことわり・権利表記など', flash: '画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）' }[(game.settingsOptions()[ts.sel] || {}).id] || '', hint: game.touch ? 'タップで選択、もう一度タップで決定／×で閉じる' : '↑↓ 選ぶ　Z 決定　C 閉じる' });
     drawCloseButton(ctx, C.gold);
     return;
   }

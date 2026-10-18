@@ -247,7 +247,8 @@ export class Player {
     this.sinceDodge = 0;
     this.perfectUsed = false;
     this.vy = 0;
-    this.dodgeCd = P.dodgeCooldown * this.stats.dodgeCdMul + P.dodgeTime;
+    // 次に回避できるまで：回避の動きの間＋待ち時間（待ち時間は難易度で短くなる。ジャスト回避に成功すれば 0 に戻る）
+    this.dodgeCd = P.dodgeCooldown * this.stats.dodgeCdMul * ((game.run && game.run.diff && game.run.diff.dodgeCd) || 1) + P.dodgeTime;
     if (this.stats.afterimageTime) this.afterT = P.dodgeTime + this.stats.afterimageTime;
     game.sfx.play('dodge');
     game.fx.afterimage(this);

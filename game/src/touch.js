@@ -12,6 +12,7 @@ const CSS = `
 #touch .t-btn { position: absolute; border-radius: 50%; background: var(--t-bg); border: 2px solid var(--t-line); color: var(--t-ink);
   display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; touch-action: none; }
 #touch .t-btn.on, #touch .t-pad.on { background: var(--t-on); }
+#touch .t-btn.cd { filter: brightness(0.5) saturate(0.4); } /* 回避がまだ使えない間は暗く */
 #touch .t-btn small { display: block; font-size: 9px; font-weight: 400; opacity: 0.75; }
 #touch .t-btn span { text-align: center; line-height: 1.1; }
 #touch .t-top { position: absolute; border-radius: 10px; width: 56px; height: 32px; font-size: 11px; }
@@ -151,5 +152,8 @@ export function setupTouch(input, root) {
   window.addEventListener('resize', layout);
   window.addEventListener('orientationchange', layout);
   layout();
+  // 回避が使えるかどうかで、回避ボタンの明るさを変える
+  const dodgeEl = btnEls.find((x) => x.b.act === 'dodge');
+  wrap.setDodgeReady = (ready) => { if (dodgeEl) dodgeEl.el.classList.toggle('cd', !ready); };
   return wrap;
 }
