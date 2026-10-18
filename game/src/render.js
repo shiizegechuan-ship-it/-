@@ -4,7 +4,7 @@ import { nightLook, drawSkyLook, drawWeather, crackAt, drawCrack } from './night
 import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC } from './config.js';
 import { SOLID, ONEWAY } from './tilemap.js';
 import { cx, cy, clamp } from './util.js';
-import { drawHud, drawModal, drawTitle, drawRewind, drawEnding, FONT } from './ui.js';
+import { drawHud, drawModal, drawTitle, drawRewind, drawEnding, FONT, setTextEnv } from './ui.js';
 import { PW, PH, makeCanvas, rect, pset, line, dashLine, circle, disc, wedge, arc, drawSprite } from './pix.js';
 import { drawBackground, backgroundFor, gearFrame, TS } from './background.js';
 // 部屋ごとの内装の型（0〜2）と、夜ごとの荒れ具合（第 2 夜は少し、第 3 夜からかなり）
@@ -27,6 +27,7 @@ const SY = (wy) => (wy / 2 - camPY) * SC;
 const W = (v) => Math.round(v / 2);
 
 export function render(ctx, game) {
+  setTextEnv(game);
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = C.bg0;

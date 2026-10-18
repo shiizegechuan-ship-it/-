@@ -9,32 +9,65 @@ import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, bossCounter, 
 import { ENDINGS } from './game.js';
 import { FLOOR_NAMES } from './world.js';
 import { expToNext, LEVEL } from './level.js';
-import { LB, lbStart, rewindGrid, cardRects } from './layout.js';
+import { LB, lbStart, rewindGrid, cardRects, PAUSE, TITLE_MENU } from './layout.js';
 export { LB, lbRowAt, rewindGrid } from './layout.js';
 
 // ドット文字（DotGothic16）。読み込めない環境では OS の日本語フォントで表示される
 export const FONT = `'DotGothic16', 'Hiragino Sans', 'Yu Gothic', 'IPAGothic', sans-serif`;
 const SERIF = FONT;
 
-function text(ctx, str, x, y, { size = 14, color = C.text, align = 'left', bold = false, font = FONT, shadow = true } = {}) {
+// 文字の大きさの設定：normal（標準）・large（大）・xlarge（特大）。t は流れる文字の時計
+export const TEXT = { mode: 'normal', t: 0 };
+export const TEXT_MODES = ['normal', 'large', 'xlarge'];
+export const TEXT_MODE_NAMES = { normal: '標準', large: '大', xlarge: '特大' };
+export function setTextEnv(game) { TEXT.mode = (game.settings && game.settings.textSize) || 'normal'; TEXT.t = game.time || 0; }
+// 実際に描く大きさ。標準でも、小さな文字ほど少し大きくする（収まる範囲で）。大・特大はさらに 1.2・1.4 倍
+export function fontSize(size) {
+  const base = size < 12 ? size + 2 : size < 15 ? size + 1 : size;
+  return Math.round(base * (TEXT.mode === 'xlarge' ? 1.4 : TEXT.mode === 'large' ? 1.2 : 1));
+}
+// 収まらない文字の横送り：はじめを 1 秒見せ、左へ流して終わりまで見せ、1 秒止まってから戻る（情報が欠けないように）
+export function marqueeOffset(over, t) {
+  const pause = 1, speed = 40, run = over / speed, period = pause * 2 + run;
+  const k = t % period;
+  return k < pause ? 0 : k < pause + run ? (k - pause) * speed : over;
+}
+function text(ctx, str, x, y, { size = 14, color = C.text, align = 'left', bold = false, font = FONT, shadow = true, maxW } = {}) {
   // ドット文字は太字にしない（にじむため）。影は 2px の硬い影
-  ctx.font = `${Math.round(size)}px ${font}`;
+  const fs = fontSize(size);
+  ctx.font = `${fs}px ${font}`;
   ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
   x = Math.round(x); y = Math.round(y);
+  // 使える幅：指定が無ければ、折り返しの幅か、画面の端まで
+  const room = maxW ?? (str && str.maxW) ?? (align === 'left' ? VIEW_W - 6 - x : align === 'right' ? x - 6 : 2 * Math.min(x, VIEW_W - x) - 12);
+  const w = ctx.measureText(str).width;
+  if (w > room + 0.5 && room > 24) {
+    const left = align === 'left' ? x : align === 'right' ? x - room : x - room / 2;
+    const off = marqueeOffset(w - room, TEXT.t);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(left - 1, y - fs * 1.15, room + 4, fs * 1.6); ctx.clip();
+    ctx.textAlign = 'left';
+    if (shadow) { ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillText(str, left - off + 2, y + 2); }
+    ctx.fillStyle = color; ctx.fillText(str, left - off, y);
+    ctx.restore();
+    return;
+  }
   if (shadow) { ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillText(str, x + 2, y + 2); }
   ctx.fillStyle = color; ctx.fillText(str, x, y);
 }
-// 折り返し（日本語は文字単位）
+// 折り返し（日本語は文字単位）。標準の大きさでは描く大きさで折り返す。大・特大では行の数を変えず（枠からはみ出さないように）、
+// 収まらない行は横に流す。行には使える幅（maxW）を持たせる
 function wrap(ctx, str, maxW, size, font = FONT) {
-  ctx.font = `${size}px ${font}`;
+  ctx.font = `${TEXT.mode === 'normal' ? fontSize(size) : size}px ${font}`;
   const lines = [];
+  const tag = (s) => Object.assign(new String(s), { maxW });
   for (const para of String(str).split('\n')) {
     let cur = '';
     for (const ch of para) {
-      if (ctx.measureText(cur + ch).width > maxW && cur) { lines.push(cur); cur = ch; }
+      if (ctx.measureText(cur + ch).width > maxW && cur) { lines.push(tag(cur)); cur = ch; }
       else cur += ch;
     }
-    lines.push(cur);
+    lines.push(tag(cur));
   }
   return lines;
 }
@@ -250,23 +283,25 @@ export function drawModal(ctx, game) {
 
 function drawDialog(ctx, game, m) {
   const line = m.lines[m.idx];
-  const x = 120, w = VIEW_W - 240, y = VIEW_H - 170;
+  const x = 120, w = VIEW_W - 240, bottom = VIEW_H - 60; // 下の端は固定（選択肢のタップの位置が変わらないように）
   const last = m.idx >= m.lines.length - 1;
   const choices = last && m.choices ? m.choices : [];
   const CH = 28; // 選択肢の行の高さ
-  const h = 110 + choices.length * CH;
-  panel(ctx, x, y - choices.length * CH, w, h, 'rgba(242,193,78,0.35)');
-  const top = y - choices.length * CH;
+  const lines = wrap(ctx, line.text, w - 36, 16, SERIF);
+  // 本文・補足・選択肢がすべて収まる高さにする（補足と選択肢が重ならないように）
+  const bodyH = 52 + lines.length * 22 + (line.note ? 22 : 0);
+  const h = Math.max(110, bodyH + (choices.length ? 22 : 8)) + choices.length * CH;
+  const top = bottom - h;
+  panel(ctx, x, top, w, h, 'rgba(242,193,78,0.35)');
   if (line.who) text(ctx, line.who, x + 18, top + 26, { size: 13, bold: true, color: C.gold });
   const shown = Math.floor(clamp(m.t * 60, 0, 999)); // 文字送り
-  const lines = wrap(ctx, line.text, w - 36, 16, SERIF);
   let used = 0;
-  lines.forEach((l, i) => { const s = l.slice(0, Math.max(0, shown - used)); used += l.length; text(ctx, s, x + 18, top + 52 + i * 22, { size: 16, font: SERIF }); });
-  if (line.note) text(ctx, '◆ ' + line.note, x + 18, top + 52 + lines.length * 22 + 4, { size: 11, color: '#7fb8ff' });
+  lines.forEach((l, i) => { const s = l.slice(0, Math.max(0, shown - used)); used += l.length; text(ctx, s, x + 18, top + 52 + i * 22, { size: 16, font: SERIF, maxW: w - 36 }); });
+  if (line.note) text(ctx, '◆ ' + line.note, x + 18, top + 52 + lines.length * 22 + 4, { size: 11, color: '#7fb8ff', maxW: w - 36 });
   choices.forEach((c, i) => {
     const cy = top + h - (choices.length - i) * CH - 8;
     if (i === m.sel) { ctx.fillStyle = 'rgba(242,193,78,0.15)'; ctx.fillRect(x + 12, cy - 20, w - 24, CH - 2); }
-    text(ctx, (i === m.sel ? '▶ ' : '　') + c.label, x + 22, cy, { size: 16, color: i === m.sel ? C.gold : '#ddd' });
+    text(ctx, (i === m.sel ? '▶ ' : '　') + c.label, x + 22, cy, { size: 16, color: i === m.sel ? C.gold : '#ddd', maxW: w - 44 });
   });
   if (!choices.length) text(ctx, game.touch ? (last ? 'タップで閉じる' : 'タップで次へ') : (last ? 'Z：閉じる' : 'Z：次へ'), x + w - 14, top + h - 10, { size: 10, align: 'right', color: C.muted });
 }
@@ -321,10 +356,13 @@ function drawBoonPick(ctx, game, m) {
   if (p.boons.length) {
     const pair = new Map(fusionsFor(m.offer[m.sel], p.boons).map((f) => [f.other, f.color]));
     const parts = p.boons.map((b) => ({ s: BOONS[b.id].name + (BOONS[b.id].max ? ` Lv${b.tier}` : b.tier > 1 ? 'II' : ''), c: pair.get(b.id) }));
-    ctx.font = `11px ${FONT}`;
+    ctx.font = `${fontSize(11)}px ${FONT}`; // 実際に描く大きさで幅を測る
     const label = '手持ち：', sep = '・';
     const widths = parts.map((q) => ctx.measureText(q.s).width), sw = ctx.measureText(sep).width, lw = ctx.measureText(label).width;
-    let tx = VIEW_W / 2 - (lw + widths.reduce((a, b) => a + b, 0) + sw * (parts.length - 1)) / 2;
+    const total = lw + widths.reduce((a, b) => a + b, 0) + sw * (parts.length - 1);
+    // 画面に収まらない（文字が大きい・手持ちが多い）ときは、1 行にまとめて横に流す
+    if (total > VIEW_W - 40) { text(ctx, label + parts.map((q) => q.s).join(sep), 20, 452, { size: 11, color: '#bbb', maxW: VIEW_W - 40 }); return; }
+    let tx = VIEW_W / 2 - total / 2;
     text(ctx, label, tx, 452, { size: 11, color: '#bbb' }); tx += lw;
     parts.forEach((q, i) => { text(ctx, q.s, tx, 452, { size: 11, color: q.c || '#bbb', bold: !!q.c }); tx += widths[i]; if (i < parts.length - 1) { text(ctx, sep, tx, 452, { size: 11, color: '#bbb' }); tx += sw; } });
   }
@@ -439,12 +477,12 @@ function drawCode(ctx, game, m) {
 
 function drawPause(ctx, game, m) {
   const opts = game.pauseOptions();
-  const x = VIEW_W / 2 - 160, y = 140, w = 320, h = 70 + opts.length * 32;
+  const x = VIEW_W / 2 - 170, y = PAUSE.y - 74, w = 340, h = 66 + opts.length * PAUSE.step;
   panel(ctx, x, y, w, h);
   text(ctx, '中断', VIEW_W / 2, y + 36, { size: 20, align: 'center', bold: true, font: SERIF });
   opts.forEach((o, i) => {
-    const yy = y + 74 + i * 32;
-    text(ctx, (i === m.sel ? '▶ ' : '') + o.label, VIEW_W / 2, yy, { size: 14, align: 'center', color: i === m.sel ? C.gold : '#ddd' });
+    const yy = PAUSE.y + i * PAUSE.step;
+    text(ctx, (i === m.sel ? '▶ ' : '') + o.label, VIEW_W / 2, yy, { size: 14, align: 'center', color: i === m.sel ? C.gold : '#ddd', maxW: w - 24 });
   });
   drawDawnStrip(ctx, game, y + h + 30);
   if (!game.touch) text(ctx, '移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃・↑↓＋Xで上下）　回避 C　術 V（ゲージ消費／術がなければ時歪）　調べる Z/↑/E（調べられる物の前）', VIEW_W / 2, VIEW_H - 30, { size: 11, align: 'center', color: C.muted });
@@ -522,7 +560,7 @@ export function drawTitle(ctx, game) {
     return;
   }
   const opts = game.titleOptions();
-  opts.forEach((o, i) => text(ctx, (i === game.titleSel ? '▶ ' : '') + o.label, VIEW_W / 2, 400 + i * 26, { size: 16, align: 'center', color: i === game.titleSel ? (o.id === 'diff' ? game.difficulty().color : C.gold) : o.id === 'diff' ? game.difficulty().color : '#bbb' }));
+  opts.forEach((o, i) => text(ctx, (i === game.titleSel ? '▶ ' : '') + o.label, VIEW_W / 2, TITLE_MENU.y + i * TITLE_MENU.step, { size: 16, align: 'center', color: i === game.titleSel ? (o.id === 'diff' ? game.difficulty().color : C.gold) : o.id === 'diff' ? game.difficulty().color : '#bbb' }));
   text(ctx, game.touch ? 'タップで選ぶ' : '↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　術 V　調べる ↑', VIEW_W / 2, VIEW_H - 18, { size: 11, align: 'center', color: C.muted });
   if (game.meta && game.meta.flags.ending) { const en = game.meta.flags.endings || {}; text(ctx, `★ クリア済み ― 結末 ${ENDING_IDS.filter((k) => en[k]).length}/${ENDING_IDS.length}（${ENDING_IDS.filter((k) => en[k]).map((k) => ENDINGS[k].name).join('・') || '夜明け'}）`, VIEW_W / 2, 506, { size: 12, align: 'center', color: '#ffd38a' }); }
   else if (game.meta) drawDawnStrip(ctx, game, 506);

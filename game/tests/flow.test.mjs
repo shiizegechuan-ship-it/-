@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cx } from '../src/util.js';
-import { newGame, Driver, sandbox } from './helpers.mjs';
+import { newGame, Driver, sandbox, memStorage } from './helpers.mjs';
 import { addWedge, learn } from '../src/meta.js';
 import { MIN_FIGHT } from '../src/game.js';
 
@@ -527,4 +527,27 @@ test('1 つの階で得られる金貨・経験値の総量は、どの階・ど
       assert.ok(Math.abs(exp - FLOOR_REWARD.exp * lv) < 1e-6, `${diff} floor ${fi} exp ${exp}`);
     });
   }
+});
+
+test('文字の大きさ：標準でも小さな文字は少し大きく、大・特大は 1.2・1.4 倍。収まらない文字は左→右へ流して最後まで見せる。設定は保存される', async () => {
+  const { fontSize, TEXT, marqueeOffset } = await import('../src/ui.js');
+  TEXT.mode = 'normal';
+  assert.equal(fontSize(10), 12); assert.equal(fontSize(13), 14); assert.equal(fontSize(20), 20);
+  TEXT.mode = 'large'; assert.equal(fontSize(20), 24);
+  TEXT.mode = 'xlarge'; assert.equal(fontSize(20), 28); assert.equal(fontSize(10), 17);
+  TEXT.mode = 'normal';
+  // 流す量：はじめは 0、途中で増え、最後に全部（はみ出した分）を見せる
+  const over = 120;
+  assert.equal(marqueeOffset(over, 0.5), 0);
+  assert.ok(marqueeOffset(over, 2) > 0 && marqueeOffset(over, 2) < over);
+  assert.equal(marqueeOffset(over, 1 + over / 40 + 0.5), over);
+  // 中断メニュー・タイトルで切り替え、保存される
+  const st = memStorage();
+  const g = newGame(5, st); g.storage.saveSettings = (s) => { g._saved = s; };
+  const i = g.titleOptions().findIndex((o) => o.id === 'text');
+  assert.ok(i >= 0); assert.match(g.titleOptions()[i].label, /標準/);
+  g.cycleTextSize(); assert.equal(g.settings.textSize, 'large');
+  g.cycleTextSize(); assert.equal(g.settings.textSize, 'xlarge');
+  assert.match(g._saved, /xlarge/);
+  assert.ok(g.pauseOptions().some((o) => o.id === 'text' && /特大/.test(o.label)));
 });

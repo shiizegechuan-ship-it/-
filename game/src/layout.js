@@ -2,6 +2,9 @@
 import { VIEW_W, VIEW_H } from './config.js';
 import { clamp } from './util.js';
 
+// 中断メニューとタイトルの項目の位置（1 行目の文字の下端と行の間隔）
+export const PAUSE = { y: 184, step: 30 };
+export const TITLE_MENU = { y: 384, step: 24 };
 export const LB = { x: 100, y: 40, w: VIEW_W - 200, h: VIEW_H - 80, top: 120, rowH: 38, rows: 8 };
 // 表示の先頭行。選んでいる行が枠から出たときだけ送る（st.scroll に覚える）
 export function lbStart(n, sel, st) {

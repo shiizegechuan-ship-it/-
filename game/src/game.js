@@ -13,7 +13,7 @@ import { NullSfx } from './audio.js';
 import { AXIS } from './input.js';
 import { BOONS, FUSIONS, LEGEND_IDS, rollOffer, rollRare, boonMax, canForge, PASSIVE_IDS, passiveWeight, readyFusions, countsForThreat } from './boons.js';
 import { expToNext, expFor, levelBonus, LEVEL } from './level.js';
-import { rewindGrid, lbRowAt, cardRects } from './layout.js';
+import { rewindGrid, lbRowAt, cardRects, PAUSE, TITLE_MENU } from './layout.js';
 import { nightLook } from './nightlook.js';
 import { FLOOR_NAMES, buildPlan, layoutRows, extraEnemyTypes } from './world.js';
 import {
@@ -118,7 +118,7 @@ export class Game {
     this.saveSettings();
   }
   saveSettings() {
-    if (this.storage && this.storage.saveSettings) { try { this.storage.saveSettings(JSON.stringify({ difficulty: this.settings.difficulty, shake: this.settings.shake, volume: this.settings.volume, bgm: this.settings.bgm })); } catch { /* 保存できなくても遊べる */ } }
+    if (this.storage && this.storage.saveSettings) { try { this.storage.saveSettings(JSON.stringify({ difficulty: this.settings.difficulty, shake: this.settings.shake, volume: this.settings.volume, bgm: this.settings.bgm, textSize: this.settings.textSize })); } catch { /* 保存できなくても遊べる */ } }
   }
 
   // ───────── 進行 ─────────
@@ -2477,6 +2477,7 @@ export class Game {
     o.push({ id: 'new', label: this.meta ? 'はじめから（記録を消す）' : 'はじめる' });
     o.push({ id: 'diff', label: `難易度：${this.difficulty().name}（決定で切り替え）` });
     o.push({ id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}` });
+    o.push({ id: 'text', label: `文字の大きさ：${{ normal: '標準', large: '大', xlarge: '特大' }[this.settings.textSize || 'normal']}` });
     return o;
   }
   // メニューの方向入力：スティックで斜めに倒れたときは、強く倒れている軸の向きだけを受け付ける
@@ -2513,15 +2514,17 @@ export class Game {
       else if (o.id === 'new') { if (this.meta) this.titleConfirm = true; else this.newGame(); }
       else if (o.id === 'shake') { this.settings.shake = !this.settings.shake; this.saveSettings(); }
       else if (o.id === 'diff') this.cycleDifficulty();
+      else if (o.id === 'text') this.cycleTextSize();
     }
   }
+  cycleTextSize() { const ms = ['normal', 'large', 'xlarge']; this.settings.textSize = ms[(ms.indexOf(this.settings.textSize || 'normal') + 1) % ms.length]; this.saveSettings(); }
 
   // ───────── タップ（スマホ）：項目を直接選ぶ。true を返すと「決定」を1回押したことになる ─────────
   handleTap(x, y) {
     const row = (y0, step, n, h = 24) => { for (let i = 0; i < n; i++) if (Math.abs(y - (y0 + i * step - 5)) < h / 2) return i; return -1; };
     if (this.scene === 'title') {
       if (this.titleConfirm) return y > 390 && y < 470;
-      const i = row(400, 26, this.titleOptions().length, 24);
+      const i = row(TITLE_MENU.y, TITLE_MENU.step, this.titleOptions().length, TITLE_MENU.step - 2);
       if (i < 0 || Math.abs(x - VIEW_W / 2) > 200) return false;
       this.titleSel = i; return true;
     }
@@ -2583,7 +2586,7 @@ export class Game {
         }
         return false;
       }
-      case 'pause': { const i = row(214, 32, this.pauseOptions().length, 28); if (i < 0) return false; m.sel = i; return true; }
+      case 'pause': { const i = row(PAUSE.y, PAUSE.step, this.pauseOptions().length, PAUSE.step - 4); if (i < 0) return false; m.sel = i; return true; }
       case 'companion':
       case 'forge': {
         const i = lbRowAt(m.list.length, m.sel, x, y, m);
@@ -2807,6 +2810,7 @@ export class Game {
           else if (o.id === 'companion') this.openCompanionPick();
           else if (o.id === 'shake') { this.settings.shake = !this.settings.shake; this.saveSettings(); }
           else if (o.id === 'diff') this.cycleDifficulty();
+          else if (o.id === 'text') this.cycleTextSize();
           else if (o.id === 'bgm') { this.settings.bgm = ((Math.round(this.settings.bgm * 10) + 2) % 12) / 10; this.saveSettings(); }
           else if (o.id === 'vol') { this.settings.volume = (Math.round(this.settings.volume * 10) + 2) % 12 / 10; this.sfx.setVolume(this.settings.volume); this.saveSettings(); }
           else if (o.id === 'giveup') { this.modal = null; this.player.hp = 0; this.player.state = 'dead'; this.run.deathT = 1.6; this.endRun('death'); }
@@ -2834,6 +2838,7 @@ export class Game {
       { id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}` },
       { id: 'vol', label: `音量：${Math.round(this.settings.volume * 10)}` },
       { id: 'bgm', label: `音楽：${this.settings.bgm > 0 ? Math.round(this.settings.bgm * 10) : 'なし'}` },
+      { id: 'text', label: `文字の大きさ：${{ normal: '標準', large: '大', xlarge: '特大' }[this.settings.textSize || 'normal']}` },
       { id: 'giveup', label: 'この夜をあきらめる（巻き戻る）' },
     ];
   }
