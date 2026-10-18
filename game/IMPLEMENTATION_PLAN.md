@@ -24,7 +24,7 @@ A 入力・操作・iPhone（不具合）→ B BGM → C 強化・店・成長 �
 | タップ移動（操作盤・ボタンの周りは無効。普通以上は床へ、簡単以下は床の上の空中へ） | 完了（実機は未検証） | タッチ端末だけ。スティック・ボタンの縁から 28px は無効。Chromium の iPhone エミュレーションで移動・無効範囲を確認 |
 | めちゃ簡単の自動ダッシュを画面外も含むフロア全体に | 完了 | 画面の範囲の制限を外した。遠い敵へは飛ぶ時間を最大 0.75 秒に |
 | iPhone：ボタンの二度押しでページ全体が半分下にずれる | 部分対応（実機は未検証） | 下の「iPhone の切り分け」を参照 |
-| 既存の操作を壊さない | 継続確認 | |
+| 既存の操作を壊さない | 完了 | 既存の操作のテストがすべて通る。スモークテスト（デスクトップのキー入力・スマホのスティックと攻撃）も通る |
 
 ### iPhone の切り分け
 - 実機・Claude アプリのプレビューは、この環境では動かせない。Chromium の iPhone エミュレーション（タッチ）で、ボタンを素早く 2 回たたいても `scrollY`・`visualViewport.offsetTop` が 0 のままなのは確認した（ただし Chromium は iOS のダブルタップの拡大を再現しない）。
@@ -36,11 +36,11 @@ A 入力・操作・iPhone（不具合）→ B BGM → C 強化・店・成長 �
 ## B. BGM・音
 | 項目 | 状態 | メモ |
 |---|---|---|
-| 通常・ボスの和音に 1 音追加 | 完了（前回） | 再確認する |
+| 通常・ボスの和音に 1 音追加 | 完了 | 声部の数のテストで再確認（通常 和音 3・刻守 4） |
 | 和音を大きく | 完了 | 和音の音量の形を 9→12 段に、声部の音量 0.06→0.075。全曲を書き出して最大 0.21（割れない）を確認 |
-| 戦闘終了後の BGM | 完了（前回） | 曲名 calm |
-| 音源の変更（ビット音のまま） | 完了（前回） | |
-| ハイカット | 完了（前回） | BGM 4200Hz、全体 7000Hz |
+| 戦闘終了後の BGM | 完了 | 曲名「静けさの間」。場面ごとの曲のテストで再確認 |
+| 音源の変更（ビット音のまま） | 完了（聞こえ方は未検証） | headless では耳で聞けない。書き出した波形の最大値 0.18〜0.21（割れない）を確認 |
+| ハイカット | 完了 | BGM 4200Hz、全体 7000Hz |
 | 進行に合う半音（経過音）を旋律に | 完了 | 全 6 曲。拍の裏の 16 分音符で、コードの音どうしを半音でつなぐ（例：E7 の上で E→D#→D、G7 の上で D→C#→C→B）。拍の頭は従来どおりコードの音 |
 | 長押しで音楽が止まり、途切れ途切れになる | 完了（実機は未検証） | 原因①：ドラムのループ音源の `stop` が行末のコメントの中に入っていて止まらず、無音のまま溜まり続けて処理が重くなる → 修正。②予約が描画（rAF）からだけで先読み 0.25 秒 → 長押しで描画が止まると曲も止まる → 先読み 0.6 秒＋描画と別の 100ms のタイマーからも予約。③長押しの選択・虫めがね・メニューを CSS で止める。④iOS の 'interrupted' 状態でも、触れたら再開する |
 
@@ -86,11 +86,24 @@ A 入力・操作・iPhone（不具合）→ B BGM → C 強化・店・成長 �
 ## G. 開発ガイド
 | 項目 | 状態 | メモ |
 |---|---|---|
-| 今後のゲーム作りに使える汎用の開発ガイド（ゲーム固有と汎用を分ける） | 未着手 | DEV_GUIDE.md |
+| 今後のゲーム作りに使える汎用の開発ガイド（ゲーム固有と汎用を分ける） | 完了 | DEV_GUIDE.md：第 1 部 汎用（進め方・操作・UI・バランス・難易度・演出・音・性能・スマホ・アクセシビリティ・テスト・不具合・互換性・AI の注意・見落とし）、第 2 部 このゲーム固有 |
+
+## 変更したファイル
+- 入力・iPhone：src/input.js、src/touch.js、src/main.js、index.html、tools/build-single.mjs、src/tilemap.js、src/player.js、src/game.js
+- BGM：src/music.js、src/songs.js、src/audio.js
+- 強化・店・成長：src/boons.js、src/game.js、src/ui.js、src/layout.js、src/meta.js、src/enemies.js、src/render.js
+- 楔・周回・結末：src/meta.js、src/game.js、src/ui.js、src/nightlook.js、src/arts.js、src/boons.js
+- ステージ・敵・戦闘：src/background.js、src/render.js、src/game.js、src/fx.js、src/companion.js、src/boons.js
+- 文字：src/ui.js、src/render.js、src/layout.js、src/game.js
+- 文書：IMPLEMENTATION_PLAN.md、DEV_GUIDE.md、README.md
+- テスト：tests/music.test.mjs、tests/physics.test.mjs、tests/flow.test.mjs、tests/growth.test.mjs、tests/combat.test.mjs、tests/loop.test.mjs、tests/boss.test.mjs、tests/fuzz.test.mjs
 
 ## 見つかった問題
 - music.js：ドラムの `src.stop()` が行末のコメントの中にあり、ループ音源が止まらない → 修正済み。
-- 1 ファイル版の外枠（tools/build-single.mjs）は index.html と別の HTML を持つ。iPhone 向けの設定は両方へ入れる必要がある。
+- 1 ファイル版の外枠（tools/build-single.mjs）は index.html と別の HTML を持つ。iPhone 向けの設定は両方へ入れた。1 ファイル版はタップのたびに画面へフォーカスしていた（iPhone でスクロールの原因になりうる）→ タッチの端末ではしない。
+- 会話の枠が固定の高さで、補足と選択肢が重なることがあった → 中身から高さを決める。
+- 手元のスモークテストが最初の夜の会話を閉じきれず、移動を確かめられていなかった → 直した（スクラッチのスクリプト）。
 
 ## 次の作業
-- G（開発ガイド）
+- 「今は倒れたら次の夜になってしまいますが、」の続き（指示書の文が途中で切れている）を確認してから対応する。
+- iPhone の実機（Claude アプリのプレビュー・Safari）で、二度押しのずれ・長押しの音・タップ移動・方向の押しっぱなしを確かめる。
