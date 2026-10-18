@@ -101,3 +101,10 @@ export const COLORS = {
   reset: '#8a8a92',
   change: '#b67cf0',
 };
+
+// 販売・配布のときに書き込む表記（空のものは「ゲームについて」に出さない）
+export const RELEASE = {
+  version: '開発版',
+  publisher: '', // 販売者名（屋号）
+  contact: '',   // 問い合わせ先（メール・フォームの URL など）
+};

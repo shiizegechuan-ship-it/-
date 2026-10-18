@@ -761,9 +761,9 @@ test('タイトル：左上の設定ボタン（↑で選べる・タップで�
   assert.equal(g.handleTap(LB_CLOSE.x + 20, LB_CLOSE.y + 20), false); assert.equal(g.titleSettings, null);
   // 設定ボタンをタップ → 決定で開く
   g.titleSel = 1; assert.equal(g.handleTap(TITLE_GEAR.x + 30, TITLE_GEAR.y + 20), true); assert.equal(g.titleSel, -1);
-  // 本文：原案・ChatGPT・Claude・フィクション・関係ない
+  // 本文：原案・AI の表記・フィクション・フォントの許諾・光の注意・個人情報（問い合わせ先は RELEASE に書いたときだけ）
   const all = ABOUT_LINES.map((l) => l.h || l.t).join('\n');
-  for (const k of ['原案', 'ChatGPT', 'Claude', 'フィクション', '一切関係ありません']) assert.ok(all.includes(k), k);
+  for (const k of ['原案', 'ChatGPT', 'Claude', 'フィクション', '一切関係ありません', '生成 AI', 'Open Font License', '光の点滅を抑える', 'けいれん', '個人の情報は集めません']) assert.ok(all.includes(k), k);
 });
 
 test('回避：待ち時間は難易度で短く（めちゃ簡単・簡単 6 割・普通 8 割）、ジャスト回避なら 0。使えない間は回避ボタンが暗くなる（dodgeReady）。光の点滅を抑える設定', async () => {

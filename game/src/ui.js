@@ -1,5 +1,5 @@
 // HUD・メニュー・巻き戻り画面。装飾より可読性を優先する。
-import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC } from './config.js';
+import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC, RELEASE } from './config.js';
 import { clamp } from './util.js';
 import { COMPANIONS, allComps, unionReady } from './companion.js';
 import { BOONS, forgeDiff, SCHOOLS, RESONANCE, synergyHints, schoolCounts, fusionsFor } from './boons.js';
@@ -625,17 +625,27 @@ function drawCloseButton(ctx, color) {
 export const ABOUT_LINES = [
   { h: '夜明けの楔　WEDGE OF DAWN' },
   { t: '同じ夜をくり返す時計塔で、「時の楔」を手に夜明けを目指す、2D アクション・ローグライトです。' },
+  { t: '版：' + RELEASE.version },
   { h: 'つくった人たち' },
-  { t: '原案：当開発元' },
+  { t: '原案・監修：当開発元' + (RELEASE.publisher ? `（${RELEASE.publisher}）` : '') },
   { t: 'シナリオの推敲：ChatGPT（OpenAI の AI）' },
   { t: '制作（プログラム・ドット絵・音楽・効果音・テキストの実装）：Claude（Anthropic の AI）' },
+  { h: '生成 AI の利用について' },
+  { t: 'この作品のプログラム・絵・音楽・効果音・文章は、生成 AI を使ってつくられています。企画と方針、遊びごこちの確認と取捨選択は人が行いました。' },
   { h: 'おことわり' },
   { t: 'この作品はフィクションです。登場する人物・団体・場所・出来事はすべて架空のものであり、実在の人物・団体、ほかのゲームや創作物とは一切関係ありません。' },
-  { t: '絵・音楽・効果音はすべてプログラムで生成しており、外部の画像や音源は使っていません。文字は「DotGothic16」（SIL Open Font License）で表示しています（読み込めない環境では端末の日本語フォント）。' },
-  { h: '記録と遊び方' },
-  { t: '記録（セーブ）と設定は、この端末のブラウザの中にだけ保存されます。ブラウザのデータを消すと記録も消えます。個人の情報を集めたり、外部へ送ったりはしません。' },
-  { t: '光の点滅や画面の揺れがある場面があります。画面揺れは、この設定で切り替えられます。長く遊ぶときは、適度に休憩をとってください。' },
-  { t: '開発中の版のため、動作は端末やブラウザによって異なる場合があります。' },
+  { h: '権利と素材' },
+  { t: '絵・音楽・効果音はすべてプログラムで生成しており、外部の画像や音源は使っていません。' },
+  { t: '文字：DotGothic16（Copyright 2020 The DotGothic16 Project Authors）。SIL Open Font License 1.1 にもとづいて同梱しています（許諾書は assets/fonts/OFL-DotGothic16.txt）。' },
+  { h: '健康のための注意' },
+  { t: 'ごくまれに、強い光の刺激や点滅を見て、一時的に筋肉のけいれんや意識の喪失などを起こす人がいます。こうした経験のある方は、遊ぶ前に医師に相談してください。遊んでいて異常を感じたら、すぐにやめて医師の診察を受けてください。' },
+  { t: '画面全体が光る演出は「光の点滅を抑える」で、画面の揺れは「画面揺れ」で弱められます（この設定画面）。明るい部屋で画面から離れて遊び、長く遊ぶときは適度に休憩をとってください。' },
+  { h: '記録と個人情報' },
+  { t: '記録（セーブ）と設定は、この端末の中にだけ保存されます。ブラウザや端末のデータを消すと記録も消えます。' },
+  { t: '個人の情報は集めません。通信・広告・課金はありません。' },
+  { h: 'ご利用にあたって' },
+  { t: '動作は端末やブラウザによって異なる場合があります。この作品を遊んだことで生じた損害について、制作者は責任を負いかねます。' },
+  ...(RELEASE.contact ? [{ h: 'お問い合わせ' }, { t: RELEASE.contact }] : []),
 ];
 function drawTitleSettings(ctx, game, ts) {
   if (!ts.about) {
@@ -657,7 +667,7 @@ function drawTitleSettings(ctx, game, ts) {
   for (const l of ABOUT_LINES) {
     if (l.h) { yy += lh(6); text(ctx, '◆ ' + l.h, box.x + 8, yy, { size: 15, color: C.gold }); yy += lh(24); continue; }
     // 文字を大きくしても横に流さず、描く大きさで折り返す（縦に送るので行が増えてもよい）
-    for (const s of wrap(ctx, l.t, (box.w - 30) / modeScale(), 13)) { text(ctx, s, box.x + 22, yy, { size: 13, color: '#e8e0d0', maxW: box.w - 26 }); yy += lh(20); }
+    for (const s of wrap(ctx, l.t, (box.w - 30) * 13 / fontSize(13), 13)) { text(ctx, s, box.x + 22, yy, { size: 13, color: '#e8e0d0', maxW: box.w - 26 }); yy += lh(20); }
   }
   vend(ctx, 'about', yy - lh(20) + 8 + off, box);
   text(ctx, game.touch ? 'どこかをタップで閉じる' : 'Z / C で閉じる', VIEW_W / 2, y + h - 14, { size: 11, align: 'center', color: C.muted });
