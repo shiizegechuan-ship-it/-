@@ -1880,3 +1880,18 @@ test('刻の支配者：10 秒ごとに、今装着している発動の術を�
   g.player.passiveT.chronarch = 9.9; d.frame(10);
   assert.ok(g.room.spells.some((s) => s.kind === 'warpslash'), 'no art: warp slash');
 });
+
+test('背景の新しい内装は上層・鐘楼だけ（下層・中層の戦闘部屋はどれも元の背景）。荒れの重ね絵は夜で全階に残る', async () => {
+  const { roomInterior, ruinLevel } = await import('../src/render.js');
+  const g = newGame(5); g.startLoop(); g.modal = null;
+  const seen = { 0: new Set(), 1: new Set(), 2: new Set() };
+  for (let fi = 0; fi < 3; fi++) for (let ri = 0; ri < 6; ri++) {
+    g.run.fi = fi; g.run.ri = ri; g.room.desc = { ...g.room.desc, type: 'combat' };
+    seen[fi].add(roomInterior(g));
+  }
+  assert.deepEqual([...seen[0]], [0]);
+  assert.deepEqual([...seen[1]], [0]);
+  assert.deepEqual([...seen[2]].sort(), [0, 1, 2]);
+  g.meta.loop = 2; assert.equal(ruinLevel(g.meta), 1);
+  g.meta.loop = 3; assert.equal(ruinLevel(g.meta), 2);
+});

@@ -60,25 +60,10 @@ export function gearFrame(r, teeth, color, hole, step, steps = 8) {
   return c;
 }
 
-// 内装の型（中層・上層は 3 通り：0 はもとの型。下層・市場はもとの型だけ）。部屋ごとに替わる
+// 内装の型（上層・鐘楼だけ 3 通り：0 はもとの型。ほかの階はもとの型だけ）。部屋ごとに替わる
 function interior(fi, v) {
   const c = makeCanvas(LAYER_W, LAYER_H), m = c.getContext('2d');
-  if (fi === 1 && v === 1) {
-    // ボイラー室：大きな釜と計器、蒸気の管
-    for (let x = 10; x < LAYER_W; x += 120) {
-      rect(m, x, 90, 60, 180, '#14262a'); disc(m, x + 30, 90, 30, '#14262a'); rect(m, x + 2, 92, 1, 170, '#24403f');
-      for (let y = 110; y < 260; y += 24) rect(m, x, y, 60, 2, '#0e1c1e');
-      circle(m, x + 30, 130, 9, '#3c6058'); line(m, x + 30, 130, x + 35, 125, '#c94a3a'); disc(m, x + 30, 130, 1, '#c9a052');
-      rect(m, x + 60, 150, 50, 6, '#1d3632'); rect(m, x + 60, 151, 50, 1, '#2f504a'); rect(m, x + 104, 0, 6, 156, '#1d3632');
-    }
-  } else if (fi === 1 && v === 2) {
-    // 振り子の間：天井から下がる大きな振り子と、縦の昇降路のはしご
-    for (let x = 40; x < LAYER_W; x += 140) {
-      line(m, x, 0, x + 18, 150, '#1b3d39', 2); disc(m, x + 19, 158, 12, '#163633'); circle(m, x + 19, 158, 12, '#2f504a'); disc(m, x + 19, 158, 4, '#5a3a24');
-      rect(m, x + 70, 0, 2, 270, '#1d3632'); rect(m, x + 86, 0, 2, 270, '#1d3632');
-      for (let y = 4; y < 270; y += 10) rect(m, x + 70, y, 18, 1, '#2f504a');
-    }
-  } else if (fi === 2 && v === 1) {
+  if (fi === 2 && v === 1) {
     // 鐘の並ぶ回廊：梁から小さな鐘がいくつも下がる
     rect(m, 0, 24, LAYER_W, 6, '#121830'); rect(m, 0, 24, LAYER_W, 1, '#2a3358');
     for (let x = 20; x < LAYER_W; x += 60) {
@@ -128,7 +113,7 @@ export function backgroundFor(fi, variant = 0, ruin = 0) {
     let mid = variant ? interior(fi, variant) : layers[last].c;
     if (ruin) mid = ruinLayer(mid, ruin, 31 + fi * 7 + variant);
     layers[last] = { ...layers[last], c: mid };
-    const out = { ...base, layers, lanterns: variant ? null : base.lanterns, chains: variant === 2 && fi === 1 ? null : base.chains };
+    const out = { ...base, layers, lanterns: variant ? null : base.lanterns, chains: base.chains };
     cache.set(key, out);
     return out;
   }

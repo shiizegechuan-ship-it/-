@@ -8,8 +8,8 @@ import { drawHud, drawModal, drawTitle, drawRewind, drawEnding, FONT, setTextEnv
 import { PW, PH, makeCanvas, rect, pset, line, dashLine, circle, disc, wedge, arc, drawSprite } from './pix.js';
 import { drawBackground, backgroundFor, gearFrame, TS } from './background.js';
 // 部屋ごとの内装の型（0〜2）と、夜ごとの荒れ具合（第 2 夜は少し、第 3 夜からかなり）
-// 下層・市場は元の背景のまま（新しい内装は中層・上層だけ）
-export const roomInterior = (game) => (game.run && game.room && game.run.fi > 0 && game.room.desc.type !== 'boss' ? (game.run.ri + game.run.fi) % 3 : 0);
+// 下層・市場と中層・歯車回廊は元の背景のまま（新しい内装は上層・鐘楼だけ）
+export const roomInterior = (game) => (game.run && game.room && game.run.fi === 2 && game.room.desc.type !== 'boss' ? (game.run.ri + game.run.fi) % 3 : 0);
 export const ruinLevel = (meta) => (!meta || meta.flags.ending ? 0 : meta.loop >= 3 ? 2 : meta.loop === 2 ? 1 : 0);
 import { spr } from './sprites.js';
 import { PRISM } from './arts.js';
@@ -80,7 +80,7 @@ function renderPlay(ctx, game) {
     ctx.drawImage(buf, 0, 0, VIEW_W, VIEW_H);
     return;
   }
-  drawBackground(b, fi, camPX, camPY, game.time, 99, roomInterior(game), ruinLevel(game.meta)); // 内装は部屋ごとに 3 通り、荒れ具合は夜で
+  drawBackground(b, fi, camPX, camPY, game.time, 99, roomInterior(game), ruinLevel(game.meta)); // 内装は上層だけ部屋ごとに 3 通り、荒れ具合は夜で
   game.look = nightLook(game.meta);
   drawSkyLook(b, game.look, PW, PH, game.time);
   b.save();
