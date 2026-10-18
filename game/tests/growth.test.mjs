@@ -439,7 +439,8 @@ test('金貨：敵を倒すと貯まる。店で強化・回復薬・アーテ�
   const chest = g.room.items.find((i) => i.kind === 'goldchest');
   g.player.x = chest.x; g.player.y = chest.y + chest.h - g.player.h; g.tryInteract();
   assert.equal(g.modal.type, 'artifact');
-  assert.ok(g.modal.offer.every((id) => ARTIFACTS[id].rarity === 'gold'));
+  assert.ok(g.modal.offer.every((id) => id.startsWith('boon:') || ARTIFACTS[id].rarity === 'gold'));
+  g.modal.offer = g.modal.offer.filter((id) => !id.startsWith('boon:')); g.modal.sel = 0; // アーティファクトを選ぶ流れを確かめる
   g.modal.t = 1; d.frame(1, ['confirm']);
   assert.equal(g.player.artifacts.length, 2);
   // 黄金の部屋の出口は、元の次の部屋へ続く
@@ -1932,4 +1933,28 @@ test('記憶の固執：終わらない夜では Lv・経験値・金貨を持�
   // 扉・店・黄金の部屋には出ない
   const { rollArtifacts } = await import('../src/artifacts.js');
   for (const r of ['normal', 'gold']) assert.ok(!rollArtifacts(makeRng(1), [], r, 99).includes('persistence'));
+});
+
+test('黄金の宝箱：低い確率で、3 枚のうち 1 枚が伝説の強化になる（持っていないものだけ）。選ぶとその強化を得る', async () => {
+  const { GOLD_LEGEND_CHANCE } = await import('../src/game.js');
+  const g = newGame(61); g.startLoop(); g.modal = null;
+  let legend = 0; const N = 400;
+  for (let i = 0; i < N; i++) {
+    g.modal = null; g.openArtifactPick('gold', 3, false);
+    const o = g.modal.offer;
+    assert.equal(o.length, 3);
+    const b = o.filter((id) => id.startsWith('boon:'));
+    assert.ok(b.length <= 1);
+    if (b.length) { legend++; assert.equal(BOONS[b[0].slice(5)].school, 'legend'); assert.ok(!BOONS[b[0].slice(5)].special, 'not the dawn sword'); }
+  }
+  assert.ok(Math.abs(legend / N - GOLD_LEGEND_CHANCE) < 0.06, `legend rate ${legend / N}`);
+  // 選ぶと強化を得る
+  const d = new Driver(g);
+  g.modal = null; g.openArtifactPick('gold', 3, false);
+  g.modal.offer[0] = 'boon:godspeed'; g.modal.sel = 0; g.modal.t = 1;
+  d.frame(1, ['confirm']);
+  assert.ok(g.player.boons.some((b) => b.id === 'godspeed'));
+  assert.equal(g.modal, null);
+  // 普通の扉のアーティファクトには混ざらない
+  for (let i = 0; i < 100; i++) { g.modal = null; g.openArtifactPick('normal', 2, false); assert.ok(g.modal.offer.every((id) => !id.startsWith('boon:'))); }
 });

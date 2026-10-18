@@ -18,7 +18,7 @@
 - リポジトリ：`shiizegechuan-ship-it/-`、作業ブランチ：`feature/wedge-of-dawn`。ゲームは `game/` の下。
 - 起動（開発）：`cd game && python3 -m http.server 8080` → `http://localhost:8080/index.html`
   - ページの中の `window.__game`（ゲームの状態）、`window.__music`、`__setManual(true)` と `__step(n)`（1 コマずつ進める）がテストに便利。
-- テスト：`cd game && node --test tests/*.test.mjs`（今 **251 件すべて通る**）。
+- テスト：`cd game && node --test tests/*.test.mjs`（今 **252 件すべて通る**）。
 - 1 ファイル版（Artifact 用）：`node tools/build-single.mjs <出力先.html>`。外枠の HTML は `index.html` と別に `tools/build-single.mjs` の中にある（iPhone 向けの設定などは両方へ入れる）。
 - Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v54）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
 - コミットの末尾の署名：
@@ -151,6 +151,11 @@
 - `cardRects` の 5 枚以上用の 2 段の配置と `drawBoonCardSmall` は、今は使われていない（消してよい）。
 
 ---
+
+## 4-追加. このチャットでの追加の依頼（済み）
+- ステンドグラスの間を、デザインを残したまま部屋全体で 1 枚の背景に作り直した（`background.js` の `stainedHall`。横 480 ドットの絵を、部屋の左端→右端で絵の左端→右端が見える速さで動かす〔`single` の層〕）。この部屋は屋内なので、後ろの空・町・月・星・夜ごとの月とオーロラ（`drawSkyLook`）は描かない。荒れ（第 2 夜から）は、黒い穴を開けずに小さな欠けた石として描く。色ガラスは敵が見えにくくならないよう暗め。
+- 黄金の宝箱：15%（`GOLD_LEGEND_CHANCE`）で、3 枚のうち 1 枚がまだ持っていない伝説の強化（`'boon:id'`）になる。
+- 未確認：鐘の回廊（上層の内装 1）も、同じ鐘の絵を 60 ドットごとに繰り返している。直すかは依頼者に聞く。
 
 ## 5. 主な仕組みの場所（早見）
 - 進行・部屋・ダメージ・店・会話・決戦：`src/game.js`（大きい。関数名で検索する）

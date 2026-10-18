@@ -55,6 +55,8 @@ export const FLOOR_REWARD = { gold: 200, exp: 90 };
 export const ENEMY_SIZE = { look: 1.25, hit: 1.12, big: 1.5 };
 // 刻守との戦いの最短の目安（秒）。時の障壁で、これより早く倒れにくくする
 export const BOSS_MIN_TIME = 20;
+// 黄金の宝箱の 3 枚のうち 1 枚が、伝説の強化に替わる確率
+export const GOLD_LEGEND_CHANCE = 0.15;
 // 強化の候補の枚数（通常の選択。選択の刻印で +1）と、そこに「仲間を呼ぶ」が混ざる確率
 export const OFFER_N = 3, CALL_IN_OFFER = 0.08;
 // タップ移動のあと、次のタップ移動を受け付けるまでの間（秒）
@@ -1260,6 +1262,11 @@ export class Game {
   }
   openArtifactPick(rarity, n, thenDoors) {
     const offer = rollArtifacts(this.run.rareRng, this.player.artifacts, rarity, n);
+    // 黄金の宝箱：低い確率で、1 枚が伝説の強化（'boon:id'）になる（まだ持っていないものだけ）
+    if (rarity === 'gold' && this.run.rareRng.next() < GOLD_LEGEND_CHANCE) {
+      const id = this.run.rareRng.shuffle(LEGEND_IDS.filter((x) => !this.player.boons.some((b) => b.id === x)))[0];
+      if (id) { if (offer.length >= n) offer.pop(); offer.push('boon:' + id); }
+    }
     if (!offer.length) { this.dropGold(80, cx(this.player), this.player.y - 10, 1.6); if (thenDoors) this.openDoors(); return; }
     this.modal = { type: 'artifact', offer, sel: 0, rarity, thenDoors, t: 0 };
     this.sfx.play('pickup');
@@ -2780,6 +2787,7 @@ export class Game {
         if (cols < m.offer.length && (input.pressed('up') || input.pressed('down'))) { m.sel = m.sel < cols ? Math.min(m.offer.length - 1, m.sel + cols) : m.sel - cols; this.sfx.play('select'); }
         if (input.pressed('confirm') || input.pressed('jump')) {
           const id = m.offer[m.sel];
+          if (id.startsWith('boon:')) { this.grantBoon(id.slice(5)); this.sfx.play('pickup'); input.consume('jump'); input.consume('attack'); this.modal = null; if (m.thenDoors) this.openDoors(); break; }
           this.player.addArtifact(id);
           const a = ARTIFACTS[id];
           this.fx.setBanner(a.name, a.desc, a.rarity === 'gold' ? '#ffd84a' : '#7fe0d0', 1.6);

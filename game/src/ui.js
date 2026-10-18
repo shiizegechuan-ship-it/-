@@ -451,11 +451,14 @@ function drawFusion(ctx, game, m) {
 // アーティファクトの選択（カード）
 function drawArtifactPick(ctx, game, m) {
   const gold = m.rarity === 'gold';
-  text(ctx, gold ? '黄金の宝箱 ― アーティファクトを 1 つ選ぶ' : 'アーティファクトを 1 つ選ぶ', VIEW_W / 2, 92, { size: 22, align: 'center', color: gold ? '#ffd84a' : '#7fe0d0' });
-  text(ctx, 'アーティファクトは夜が戻っても失われない', VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });
+  const hasLegend = m.offer.some((id) => id.startsWith('boon:'));
+  text(ctx, hasLegend ? '黄金の宝箱 ― 1 つ選ぶ' : gold ? '黄金の宝箱 ― アーティファクトを 1 つ選ぶ' : 'アーティファクトを 1 つ選ぶ', VIEW_W / 2, 92, { size: 22, align: 'center', color: gold ? '#ffd84a' : '#7fe0d0' });
+  text(ctx, hasLegend ? 'アーティファクトは夜が戻っても残る。伝説の強化は楔か継承で持ち越す' : 'アーティファクトは夜が戻っても失われない', VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });
   const cw = 250, ch = 240, gap = 18, total = m.offer.length * cw + (m.offer.length - 1) * gap;
   m.offer.forEach((id, i) => {
-    const a = ARTIFACTS[id], col = ARTIFACT_COLOR[a.rarity];
+    // 黄金の宝箱では、まれに伝説の強化が混ざる（'boon:id'）
+    const boon = id.startsWith('boon:') ? BOONS[id.slice(5)] : null;
+    const a = boon ? { name: boon.name, desc: boon.desc(1) } : ARTIFACTS[id], col = boon ? '#ff7ae0' : ARTIFACT_COLOR[a.rarity];
     const appear = clamp((m.t - i * 0.07) / 0.2, 0, 1);
     if (appear <= 0) return;
     ctx.globalAlpha = appear;
@@ -463,7 +466,7 @@ function drawArtifactPick(ctx, game, m) {
     const x = VIEW_W / 2 - total / 2 + i * (cw + gap), y = 140 - (sel ? 8 : 0) + (1 - appear) * 24;
     panel(ctx, x, y, cw, ch, sel ? col : 'rgba(255,255,255,0.15)', sel ? 'rgba(24,18,32,0.98)' : 'rgba(14,11,20,0.95)');
     ctx.fillStyle = col; ctx.fillRect(x, y, cw, 5);
-    text(ctx, gold ? '黄金のアーティファクト' : 'アーティファクト', x + 16, y + 28, { size: 11, color: col });
+    text(ctx, boon ? '★伝説の強化' : gold ? '黄金のアーティファクト' : 'アーティファクト', x + 16, y + 28, { size: 11, color: col });
     text(ctx, a.name, x + 16, y + 58, { size: 20 });
     wrap(ctx, a.desc, cw - 28, 15).forEach((l, j) => text(ctx, l, x + 14, y + 90 + j * lh(21), { size: 15, color: '#e8e0d0' }));
     ctx.globalAlpha = 1;
