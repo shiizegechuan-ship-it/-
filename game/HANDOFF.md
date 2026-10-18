@@ -20,7 +20,7 @@
   - ページの中の `window.__game`（ゲームの状態）、`window.__music`、`__setManual(true)` と `__step(n)`（1 コマずつ進める）がテストに便利。
 - テスト：`cd game && node --test tests/*.test.mjs`（今 **254 件すべて通る**）。
 - 1 ファイル版（Artifact 用）：`node tools/build-single.mjs <出力先.html>`。外枠の HTML は `index.html` と別に `tools/build-single.mjs` の中にある（iPhone 向けの設定などは両方へ入れる）。
-- Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v55）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
+- Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v56）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
 - コミットの末尾の署名：
   ```
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -160,6 +160,7 @@
 ## 4-追加. このチャットでの追加の依頼（済み）
 - ステンドグラスの間を、デザインを残したまま部屋全体で 1 枚の背景に作り直した（`background.js` の `stainedHall`。横 480 ドットの絵を、部屋の左端→右端で絵の左端→右端が見える速さで動かす〔`single` の層〕）。この部屋は屋内なので、後ろの空・町・月・星・夜ごとの月とオーロラ（`drawSkyLook`）は描かない。荒れ（第 2 夜から）は、黒い穴を開けずに小さな欠けた石として描く。色ガラスは敵が見えにくくならないよう暗め。
 - 黄金の宝箱：15%（`GOLD_LEGEND_CHANCE`）で、3 枚のうち 1 枚がまだ持っていない伝説の強化（`'boon:id'`）になる。
+- 決着がついたら（結末のページのあと）リザルト（巻き戻り）画面を出し、「次の夜へ」を「タイトル画面に戻る」に（`endRun('ending')`、夜は 1 つ進んで終わらない夜へ）。何も強化（刻印・継承・楔）しないまま押すと、エンドレスで遊べることと強化はこの画面で行うことをライトボックス（`rewind.mode === 'notice'`）で一度だけ伝え、もう一度押すとタイトルへ。
 - 鐘の回廊（上層の内装 1）も 1 枚絵に作り直した（`bellHall`：天井の梁と筋交い、中央の大鐘、左に大きさの違う鐘 2 つ、右に鐘を鳴らす木の車輪と鐘、両端の鎧戸の窓）。木は足場の板と見間違えないよう暗く冷たい色。
 
 ## 5. 主な仕組みの場所（早見）
