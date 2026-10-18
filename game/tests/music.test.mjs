@@ -53,7 +53,7 @@ test('BGM の主旋律は曲どうしで似ない（同じ音の動きが 6 音�
   }
 });
 
-test('場面ごとの曲：戦いのある部屋は各階の曲、戦いの無い部屋とタイトルは「夜明けを待つ塔」、刻守・白き刻守。倒れた時・刻守を倒した直後は無音', () => {
+test('場面ごとの曲：戦いのある部屋は各階の曲（上層は「鐘楼の剣戟」）、戦いの無い部屋とタイトルは「夜明けを待つ塔」、刻守・白き刻守。倒れた時・刻守を倒した直後は無音', () => {
   const g = newGame(5); g.startLoop(); g.modal = null;
   // 夜のはじめの入口（戦いの無い部屋）はタイトルと同じ曲
   assert.equal(g.room.desc.type, 'entry'); assert.equal(musicFor(g), 'title');
@@ -63,11 +63,12 @@ test('場面ごとの曲：戦いのある部屋は各階の曲、戦いの無�
   g.run.fi = 0; g.room.desc = { type: 'combat' }; g.room.cleared = false;
   assert.equal(musicFor(g), 'market');
   g.run.fi = 1; assert.equal(musicFor(g), 'gears');
-  g.run.fi = 2; assert.equal(musicFor(g), 'belfry');
+  g.run.fi = 2; assert.equal(musicFor(g), 'bellfight'); // 上層の戦闘部屋は戦闘向けの速い曲
+  assert.ok(SONGS.bellfight.bpm >= 144, 'fast enough for a fight');
   // 戦いを終えた部屋は静かな曲
   const keep = g.room.desc; g.room.desc = { type: 'combat' }; g.room.cleared = true;
   assert.equal(musicFor(g), 'calm');
-  g.room.cleared = false; assert.equal(musicFor(g), 'belfry');
+  g.room.cleared = false; assert.equal(musicFor(g), 'bellfight');
   g.room.desc = { type: 'shop' }; g.room.cleared = true; assert.equal(musicFor(g), 'title'); g.room.desc = keep;
   g.room.desc = { type: 'boss' }; g.room.boss = { defeated: false, finalForm: false };
   assert.equal(musicFor(g), 'boss');
@@ -95,7 +96,7 @@ function fakeAudio() {
 }
 
 test('BGM の演奏：同時に鳴る音は通常の階と戦いのあとで 5 音まで、刻守で 7 音まで（エコーは数えない）。エコーとビブラートがある', () => {
-  for (const [id, max] of [['market', 5], ['gears', 5], ['belfry', 5], ['calm', 5], ['title', 5], ['boss', 7], ['final', 7]]) {
+  for (const [id, max] of [['market', 5], ['gears', 5], ['belfry', 5], ['bellfight', 5], ['calm', 5], ['title', 5], ['boss', 7], ['final', 7]]) {
     const { ctx, nodes } = fakeAudio();
     const m = new Music({ ctx, master: { connect() {} } });
     globalThis.setTimeout ??= () => {};

@@ -5,7 +5,7 @@ const SP = process.argv[2];
 const b = await chromium.launch(); const p = await b.newPage();
 const errs = []; p.on('pageerror', (e) => errs.push(e.message)); p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
 await p.goto('http://localhost:8080/index.html'); await p.waitForTimeout(800);
-for (const id of ['market', 'gears', 'belfry', 'boss', 'final', 'calm', 'title']) {
+for (const id of ['market', 'gears', 'belfry', 'bellfight', 'boss', 'final', 'calm', 'title']) {
   const res = await p.evaluate(async (id) => {
     const { Music } = await import('/src/music.js');
     const { buildSong } = await import('/src/songs.js');

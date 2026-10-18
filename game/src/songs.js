@@ -54,6 +54,19 @@ export const SONGS = {
     ],
     drum: { a: 'k...h...s...h...', f: 'k...h...s.s.sss.' }, order: 'aaaaaaafaaaaaaaf',
   },
+  // 上層・鐘楼の戦闘部屋：鐘を打ち鳴らすように速く刻む（ヘ短調）。「鐘楼へ」の重さは残して、前へ駆ける
+  bellfight: {
+    name: '鐘楼の剣戟', bpm: 150, style: 'gallop', echo: 2,
+    // 下がる低音（Fm→Fm/E♭→D♭maj7）、宙づりの Csus4 から C7、短調の ii–V（Gm7♭5→C7）、平行調の E♭7→A♭maj7
+    chords: 'Fm Dbmaj7 Bbm7 C7 Fm Fm/Eb Dbmaj7 Csus4|C7 Bbm7 Eb7 Abmaj7 Dbmaj7 Gm7b5 C7 Fm Csus4|C7',
+    lead: [
+      'C5/2 F5/2 Ab5/2 F5/2 C6/4 Ab5/2 F5/2', 'Ab5/4 F5/2 Db5/2 C5/2 Db5/2 F5/4', 'Bb4/2 Db5/2 F5/2 Ab5/2 Bb5/4 Ab5/2 F5/2', 'E5/2 G5/2 Bb5/2 G5/2 E5/2 G5/2 Bb5/3 A5/1',
+      'Ab5/2 F5/2 C5/2 F5/2 Ab5/2 Bb5/2 C6/4', 'Ab5/4 Eb5/2 F5/2 C5/2 Eb5/2 F5/4', 'Ab5/2 F5/2 Db5/2 F5/2 Ab5/4 C6/4', 'G5/4 F5/2 C5/2 E5/2 G5/2 Bb5/2 G5/2',
+      'F5/2 Db5/2 Bb4/2 Db5/2 F5/4 Ab5/4', 'G5/2 Eb5/2 Bb4/2 Eb5/2 G5/4 Bb5/4', 'C6/4 Ab5/2 Eb5/2 G5/4 Eb5/2 C5/2', 'F5/2 Db5/2 C5/2 F5/2 Ab5/2 C6/2 Ab5/4',
+      'Db5/2 F5/2 G5/2 Bb5/2 G5/2 F5/2 Db5/4', 'C5/2 E5/2 G5/2 Bb5/2 C6/4 Bb5/2 G5/2', 'Ab5/2 C6/2 Ab5/2 F5/2 C5/4 F5/2 Ab5/2', 'G5/4 C6/2 G5/2 E5/4 G5/2 Bb4/2',
+    ],
+    drum: { a: 'k.hhs.hkk.hhs.hh', f: 'k.hhs.hks.s.ssss' }, order: 'aaaaaaafaaaaaaaf',
+  },
   // 刻守：速く、激しく。副旋律が下で支える（ニ短調）
   boss: {
     name: '刻守', bpm: 160, style: 'drive', echo: 3, boss: true,
@@ -126,6 +139,8 @@ export const CHORD_STYLES = {
   pad: { bass: [[0, 8, 'r'], [8, 8, 'r']], chord: [[[0, 8, 3], [8, 8, 5]], [[0, 8, 7], [8, 8, 7]]] },
   drive: { bass: BASS8, chord: [SYNC.map((s) => [s, 2, 3]), SYNC.map((s) => [s, 2, 5]), SYNC.map((s) => [s, 2, 'X'])] },
   anthem: { bass: [[0, 2, 'r'], [2, 2, 'r'], [4, 2, 'o'], [6, 2, 'r'], [8, 2, 'r'], [10, 2, 'r'], [12, 2, 'o'], [14, 2, 'r']], chord: [[0, 4, 8, 12].map((s) => [s, 3, 3]), OFF.map((s) => [s, 2, 5]), [[0, 8, 'X'], [8, 8, 'X']]] },
+  // 駆け足：低音は付点で跳ね、和音は 3 度と 7 度をシンコペーションで刻む（2 声）
+  gallop: { bass: [[0, 2, 'r'], [3, 1, 'r'], [4, 2, 'o'], [6, 2, 'r'], [8, 2, 'r'], [11, 1, 'r'], [12, 2, 'o'], [14, 2, 'r']], chord: [SYNC.map((s) => [s, 2, 3]), SYNC.map((s) => [s, 2, 'X'])] },
   arp: { bass: [[0, 8, 'r'], [8, 8, 'r']], chord: [EIGHTS.map((s, i) => [s, 2, i % 2 ? 5 : 3]), [[0, 8, 7], [8, 8, 7]]] },
 };
 
@@ -229,5 +244,7 @@ export function musicFor(game) {
   if (game.room.cleared && fight) return 'calm';
   // 戦いの無い部屋（書庫・書斎・店・祠・鍛冶場・入口など）は、タイトルと同じ曲（敵が出ている間は階の曲）
   if (!fight && !game.room.enemies.some((e) => e.alive)) return 'title';
+  // 上層の戦闘部屋は速い「鐘楼の剣戟」（「鐘楼へ」は戦いの無い部屋に敵が出た時の階の曲として残す）
+  if (fight && game.run.fi >= 2) return 'bellfight';
   return ['market', 'gears', 'belfry'][Math.min(2, game.run.fi)];
 }
