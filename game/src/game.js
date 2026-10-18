@@ -327,7 +327,7 @@ export class Game {
     const h = e.boss ? Math.min(1.25, 1 + 0.03 * s) : Math.min(1.4, 1 + 0.05 * s);
     return h * (e.counter === 'dodge' && !e.boss ? 1.15 : 1) * (this.run.diff ? this.run.diff.speed : 1);
   }
-  // 刻守の時の障壁：この戦いでのあなたの平均ダメージ（毎秒）が「最大HP ÷ BOSS_MIN_TIME」を超えるほど、受けるダメージを減らす。
+  // 刻守・中ボスの時の障壁：この戦いでのあなたの平均ダメージ（毎秒）が「最大HP ÷ BOSS_MIN_TIME」を超えるほど、受けるダメージを減らす。
   // さらに、戦った時間に応じた上限を超えた分は 1 割しか通らない。強い構成でも、戦いが最低でも約 20 秒は続く（弱い構成には何もしない）
   bossBarrier(e, dmg) {
     const B = (e.barrier ||= { t: 0, dealt: 0 });
@@ -784,7 +784,7 @@ export class Game {
     for (const e of room.enemies) {
       const edt = (this.timeStopT > 0 && !e.boss ? dt * 0.3 : dt) * this.enemyHaste(e);
       if (e.alive) { this.updatingEnemy = e; e.update(this, edt); this.updatingEnemy = null; }
-      if (e.boss && e.alive && !e.defeated && !e.invuln) { (e.barrier ||= { t: 0, dealt: 0 }).t += dt; if (e.barrierFx > 0) e.barrierFx -= dt; } // 時の障壁の時計
+      if ((e.boss || e.elite) && e.alive && !e.defeated && !e.invuln) { (e.barrier ||= { t: 0, dealt: 0 }).t += dt; if (e.barrierFx > 0) e.barrierFx -= dt; } // 時の障壁の時計
       // 敵の攻撃が出た瞬間の斬光（1 振りにつき 1 度）
       if (e.alive && e.attacks && e.attacks.length && e.fxSwing !== e.swing) {
         e.fxSwing = e.swing;
@@ -939,7 +939,7 @@ export class Game {
     if (info.proj && (e.boss || e.elite)) dmg *= e.boss ? 0.5 : 0.7;
     if (e.brittleT > 0) dmg *= 1 + e.brittleK; // 脆くする
     if (info.spell && (e.boss || e.elite)) dmg = this.spellGuard(e, dmg);
-    if (e.boss && !e.defeated) dmg = this.bossBarrier(e, dmg);
+    if ((e.boss && !e.defeated) || e.elite) dmg = this.bossBarrier(e, dmg); // 中ボス（歯車騎士・振り子の番人）にも同じ障壁
     dmg = Math.round(dmg);
     // 刻守は戦いの中でも見切る：HP が 7 割を切った時点で、いちばん受けている種類のダメージを半減する
     if (e.boss && !e.defeated && (!this.run.diff || this.run.diff.strategy)) {

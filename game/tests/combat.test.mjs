@@ -339,3 +339,23 @@ test('刻守の時の障壁：強い一撃を続けても、戦った時間ぶ�
   const p0 = pc.hp; plain.dealDamage(pc, { base: 10, cat: 'combo', dir: 1 });
   assert.equal(hp0 - c.hp, p0 - pc.hp);
 });
+
+test('中ボス（歯車騎士・振り子の番人）にも時の障壁：強い一撃を続けても、戦った時間ぶんしか削れない（最短約 20 秒）', async () => {
+  const { BOSS_MIN_TIME } = await import('../src/game.js');
+  const { newGame } = await import('./helpers.mjs');
+  const { GearKnight, Warden } = await import('../src/enemies.js');
+  for (const E of [GearKnight, Warden]) {
+    const g = newGame(33); g.startLoop(); g.modal = null;
+    g.room.enemies = [];
+    const e = g.addEnemy(new E(400, 300)); e.state = 'idle';
+    const rate = e.maxHp / BOSS_MIN_TIME;
+    g.dealDamage(e, { base: 1e5, cat: 'heavy', dir: 1 });
+    assert.ok(e.alive && e.maxHp - e.hp <= rate * 1.75 + 1, `${e.kind} first hit ${e.maxHp - e.hp}`);
+    e.barrier.t = 10;
+    for (let i = 0; i < 20; i++) g.dealDamage(e, { base: 1e5, cat: 'heavy', dir: 1 });
+    assert.ok(e.alive, `${e.kind} still standing after 10 s`);
+    e.barrier.t = 30;
+    for (let i = 0; i < 20 && e.alive; i++) g.dealDamage(e, { base: 1e5, cat: 'heavy', dir: 1 });
+    assert.ok(!e.alive, `${e.kind} falls after enough time`);
+  }
+});

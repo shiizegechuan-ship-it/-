@@ -18,7 +18,7 @@
 - リポジトリ：`shiizegechuan-ship-it/-`、作業ブランチ：`feature/wedge-of-dawn`。ゲームは `game/` の下。
 - 起動（開発）：`cd game && python3 -m http.server 8080` → `http://localhost:8080/index.html`
   - ページの中の `window.__game`（ゲームの状態）、`window.__music`、`__setManual(true)` と `__step(n)`（1 コマずつ進める）がテストに便利。
-- テスト：`cd game && node --test tests/*.test.mjs`（今 **250 件すべて通る**）。
+- テスト：`cd game && node --test tests/*.test.mjs`（今 **251 件すべて通る**）。
 - 1 ファイル版（Artifact 用）：`node tools/build-single.mjs <出力先.html>`。外枠の HTML は `index.html` と別に `tools/build-single.mjs` の中にある（iPhone 向けの設定などは両方へ入れる）。
 - Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v53）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
 - コミットの末尾の署名：
@@ -126,7 +126,8 @@
   - バッドエンドは結末の数に**含める（結末 n/4）**。
   - 「記憶の固執」を得た後の終わらない夜では、**Lv も金貨も持ち越す**。
 
-### 4-7. 中ボスが指定秒数より先に倒されてしまう。障壁はどうなっているか【回答：中ボスにも付ける・最短 20 秒】
+### 4-7. 中ボスが指定秒数より先に倒されてしまう。障壁はどうなっているか【回答：中ボスにも付ける・最短 20 秒 → 済み】
+- **直した**：刻守と同じ時の障壁（`bossBarrier`、目安 20 秒）を中ボス（`e.elite`）にも付けた。ボットで測った中ボス戦の長さ（3 シード）：以前 弱い 10〜18 秒・中 5〜20 秒・強い 1.0〜1.6 秒・極端 0.9〜1.7 秒 → 今 どの構成も 23〜35 秒。まれに 60〜90 秒になるのは、残り HP がわずかな所でボットが離れたまま近づかないため（障壁の上限には掛かっていない）。
 - 回答用の事実：時間で上限をかける「時の障壁」（`game.js` の `bossBarrier`、最短の目安 20 秒）は**刻守（`e.boss`）にしか付けていない**。中ボス（歯車騎士・振り子の番人・`e.elite`）には、術で 1 秒あたりに削れる量の上限（`spellGuard`）しか無く、剣の攻撃には上限が無い。また中ボスの部屋は「15 秒たつまで制圧にならない」の対象外。
 - 依頼者に聞く：中ボスにも同じ障壁を付けるか、目安の秒数は何秒か。
 
