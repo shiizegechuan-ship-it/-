@@ -320,10 +320,10 @@ export class Player {
     return gapX <= 34 && Math.abs(cy(e) - (this.y + this.h / 2)) < e.h / 2 + 14;
   }
   // 部屋を終えたあと、扉の横までくるくる回りながら飛んでいく（壁は抜ける）
-  // air：行き先は空中（着いたら、そのまま落ちる）
-  startTravel(tx, ty, { air = false } = {}) {
+  // air：行き先は空中（着いたら、そのまま落ちる）。safe：移動の間は無敵（戦いの後の移動）。タップ移動は無敵にしない
+  startTravel(tx, ty, { air = false, safe = true } = {}) {
     this.state = 'travel'; this.stateT = 0; this.atk = null;
-    this.travel = { x0: this.x, y0: this.y, tx, ty, t: 0, air, dur: Math.min(0.9, 0.35 + Math.hypot(tx - this.x, ty - this.y) / 900) };
+    this.travel = { x0: this.x, y0: this.y, tx, ty, t: 0, air, safe, dur: Math.min(0.9, 0.35 + Math.hypot(tx - this.x, ty - this.y) / 900) };
     this.face = Math.sign(tx - this.x) || this.face;
   }
   updateTravel(game, dt) {
@@ -333,7 +333,7 @@ export class Player {
     this.x = tr.x0 + (tr.tx - tr.x0) * e;
     this.y = tr.y0 + (tr.ty - tr.y0) * e - Math.sin(k * Math.PI) * 50;
     this.vx = 0; this.vy = 0;
-    this.iframeT = Math.max(this.iframeT, 0.1);
+    if (tr.safe) this.iframeT = Math.max(this.iframeT, 0.1);
     this.flipT = 0.34 - ((tr.t * 2.6) % 1) * 0.34;
     if (Math.floor(tr.t / 0.06) !== Math.floor((tr.t - dt) / 0.06)) game.fx.afterimage(this);
     if (k >= 1) {

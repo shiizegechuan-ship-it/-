@@ -58,6 +58,8 @@ export const ENEMY_SIZE = { look: 1.25, hit: 1.12, big: 1.5 };
 export const BOSS_MIN_TIME = 20;
 // 強化の候補の枚数（通常の選択）と、そこに「仲間を呼ぶ」が混ざる確率
 export const OFFER_N = 6, CALL_IN_OFFER = 0.08;
+// タップ移動のあと、次のタップ移動を受け付けるまでの間（秒）
+export const TAP_MOVE_CD = 0.4;
 export function tapGoal(map, p, wx, wy, easy) {
   const free = (x, y) => p.boxFree(map, x, y);
   const lowest = (col) => {
@@ -1801,11 +1803,13 @@ export class Game {
   tapMove(x, y) {
     const p = this.player, map = this.map;
     if (this.scene !== 'play' || this.modal || !p || !['normal', 'attack'].includes(p.state) || !this.room) return false;
+    if (this.run.clock < (p.tapReadyAt || 0)) return false; // 着いてすぐは次のタップ移動を受け付けない（連打で飛び回らないように）
     const wx = this.cam.x + x / ZOOM, wy = this.cam.y + y / ZOOM;
     const easy = DIFF_ORDER.indexOf(this.difficulty().id) <= DIFF_ORDER.indexOf('easy');
     const goal = tapGoal(map, p, wx, wy, easy);
     if (!goal || Math.hypot(goal.x - p.x, goal.y - p.y) < 8) return false;
-    p.startTravel(goal.x, goal.y, { air: easy });
+    p.startTravel(goal.x, goal.y, { air: easy, safe: false });
+    p.tapReadyAt = this.run.clock + p.travel.dur + TAP_MOVE_CD;
     this.sfx.play('dodge');
     return true;
   }
@@ -1824,7 +1828,7 @@ export class Game {
   eventHopGoal() {
     const room = this.room, p = this.player;
     if (room.hopUsed || this.modal || p.state !== 'normal' || !p.onGround) return null;
-    if (['combat', 'trial', 'elite', 'elite2', 'boss', 'golden'].includes(room.desc.type) || room.enemies.some((e) => e.alive)) return null;
+    if (['combat', 'trial', 'elite', 'elite2', 'boss'].includes(room.desc.type) || room.enemies.some((e) => e.alive)) return null;
     let best = null;
     for (const it of room.items) {
       if (it.kind === 'door' || it.kind === 'reward' || (it.vault && !this.run.vaultOpen) || !this.interactPrompt(it)) continue;

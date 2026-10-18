@@ -551,3 +551,35 @@ test('文字の大きさ：標準でも小さな文字は少し大きく、大�
   assert.match(g._saved, /xlarge/);
   assert.ok(g.pauseOptions().some((o) => o.id === 'text' && /特大/.test(o.label)));
 });
+
+test('タップ移動は無敵にならず、着いてすぐは次のタップ移動を受け付けない（連打で無敵のまま飛び回れない）', async () => {
+  const { TAP_MOVE_CD } = await import('../src/game.js');
+  const g = sandbox(FLAT_ROWS()); const d = new Driver(g); d.frame(5);
+  const p = g.player; p.iframeT = 0;
+  assert.ok(g.tapMove((30 * 30 - g.cam.x) * 1.5, (14 * 30 - g.cam.y) * 1.5));
+  d.frame(3);
+  assert.equal(p.state, 'travel'); assert.ok(!p.invulnerable, 'no i-frames while tap-moving');
+  assert.equal(g.tapMove(100, 300), false, 'no new tap move while travelling');
+  d.until(() => p.state !== 'travel', 120);
+  assert.equal(g.tapMove(100, 300), false, 'cooldown after arriving');
+  d.frame(Math.ceil(TAP_MOVE_CD * 60) + 2);
+  assert.ok(g.tapMove(100, 300), 'ready again');
+  // 戦いの後の扉への移動は、今までどおり無敵
+  p.startTravel(p.x + 100, p.y); d.frame(2); assert.ok(p.invulnerable);
+});
+function FLAT_ROWS() {
+  return ['################################################', ...Array.from({ length: 13 }, () => '#..............................................#'), '#P.............................................#', '################################################', '################################################', '################################################'];
+}
+
+test('黄金の部屋（戦いの無い部屋）でも、跳ぶボタンで右の宝箱へ移動できる', () => {
+  const g = newGame(5); const d = new Driver(g);
+  g.enterRoom(0, 1, { type: 'golden', layout: 'vault' }); g.modal = null;
+  assert.equal(g.room.desc.type, 'golden');
+  const chest = g.room.items.find((it) => it.kind === 'goldchest');
+  assert.ok(chest);
+  const p = g.player; d.until(() => p.onGround, 60);
+  p.x = Math.max(40, chest.x - 200); d.until(() => p.onGround, 60); d.frame(3);
+  assert.ok(g.eventHopGoal());
+  d.frame(1, ['jump']); d.until(() => p.state !== 'travel', 90);
+  assert.equal(g.nearestInteractable(), chest);
+});
