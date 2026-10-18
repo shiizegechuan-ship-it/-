@@ -2752,9 +2752,6 @@ export class Game {
         if (m.t < 0.25) return; // 誤選択防止
         if (input.pressed('left')) { m.sel = (m.sel + m.offer.length - 1) % m.offer.length; this.sfx.play('select'); }
         if (input.pressed('right')) { m.sel = (m.sel + 1) % m.offer.length; this.sfx.play('select'); }
-        // 2 段のときは上下で段を移る
-        const cols = cardRects(m.offer.length).cols;
-        if (cols < m.offer.length && (input.pressed('up') || input.pressed('down'))) { m.sel = m.sel < cols ? Math.min(m.offer.length - 1, m.sel + cols) : m.sel - cols; this.sfx.play('select'); }
         if (input.pressed('confirm') || input.pressed('jump')) {
           const id = m.offer[m.sel];
           const threat0 = this.threatStep();
@@ -2794,9 +2791,6 @@ export class Game {
         if (m.t < 0.25) return;
         if (input.pressed('left')) { m.sel = (m.sel + m.offer.length - 1) % m.offer.length; this.sfx.play('select'); }
         if (input.pressed('right')) { m.sel = (m.sel + 1) % m.offer.length; this.sfx.play('select'); }
-        // 2 段のときは上下で段を移る
-        const cols = cardRects(m.offer.length).cols;
-        if (cols < m.offer.length && (input.pressed('up') || input.pressed('down'))) { m.sel = m.sel < cols ? Math.min(m.offer.length - 1, m.sel + cols) : m.sel - cols; this.sfx.play('select'); }
         if (input.pressed('confirm') || input.pressed('jump')) {
           const id = m.offer[m.sel];
           if (id.startsWith('boon:')) { this.grantBoon(id.slice(5)); this.sfx.play('pickup'); input.consume('jump'); input.consume('attack'); this.modal = null; if (m.thenDoors) this.openDoors(); break; }

@@ -29,18 +29,8 @@ export function rewindGrid(n) {
   const rows = Math.ceil(n / 2);
   return { x: VIEW_W / 2 - cw - gap / 2 + 12, y: VIEW_H - 30 - rows * rowH + 18, cw, gap, rowH };
 }
-// 強化・アーティファクトのカードの位置。4 枚までは横 1 列、5 枚からは 2 段（cols は 1 段の枚数）
+// 強化・アーティファクトのカードの位置（横 1 列。候補は最大 4 枚：選択の刻印で 4 枚）
 export function cardRects(n) {
-  if (n <= 4) {
-    const cw = n > 3 ? 214 : 250, gap = 18, total = n * cw + (n - 1) * gap;
-    return { cols: n, big: true, rects: Array.from({ length: n }, (_, i) => ({ x: VIEW_W / 2 - total / 2 + i * (cw + gap), y: 140, w: cw, h: 270 })) };
-  }
-  const cols = Math.ceil(n / 2), gap = 14, cw = Math.min(290, Math.floor((VIEW_W - 60 - gap * (cols - 1)) / cols)), ch = 138;
-  const rects = [];
-  for (let i = 0; i < n; i++) {
-    const r = Math.floor(i / cols), inRow = r === 0 ? cols : n - cols, c = i - r * cols;
-    const total = inRow * cw + (inRow - 1) * gap;
-    rects.push({ x: VIEW_W / 2 - total / 2 + c * (cw + gap), y: 124 + r * (ch + 14), w: cw, h: ch });
-  }
-  return { cols, big: false, rects };
+  const cw = n > 3 ? 214 : 250, gap = 18, total = n * cw + (n - 1) * gap;
+  return { cols: n, rects: Array.from({ length: n }, (_, i) => ({ x: VIEW_W / 2 - total / 2 + i * (cw + gap), y: 140, w: cw, h: 270 })) };
 }

@@ -26,7 +26,21 @@ export function fontSize(size) {
   const base = size < 12 ? size + 2 : size < 15 ? size + 1 : size;
   return Math.round(base * (TEXT.mode === 'xlarge' ? 1.4 : TEXT.mode === 'large' ? 1.2 : 1));
 }
-// 収まらない文字の横送り：はじめを 1 秒見せ、左へ流して終わりまで見せ、1 秒止まってから戻る（情報が欠けないように）
+// 流れる文字ごとの時計：その文字が出た時（しばらく描かれていなかった後）から数える。
+// 画面全体の時計の周期の余りで決めると、文字が出た瞬間に周期の途中から始まり、速く飛んで見えるため
+const SINCE = new Map();
+function since(key) {
+  const now = TEXT.t;
+  let e = SINCE.get(key);
+  if (!e || now - e.last > 0.25 || now < e.last) { e = { start: now, last: now }; SINCE.set(key, e); }
+  e.last = now;
+  if (SINCE.size > 400) for (const [k, v] of SINCE) if (now - v.last > 1) SINCE.delete(k);
+  return now - e.start;
+}
+// その文字（key）の今の横送りの量
+export const scrollOffset = (key, over) => marqueeOffset(over, since(key));
+// 収まらない文字の横送り：はじめを 1 秒見せ、左へ一定の速さで流して終わりまで見せ、1 秒止まってから戻る（情報が欠けないように）
+// t はその文字が出てからの時間
 export function marqueeOffset(over, t) {
   const pause = 1, speed = 40, run = over / speed, period = pause * 2 + run;
   const k = t % period;
@@ -44,7 +58,9 @@ export function vOffset(over, t) {
 }
 function vbegin(ctx, key, box) {
   ctx.save(); ctx.beginPath(); ctx.rect(box.x, box.y, box.w, box.h); ctx.clip();
-  return Math.round(vOffset(VSCROLL[key] || 0, TEXT.t));
+  // 流す量が決まってから（前のフレームで測った量）、その枠を流し始める。量が変わったら最初から
+  const over = VSCROLL[key] || 0;
+  return Math.round(vOffset(over, since(`v:${key}:${over}`)));
 }
 function vend(ctx, key, bottom, box) {
   ctx.restore();
@@ -63,7 +79,7 @@ function text(ctx, str, x, y, { size = 14, color = C.text, align = 'left', bold 
   const w = ctx.measureText(str).width;
   if (w > room + 0.5 && room > 24) {
     const left = align === 'left' ? x : align === 'right' ? x - room : x - room / 2;
-    const off = marqueeOffset(w - room, TEXT.t);
+    const off = scrollOffset(`h:${str}:${Math.round(room)}`, w - room);
     ctx.save();
     ctx.beginPath(); ctx.rect(left - 1, y - fs * 1.15, room + 4, fs * 1.6); ctx.clip();
     ctx.textAlign = 'left';
@@ -339,9 +355,8 @@ function drawBoonPick(ctx, game, m) {
     if (appear <= 0) return;
     ctx.globalAlpha = appear;
     const R = lay.rects[i], cw = R.w, ch = R.h;
-    const x = R.x, y = R.y - (i === m.sel ? (lay.big ? 8 : 4) : 0) + (1 - appear) * 24;
+    const x = R.x, y = R.y - (i === m.sel ? 8 : 0) + (1 - appear) * 24;
     const sel = i === m.sel;
-    if (!lay.big) { drawBoonCardSmall(ctx, p, id, x, y, cw, ch, sel); ctx.globalAlpha = 1; return; }
     panel(ctx, x, y, cw, ch, sel ? sc.color : 'rgba(255,255,255,0.15)', sel ? 'rgba(24,18,32,0.98)' : 'rgba(14,11,20,0.95)');
     if (sel) { ctx.lineWidth = 2; ctx.strokeStyle = sc.color; ctx.strokeRect(x + 1, y + 1, cw - 2, ch - 2); }
     ctx.fillStyle = sc.color; ctx.fillRect(x, y, cw, 5);
@@ -352,27 +367,40 @@ function drawBoonPick(ctx, game, m) {
     if (def.max) text(ctx, own ? `Lv${own.tier} → ${nt}` : 'Lv1', x + cw - 16, y + 28, { size: 13, align: 'right', color: own ? '#ffe14a' : C.muted });
     const curArt = def.active && !own ? p.boons.find((b) => BOONS[b.id].active) : null;
     if (curArt) text(ctx, `持ち替え：${BOONS[curArt.id].name} を外す`, x + 16, y + ch - 32, { size: 11, color: '#ff8ae0' });
-    wrap(ctx, own ? (forgeDiff(id, own.tier).diff || def.desc(nt)) : def.desc(nt), cw - 28, 15).forEach((l, j) => text(ctx, l, x + 14, y + 86 + j * lh(21), { size: 15, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0' }));
     // 合成の素材なら、カードの下に「合成先・相手の素材・持っているか」を色つきの枠で見せる
     const fus = fusionsFor(id, p.boons);
-    if (fus.length) text(ctx, '◆ 合成素材', x + cw - 16, y + 46, { size: 10, align: 'right', color: fus[0].color, bold: true });
-    const hints = synergyHints(id, p.boons).filter((h) => !h.startsWith('合成：'));
-    const boxH = fus.length * 34;
-    let hy = y + 180;
-    for (const h of hints) { wrap(ctx, h, cw - 32, 11).forEach((l) => { if (hy < y + ch - boxH - 12) text(ctx, l, x + 16, hy, { size: 11, color: '#f2c14e' }); hy += lh(15); }); }
+    // 「◆ 合成素材」の印は、系統名と Lv の間に入る時だけ（文字が大きいと重なるので省く。合成の枠は下に出る）
+    ctx.font = `${fontSize(11)}px ${FONT}`; const fx0 = x + 16 + ctx.measureText(sc.name + '　').width;
+    ctx.font = `${fontSize(10)}px ${FONT}`; const fx1 = fx0 + ctx.measureText('◆ 合成素材').width;
+    ctx.font = `${fontSize(13)}px ${FONT}`; const lvX = x + cw - 16 - (def.max ? ctx.measureText(own ? `Lv${own.tier} → ${nt}` : 'Lv1').width + 8 : 0);
+    if (fus.length && fx1 < lvX) text(ctx, '◆ 合成素材', fx0, y + 28, { size: 10, color: fus[0].color, bold: true });
+    const FB = lh(34), boxH = fus.length * FB;
+    // 説明（17px）→ 補足（共鳴・相乗）の順に、合成の枠より上へ詰める。文字が大きくて入りきらない時は、
+    // 補足を省いて説明を優先し、それでも入らない分は最後の行につなげて横に流す（重ならず、欠けない）
+    const L = lh(24), HL = lh(15), top = y + 88, bottom = y + ch - boxH - 12 - (curArt ? lh(18) : 0);
+    const lines = wrap(ctx, own ? (forgeDiff(id, own.tier).diff || def.desc(nt)) : def.desc(nt), cw - 28, 17);
+    let hintLines = synergyHints(id, p.boons).filter((h) => !h.startsWith('合成：')).flatMap((h) => wrap(ctx, h, cw - 32, 11));
+    const fit = (nh) => Math.max(1, Math.floor((bottom - top - (nh ? lh(8) + nh * HL : 0)) / L) + 1);
+    if (lines.length > fit(hintLines.length)) hintLines = hintLines.slice(0, Math.max(0, Math.floor((bottom - top - lines.length * L) / HL)));
+    const maxL = fit(hintLines.length);
+    const shown = lines.length > maxL ? [...lines.slice(0, maxL - 1), lines.slice(maxL - 1).join('')] : lines;
+    shown.forEach((l, j) => text(ctx, l, x + 14, top + j * L, { size: 17, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0', maxW: cw - 28 }));
+    let hy = top + (shown.length - 1) * L + lh(8) + HL;
+    for (const l of hintLines) { if (hy <= bottom) text(ctx, l, x + 16, hy, { size: 11, color: '#f2c14e', maxW: cw - 32 }); hy += HL; }
+    const hints = hintLines;
     fus.forEach((f, j) => {
-      const by = y + ch - boxH - 6 + j * 34;
-      ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(x + 8, by, cw - 16, 30);
-      ctx.fillStyle = f.color; ctx.fillRect(x + 8, by, 3, 30);
-      text(ctx, `合成 ▶ ${BOONS[f.to].name}`, x + 18, by + 13, { size: 12, bold: true, color: f.color });
+      const by = y + ch - boxH - 6 + j * FB;
+      ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(x + 8, by, cw - 16, FB - 4);
+      ctx.fillStyle = f.color; ctx.fillRect(x + 8, by, 3, FB - 4);
+      text(ctx, `合成 ▶ ${BOONS[f.to].name}`, x + 18, by + lh(13), { size: 12, bold: true, color: f.color, maxW: cw - 32 });
       const have = f.otherLv > 0, ready = f.otherLv >= 2;
-      text(ctx, `＋ ${BOONS[f.other].name}`, x + 18, by + 27, { size: 11, color: '#e8e0d0' });
-      text(ctx, ready ? `手持ち Lv${f.otherLv} ✓` : have ? `手持ち Lv${f.otherLv}（Lv2 で）` : '未所持', x + cw - 14, by + 27, { size: 10, align: 'right', color: ready ? '#7dff9a' : have ? '#ffe14a' : C.muted });
+      text(ctx, `＋ ${BOONS[f.other].name}`, x + 18, by + lh(27), { size: 11, color: '#e8e0d0' });
+      text(ctx, ready ? `手持ち Lv${f.otherLv} ✓` : have ? `手持ち Lv${f.otherLv}（Lv2 で）` : '未所持', x + cw - 14, by + lh(27), { size: 10, align: 'right', color: ready ? '#7dff9a' : have ? '#ffe14a' : C.muted });
     });
     if (!fus.length && !hints.length && RESONANCE[def.school] && !schoolCounts(p.boons)[def.school]) text(ctx, `同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted, maxW: cw - 28 });
     ctx.globalAlpha = 1;
   });
-  text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : lay.big ? '← → 選ぶ　Z 決定' : '←→↑↓ 選ぶ　Z 決定', VIEW_W / 2, 428, { size: 12, align: 'center', color: C.muted });
+  text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定', VIEW_W / 2, 428, { size: 12, align: 'center', color: C.muted });
   // 現在の手持ち。選んでいるカードと合成の組になるものは、その合成の色で光らせる
   if (p.boons.length) {
     const pair = new Map(fusionsFor(m.offer[m.sel], p.boons).map((f) => [f.other, f.color]));
@@ -386,29 +414,6 @@ function drawBoonPick(ctx, game, m) {
     let tx = VIEW_W / 2 - total / 2;
     text(ctx, label, tx, 452, { size: 11, color: '#bbb' }); tx += lw;
     parts.forEach((q, i) => { text(ctx, q.s, tx, 452, { size: 11, color: q.c || '#bbb', bold: !!q.c }); tx += widths[i]; if (i < parts.length - 1) { text(ctx, sep, tx, 452, { size: 11, color: '#bbb' }); tx += sw; } });
-  }
-}
-
-// 2 段に並べるときの小さなカード：系統・名前・Lv・説明（3 行まで）・合成の相手（1 行）
-function drawBoonCardSmall(ctx, p, id, x, y, cw, ch, sel) {
-  const def = BOONS[id], sc = SCHOOLS[def.school];
-  panel(ctx, x, y, cw, ch, sel ? sc.color : 'rgba(255,255,255,0.15)', sel ? 'rgba(24,18,32,0.98)' : 'rgba(14,11,20,0.95)');
-  if (sel) { ctx.lineWidth = 2; ctx.strokeStyle = sc.color; ctx.strokeRect(x + 1, y + 1, cw - 2, ch - 2); }
-  ctx.fillStyle = sc.color; ctx.fillRect(x, y, cw, 4);
-  const own = p.boons.find((b) => b.id === id), nt = own ? own.tier + 1 : 1;
-  text(ctx, sc.name, x + 12, y + 20, { size: 11, color: sc.color, bold: true });
-  if (def.max) text(ctx, own ? `Lv${own.tier} → ${nt}` : 'Lv1', x + cw - 12, y + 20, { size: 12, align: 'right', color: own ? '#ffe14a' : C.muted });
-  text(ctx, def.name, x + 12, y + 44, { size: 18, bold: true, font: SERIF });
-  const fus = fusionsFor(id, p.boons);
-  const lines = wrap(ctx, own ? (forgeDiff(id, own.tier).diff || def.desc(nt)) : def.desc(nt), cw - 24, 13);
-  // 入りきる行の数（文字が大きいほど少ない）。入りきらない分は最後の行につなげて横に流す（説明が欠けないように）
-  const L = lh(17), maxL = Math.max(1, Math.floor((ch - 58 - (fus.length ? 26 : 6)) / L));
-  const shown = lines.length > maxL ? [...lines.slice(0, maxL - 1), lines.slice(maxL - 1).join('')] : lines;
-  shown.forEach((l, j) => text(ctx, l, x + 12, y + 66 + j * L, { size: 13, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0', maxW: cw - 24 }));
-  if (fus.length) {
-    const f = fus[0], ready = f.otherLv >= 2;
-    ctx.fillStyle = f.color; ctx.fillRect(x + 8, y + ch - 24, 3, 16);
-    text(ctx, `合成 ▶ ${BOONS[f.to].name}（＋${BOONS[f.other].name}${f.otherLv ? ` Lv${f.otherLv}${ready ? ' ✓' : ''}` : '・未所持'}）`, x + 16, y + ch - 11, { size: 11, color: f.color, bold: true, maxW: cw - 24 });
   }
 }
 

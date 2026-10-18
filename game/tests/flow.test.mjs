@@ -624,6 +624,16 @@ test('文字の大きさ：標準でも小さな文字は少し大きく、大�
   assert.equal(marqueeOffset(over, 0.5), 0);
   assert.ok(marqueeOffset(over, 2) > 0 && marqueeOffset(over, 2) < over);
   assert.equal(marqueeOffset(over, 1 + over / 40 + 0.5), over);
+  // 文字が出た瞬間は、画面全体の時計がどこでも先頭から始まり、一定の速さ（毎秒 40 以下）で流れる（最初だけ速く飛ばない）
+  const { scrollOffset } = await import('../src/ui.js');
+  for (const t0 of [0, 2.7, 37.3]) {
+    TEXT.t = t0; let prev = scrollOffset('test-' + t0, over);
+    assert.equal(prev, 0, `starts at the head (t=${t0})`);
+    for (let k = 1; k <= 120; k++) { TEXT.t = t0 + k / 30; const o = scrollOffset('test-' + t0, over); if (o >= prev) assert.ok(o - prev <= 40 / 30 + 1e-6, `steady at t=${TEXT.t}`); prev = o; }
+  }
+  // しばらく描かれなかった文字は、また先頭から
+  TEXT.t = 100; assert.equal(scrollOffset('test-0', over), 0);
+  TEXT.t = 0;
   // 中断メニュー・タイトルで切り替え、保存される
   const st = memStorage();
   const g = newGame(5, st); g.storage.saveSettings = (s) => { g._saved = s; };
