@@ -27,8 +27,9 @@ export class Enemy {
     this.boss = false;
     this.tier = 1; // 夜の深さで上がる（攻撃パターンが増える）
   }
-  get timeScale() { return this.snareT > 0 ? 0.15 : this.warp > 0 ? 0.35 : this.lag > 0 ? 0.6 : 1; }
-  get slowed() { return this.warp > 0 || this.lag > 0 || this.snareT > 0; }
+  // 中ボス・刻守（白き刻守も）には、遅くする効果（遅延・時歪・鎖）を一切効かせない
+  get timeScale() { return this.boss || this.elite ? 1 : this.snareT > 0 ? 0.15 : this.warp > 0 ? 0.35 : this.lag > 0 ? 0.6 : 1; }
+  get slowed() { return !this.boss && !this.elite && (this.warp > 0 || this.lag > 0 || this.snareT > 0); }
   // 予備動作の長さの倍率（遅い敵・難易度）
   wmul(game) { return (this.slowed ? game.player.stats.slowWindupMul : 1) * (game.run && game.run.diff ? game.run.diff.windup : 1); }
   setState(s) { this.state = s; this.stateT = 0; this.tell = 0; }
@@ -503,15 +504,13 @@ export class GearKnight extends Enemy {
         if (this.hp <= 0) this.alive = false;
         return { blocked: false, flinched: true, guardBreak: true };
       }
-      this.hitFlash = 0.05;
-      this.vx = info.dir * 40;
+      this.hitFlash = 0.05; // 弾いても押し戻されない（中ボスは吹き飛ばない）
       return { blocked: true };
     }
     this.hp -= info.dmg;
     this.hitFlash = 0.1;
     if (this.hp <= 0) this.alive = false;
-    // 隙の間は小さく揺れるだけ（盾には戻らない）
-    if (this.state === 'recover' || this.state === 'stagger') this.vx = info.dir * 30;
+    // 中ボスは攻撃を受けても吹き飛ばず、ひるまない（盾を重撃で崩した時だけ崩れる）
     return { blocked: false, flinched: false };
   }
 }

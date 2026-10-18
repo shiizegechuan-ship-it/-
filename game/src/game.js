@@ -1023,9 +1023,10 @@ export class Game {
     this.learnOnce(e);
     return res;
   }
-  // 弱体の強化：直接攻撃で敵に錆び・脆さ、重撃で鎖。中ボス・刻守には効きが半分
+  // 弱体の強化：直接攻撃で敵に錆び・脆さ、重撃で鎖。中ボス・刻守（白き刻守も）には一切効かない
   applyHex(e, info) {
-    const st = this.player.stats, big = e.boss || e.elite, k = big ? 0.5 : 1, time = 4 * (st.hexTime || 1);
+    if (e.boss || e.elite) return;
+    const st = this.player.stats, k = 1, time = 4 * (st.hexTime || 1);
     if (st.rust) { e.rustT = time; e.rustK = st.rust * k; }
     if (st.brittle) { e.brittleT = time; e.brittleK = st.brittle * k; }
     if (st.snare && info.heavy && e.alive) {
@@ -1594,7 +1595,7 @@ export class Game {
     this.fx.text(cx(p), p.y - 26, '刻閃', '#e8f4ff', 18);
     const t = PC.skillTime + p.stats.skillTimeAdd;
     for (const e of this.room.enemies) if (e.alive && Math.hypot(cx(e) - cx(p), cy(e) - cy(p)) < PC.skillRadius) {
-      e.warp = e.boss && e.counter === 'skill' ? t / 2 : t;
+      if (!e.boss && !e.elite) e.warp = t; // 中ボス・刻守は遅くならない
     }
     for (const pr of this.room.projectiles) if (Math.hypot(pr.x - cx(p), pr.y - cy(p)) < PC.skillRadius) { pr.vx *= 0.35; pr.vy *= 0.35; }
     if (this.room.boss) this.room.boss.onPlayerCast(this);

@@ -108,11 +108,13 @@ test('刻守の記憶（残響）：紫の輪の間は残響を吸収する', ()
   assert.equal(b.hp, hp);
 });
 
-test('刻守の記憶（時歪）：時歪の効果時間が半分', () => {
-  const { g, d, b } = bossRoom(13, (g) => { g.meta.lastLoop = { dmgByCat: { skill: 500 } }; });
-  g.player.gauge = 100; g.player.x = b.x - 50;
-  g.useSkill();
-  assert.ok(b.warp > 0.9 && b.warp < 1.1);
+test('刻守には時歪の遅くする効果が効かない（術潰しの対策があってもなくても）', () => {
+  for (const lastLoop of [null, { dmgByCat: { skill: 500 } }]) {
+    const { g, b } = bossRoom(13, (g) => { g.meta.lastLoop = lastLoop; });
+    g.player.gauge = 100; g.player.x = b.x - 50;
+    g.useSkill();
+    assert.ok(!(b.warp > 0) && b.timeScale === 1 && !b.slowed);
+  }
 });
 
 test('時止め中もプレイヤーは遅く動ける（完全停止はしない）', () => {

@@ -241,7 +241,7 @@ test('守護の強化：時の盾・鉄の心・棘の外套・不動・踏み�
   assert.equal(r.state, 'dead', 'only once per room');
 });
 
-test('弱体の強化：錆びつかせ（敵の与ダメージ減）・脆くする（受けるダメージ増）・足止めの鎖（重撃で縛る）。中ボス以上は半分', async () => {
+test('弱体の強化：錆びつかせ（敵の与ダメージ減）・脆くする（受けるダメージ増）・足止めの鎖（重撃で縛る）。中ボス・刻守には効かない', async () => {
   const { sandbox, Driver, FLAT } = await import('./helpers.mjs');
   const { RustSoldier } = await import('../src/enemies.js');
   const mk = (boons) => {
@@ -259,9 +259,14 @@ test('弱体の強化：錆びつかせ（敵の与ダメージ減）・脆く�
   // 錆びつかせ：敵の攻撃が弱まる
   const { g: rg, e: re } = hit([{ id: 'rust', tier: 2 }]);
   assert.ok(re.rustT > 0 && Math.abs(rg.rustMul(re) - 0.7) < 1e-9);
-  // 中ボス以上は半分
-  const { g: eg, e: ee } = mk([{ id: 'rust', tier: 2 }]); ee.elite = true; eg.run.critRng = { next: () => 1 };
-  eg.dealDamage(ee, { base: 10, cat: 'combo', dir: 1 }); assert.ok(Math.abs(eg.rustMul(ee) - 0.85) < 1e-9);
+  // 中ボス・刻守には一切効かない
+  for (const flag of ['elite', 'boss']) {
+    const { g: eg, e: ee } = mk([{ id: 'rust', tier: 3 }, { id: 'brittle', tier: 3 }, { id: 'snare', tier: 3 }]); ee[flag] = true; eg.run.critRng = { next: () => 1 };
+    eg.dealDamage(ee, { base: 10, cat: 'combo', dir: 1 }); eg.dealDamage(ee, { base: 10, cat: 'heavy', heavy: true, dir: 1 });
+    assert.ok(!(ee.rustT > 0) && !(ee.brittleT > 0) && !(ee.snareT > 0), `${flag}: no hex`);
+    assert.equal(eg.rustMul(ee), 1);
+    ee.lag = 3; ee.warp = 3; ee.snareT = 3; assert.equal(ee.timeScale, 1, `${flag}: never slowed`);
+  }
   // 足止めの鎖：重撃で縛られ、ほとんど動けない
   const { g: sg, e: se } = mk([{ id: 'snare', tier: 2 }]); sg.run.critRng = { next: () => 1 };
   sg.dealDamage(se, { base: 10, cat: 'combo', dir: 1 }); assert.ok(!(se.snareT > 0), 'normal hit does not snare');
@@ -357,5 +362,27 @@ test('中ボス（歯車騎士・振り子の番人）にも時の障壁：強�
     e.barrier.t = 30;
     for (let i = 0; i < 20 && e.alive; i++) g.dealDamage(e, { base: 1e5, cat: 'heavy', dir: 1 });
     assert.ok(!e.alive, `${e.kind} falls after enough time`);
+  }
+});
+
+test('中ボス・刻守・白き刻守は、攻撃を受けても吹き飛ばず、ひるまない', async () => {
+  const { newGame } = await import('./helpers.mjs');
+  const { GearKnight, Warden } = await import('../src/enemies.js');
+  for (const E of [GearKnight, Warden]) {
+    const g = newGame(41); g.startLoop(); g.modal = null; g.room.enemies = [];
+    const e = g.addEnemy(new E(400, 300)); e.hp = e.maxHp = 1e6; e.barrier = { t: 1e9, dealt: 0 };
+    for (const st of ['recover', 'approach', 'idle']) {
+      e.state = st; e.vx = 0; e.face = -1;
+      const r = g.dealDamage(e, { base: 30, cat: 'combo', knock: 400, dir: 1 });
+      assert.ok(!r || !r.flinched, `${e.kind} ${st}: no flinch`);
+      assert.equal(e.vx, 0, `${e.kind} ${st}: no knockback`);
+    }
+  }
+  const g = newGame(42); g.enterRoom(2, g.run.plan.floors[2].findIndex((r) => r.type === 'boss')); g.modal = null;
+  const b = g.room.boss; b.barrier = { t: 1e9, dealt: 0 };
+  for (const final of [false, true]) {
+    if (final) { b.trueDuel = true; g.beginFinalForm(b); g.modal = null; b.barrier = { t: 1e9, dealt: 0 }; }
+    b.setState('idle'); b.hp = b.maxHp;
+    for (let i = 0; i < 40; i++) { g.dealDamage(b, { base: 60, cat: 'heavy', heavy: true, breaks: true, knock: 600, dir: 1 }); assert.notEqual(b.state, 'stagger', `final=${final}: no stagger from damage`); b.hp = b.maxHp; }
   }
 });
