@@ -60,30 +60,10 @@ export function gearFrame(r, teeth, color, hole, step, steps = 8) {
   return c;
 }
 
-// 内装の型（各階 3 通り：0 はもとの型）。部屋ごとに替わる
+// 内装の型（中層・上層は 3 通り：0 はもとの型。下層・市場はもとの型だけ）。部屋ごとに替わる
 function interior(fi, v) {
   const c = makeCanvas(LAYER_W, LAYER_H), m = c.getContext('2d');
-  if (fi === 0 && v === 1) {
-    // 時計店の並ぶ通り：店先の庇と看板、軒先の掛け時計、旗の連なり
-    for (let x = 0; x < LAYER_W; x += 96) {
-      rect(m, x + 4, 70, 84, 200, '#1c1120'); rect(m, x + 4, 70, 84, 2, '#2e1c30');
-      for (let i = 0; i < 84; i++) rect(m, x + 4 + i, 62 + (i % 12 < 6 ? 0 : 2), 1, 8, i % 24 < 12 ? '#4a1a26' : '#2e1220');
-      rect(m, x + 30, 82, 32, 10, '#2a1828'); rect(m, x + 31, 83, 30, 1, '#6a4a3a');
-      circle(m, x + 46, 110, 8, '#c9a052'); line(m, x + 46, 110, x + 46, 105, '#c9a052'); line(m, x + 46, 110, x + 50, 110, '#c9a052');
-      rect(m, x + 14, 120, 20, 26, '#2a1830'); rect(m, x + 58, 120, 20, 26, '#2a1830');
-      rect(m, x + 16, 122, 16, 22, '#6a3a2a'); rect(m, x + 60, 122, 16, 22, '#6a3a2a');
-    }
-    for (let x = 0; x < LAYER_W; x++) { const y = 40 + Math.round(Math.sin(x / 96 * Math.PI) ** 2 * 10); pset(m, x, y, '#1a0f1e'); if (x % 8 < 5 && x % 8 > 0) rect(m, x, y + 1, 1, 6 - Math.abs(x % 8 - 3), (x >> 3) % 3 === 0 ? '#c45a48' : (x >> 3) % 3 === 1 ? '#c9a052' : '#5a7a9a'); }
-  } else if (fi === 0 && v === 2) {
-    // 広場：噴水と、柱から柱へ渡した豆電球、天幕の屋台
-    for (let x = 0; x < LAYER_W; x += 160) {
-      rect(m, x + 60, 150, 50, 8, '#1a0f1e'); rect(m, x + 70, 126, 30, 24, '#1a0f1e'); rect(m, x + 80, 100, 10, 26, '#1a0f1e'); disc(m, x + 85, 98, 6, '#1a0f1e');
-      for (let i = 0; i < 6; i++) pset(m, x + 74 + i * 4, 120 - (i % 2) * 3, '#5aa9e6');
-      rect(m, x + 2, 50, 4, 220, '#1a0f1e');
-      for (let i = 0; i < 154; i++) { const y = 54 + Math.round(Math.sin(i / 154 * Math.PI) * 16); pset(m, x + 6 + i, y, '#1a0f1e'); if (i % 10 === 5) rect(m, x + 6 + i, y + 1, 2, 2, '#ffd27a'); }
-      for (let i = 0; i < 40; i++) rect(m, x + 112 + i, 120 + Math.abs(i - 20) / 2, 1, 30 - Math.abs(i - 20) / 2, i % 10 < 5 ? '#3e1726' : '#5a1f2c');
-    }
-  } else if (fi === 1 && v === 1) {
+  if (fi === 1 && v === 1) {
     // ボイラー室：大きな釜と計器、蒸気の管
     for (let x = 10; x < LAYER_W; x += 120) {
       rect(m, x, 90, 60, 180, '#14262a'); disc(m, x + 30, 90, 30, '#14262a'); rect(m, x + 2, 92, 1, 170, '#24403f');

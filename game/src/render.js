@@ -8,7 +8,8 @@ import { drawHud, drawModal, drawTitle, drawRewind, drawEnding, FONT, setTextEnv
 import { PW, PH, makeCanvas, rect, pset, line, dashLine, circle, disc, wedge, arc, drawSprite } from './pix.js';
 import { drawBackground, backgroundFor, gearFrame, TS } from './background.js';
 // 部屋ごとの内装の型（0〜2）と、夜ごとの荒れ具合（第 2 夜は少し、第 3 夜からかなり）
-export const roomInterior = (game) => (game.run && game.room && game.room.desc.type !== 'boss' ? (game.run.ri + game.run.fi) % 3 : 0);
+// 下層・市場は元の背景のまま（新しい内装は中層・上層だけ）
+export const roomInterior = (game) => (game.run && game.room && game.run.fi > 0 && game.room.desc.type !== 'boss' ? (game.run.ri + game.run.fi) % 3 : 0);
 export const ruinLevel = (meta) => (!meta || meta.flags.ending ? 0 : meta.loop >= 3 ? 2 : meta.loop === 2 ? 1 : 0);
 import { spr } from './sprites.js';
 import { PRISM } from './arts.js';
