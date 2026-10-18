@@ -118,8 +118,10 @@ export const UPGRADES = {
   choice: { name: '選択の刻印', max: 1, desc: (lv) => `強化の候補が ${3 + lv} 枚になる`, cost: () => 150 },
 };
 export const upLv = (m, k) => (m.upgrades && m.upgrades[k]) || 0;
-// 伝説のアーティファクト「記憶の固執」：決着の戦いに勝って結末を見ると得る。終わらない夜でも、強化・Lv・金貨を持ったまま次の夜へ
+// 伝説のアーティファクト「記憶の固執」：真の結末「夜明けの楔」を見ると得る。強化・Lv・金貨を持ったまま次の夜へ
 export const hasPersistence = (m) => (m.artifacts || []).includes('persistence');
+// 結末のあとのエンドレスは 2 通り：ほかの結末のあとは「終わらない夜」、真の結末のあと（記憶の固執あり）は「記憶の固執の夜」
+export const endlessName = (m) => (hasPersistence(m) ? '記憶の固執の夜' : '終わらない夜');
 // 刻印の上限（「記憶の固執」があれば、継承の刻印は上限なし。めちゃ簡単は最初から継承が無限なので関係ない）
 export const upMax = (m, k) => (k === 'inherit' && hasPersistence(m) ? Infinity : UPGRADES[k].max);
 export const inheritCount = (m) => (m.difficulty === 'veryeasy' ? Infinity : 3 + upLv(m, 'inherit')); // 基本 3 個（刻印で +1 ずつ）。めちゃ簡単は無限
@@ -159,8 +161,8 @@ function migrate(m) {
   for (const k of ['power', 'arts', 'bond', 'ward', 'hex']) if (!m.unlocked.includes(k)) m.unlocked.push(k);
   m.companion ??= 'hotaru';
   m.runs ??= 0;
-  // 以前の版で結末を見たセーブは、「記憶の固執」を得たことにする
-  if (m.flags.ending && !m.artifacts.includes('persistence')) m.artifacts.push('persistence');
+  // 以前の版で真の結末を見たセーブは、「記憶の固執」を得たことにする
+  if (m.flags.endings.true && !m.artifacts.includes('persistence')) m.artifacts.push('persistence');
   return m;
 }
 
@@ -308,7 +310,7 @@ export function endLoop(m, run) {
   m.carry = hasPersistence(m) && m.flags.ending ? { level: run.level || 1, exp: run.exp || 0, gold: run.gold || 0 } : null;
   if (m.carry && run.gold) report.reset = report.reset.filter((x) => !/^金貨/.test(x.text));
   if (m.carry && (run.level || 1) > 1) report.reset = report.reset.filter((x) => !/^レベル/.test(x.text));
-  if (m.carry) report.kept.push({ text: `記憶の固執：Lv${m.carry.level}・金貨 ${m.carry.gold}`, sub: '終わらない夜では、Lv と金貨も持ったまま次の夜へ' });
+  if (m.carry) report.kept.push({ text: `記憶の固執：Lv${m.carry.level}・金貨 ${m.carry.gold}`, sub: '記憶の固執の夜では、Lv と金貨も持ったまま次の夜へ' });
   m.lastLoop = { dmgByCat: { ...(run.dmgByCat || {}) }, cause: run.cause, floor: run.floor, boons: (run.boons || []).map((b) => ({ ...b })), loop: m.loop, dodges: run.dodges || 0, clock: run.clock || 0 };
   const nextCounter = bossCounter(m.lastLoop);
   if (nextCounter) {
@@ -356,12 +358,12 @@ const STORY = [
 ];
 // 倒れて同じ夜をやり直すとき
 export function retryStory(m) {
-  if (m.flags.ending) return `第${m.loop}夜。終わらない夜の、同じはじまりにもう一度立つ。`;
+  if (m.flags.ending) return `第${m.loop}夜。${endlessName(m)}の、同じはじまりにもう一度立つ。`;
   return `第${m.loop}夜のはじめに戻った。夜は進んでいない――もう一度、同じ夜を。`;
 }
 export function nightStory(m) {
   const n = m.loop;
-  if (m.flags.ending) return `第${n}夜。夜明けを知った塔に、それでも夜は来る――終わらない夜。`;
+  if (m.flags.ending) return hasPersistence(m) ? `第${n}夜。朝を知る者の記憶は消えない――記憶の固執の夜。` : `第${n}夜。夜明けを知った塔に、それでも夜は来る――終わらない夜。`;
   if (n === LAST_NIGHT) return '第3夜。雨は上がり、塔の上に澄んだ月と、白い光の帯がかかっている。鐘は、もう掠れて鳴らない。';
   if (n > LAST_NIGHT) return `第${n}夜。月は澄んだまま。鐘はもう鳴らないのに、朝は来ない――歯止めに楔を。`;
   const line = STORY[Math.min(n - 2, STORY.length - 1)] || STORY[0];

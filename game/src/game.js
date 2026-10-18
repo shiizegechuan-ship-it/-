@@ -18,7 +18,7 @@ import { nightLook } from './nightlook.js';
 import { FLOOR_NAMES, buildPlan, layoutRows, extraEnemyTypes } from './world.js';
 import {
   newMeta, serialize, deserialize, endLoop, learn, knows, hasWedge, addWedge, removeWedge, freeSlots,
-  bossCounter, trueEndReady, finalReady, FINAL_NIGHT, LAST_NIGHT, canWedgeBrake, decisiveNight, badFinalNight, hasPersistence, upMax, endingFor, ENDING_IDS, PERSON_MAX, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
+  bossCounter, trueEndReady, finalReady, FINAL_NIGHT, LAST_NIGHT, canWedgeBrake, decisiveNight, badFinalNight, hasPersistence, endlessName, upMax, endingFor, ENDING_IDS, PERSON_MAX, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
   upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount, inheritLabel, habitAnalysis, dawnProgress, MOB_COUNTERS} from './meta.js';
 
 const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
@@ -239,7 +239,7 @@ export class Game {
     if (decisiveNight(meta)) this.fx.setBanner(`第 ${meta.loop} 夜 ― 決着の夜`, finalReady(meta) ? '鐘楼で、リラの言葉を師に届けよ' : '歯止めの楔：刻守との戦いが決着になる', '#ffd38a', 3);
     else if (badFinalNight(meta)) this.fx.setBanner(`第 ${meta.loop} 夜`, '鐘はもう夜を戻せない。けれど、楔の無い勝利で朝は来るだろうか', '#ffd38a', 3);
     else if (canWedgeBrake(meta) && !meta.flags.ending) this.fx.setBanner(`第 ${meta.loop} 夜`, '鐘楼の歯止めに楔を打てば、この夜の刻守戦が決着の戦いになる', '#ffd38a', 3);
-    else this.fx.setBanner(`第 ${meta.loop} 夜`, pr.next ? `夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}` : `終わらない夜　深さLv${this.run.scale.level}`, '#f2c14e', 2.6);
+    else this.fx.setBanner(`第 ${meta.loop} 夜`, pr.next ? `夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}` : `${endlessName(meta)}　深さLv${this.run.scale.level}`, '#f2c14e', 2.6);
     if (meta.loop === 1 && !meta.flags.ending && !meta.flags.seenRewind) this.openDialog([
       { who: '', text: 'あなたは時計塔の主「刻守」の弟子。この町は、同じ夜を繰り返している。' },
       { who: '', text: '夜の終わりに師が鐘を鳴らすと、時は夜のはじめに戻る。それを覚えていられるのは、師から「時の楔」を習ったあなただけ。' },
@@ -2367,8 +2367,8 @@ export class Game {
     let gotPersistence = false, pulled = false;
     if (!bad) {
       m.flags.ending = true;
-      // 決着の戦いに勝ってシナリオをクリアした：伝説のアーティファクト「記憶の固執」
-      if (!hasPersistence(m)) { m.artifacts = [...(m.artifacts || []), 'persistence']; gotPersistence = true; }
+      // 真の結末：伝説のアーティファクト「記憶の固執」（ほかの結末のあとは、ふつうの「終わらない夜」）
+      if (id === 'true' && !hasPersistence(m)) { m.artifacts = [...(m.artifacts || []), 'persistence']; gotPersistence = true; }
       // 歯止めの楔は抜ける（終わらない夜で同じ結末が毎晩くり返されないように。打ち直せば、ほかの結末を探せる）
       const bi = m.wedges.findIndex((w) => w.target === 'brake');
       if (bi >= 0) { removeWedge(m, bi); pulled = true; }
@@ -2381,8 +2381,8 @@ export class Game {
     const seen = ENDING_IDS.filter((k) => m.flags.endings[k]).length;
     if (bad) pages.push(['夜は続く', `結末 ${seen}/${ENDING_IDS.length} を見た`, '鐘楼の歯止めに楔を打った夜の決着の戦いで勝てば、朝が来るかもしれない。']);
     else {
-      if (gotPersistence) pages.push(['伝説のアーティファクト「記憶の固執」', ARTIFACTS.persistence.desc, '']);
-      pages.push(['クリア', `結末 ${seen}/${ENDING_IDS.length} を見た`, pulled ? 'ほかの結末は、歯止めに楔を打ち直して探せる。「終わらない夜」にも挑める。' : seen < ENDING_IDS.length ? 'ほかの結末を探すことも、続けて「終わらない夜」に挑むこともできる。' : 'すべての結末を見た。続けて「終わらない夜」に挑むこともできる。']);
+      if (gotPersistence) pages.push(['伝説のアーティファクト「記憶の固執」', ARTIFACTS.persistence.desc, 'これからの夜は「記憶の固執の夜」になる。']);
+      pages.push(['クリア', `結末 ${seen}/${ENDING_IDS.length} を見た`, pulled ? `ほかの結末は、歯止めに楔を打ち直して探せる。「${endlessName(m)}」にも挑める。` : seen < ENDING_IDS.length ? `ほかの結末を探すことも、続けて「${endlessName(m)}」に挑むこともできる。` : `すべての結末を見た。続けて「${endlessName(m)}」に挑むこともできる。`]);
     }
     this.ending = { t: 0, page: 0, id, pages, tone: ENDINGS[id].tone, bad };
     this.emit('ending', { id });
@@ -2535,7 +2535,7 @@ export class Game {
   // ───────── タイトル ─────────
   titleOptions() {
     const o = [];
-    if (this.meta) o.push({ id: 'continue', label: this.meta.flags.ending ? `終わらない夜へ（第 ${this.meta.loop} 夜）` : `続きから（第 ${this.meta.loop} 夜）` });
+    if (this.meta) o.push({ id: 'continue', label: this.meta.flags.ending ? `${endlessName(this.meta)}へ（第 ${this.meta.loop} 夜）` : `続きから（第 ${this.meta.loop} 夜）` });
     o.push({ id: 'new', label: this.meta ? 'はじめから（記録を消す）' : 'はじめる' });
     o.push({ id: 'diff', label: `難易度：${this.difficulty().name}（決定で切り替え）` });
     o.push({ id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}` });

@@ -112,6 +112,10 @@ test('真の結末：歯止めに楔を打った夜の決着の戦いで、条�
   d.until(() => g.scene === 'ending', 400);
   assert.equal(g.scene, 'ending');
   assert.ok(g.meta.flags.ending);
+  // 真の結末だけ「記憶の固執」。そのあとは「記憶の固執の夜」
+  assert.ok(g.meta.artifacts.includes('persistence'));
+  assert.ok(g.ending.pages.some((pg) => /記憶の固執/.test(pg[0])));
+  assert.match(g.titleOptions()[0].label, /^記憶の固執の夜へ/);
 });
 
 test('同じセーブ・同じ夜を2回遊ぶと、敵配置と強化候補が一致する（再挑戦の再現性）', () => {
@@ -166,7 +170,7 @@ function defeatBoss(g, d) {
 // 結末のページを最後まで送る
 function finishEnding(g, d) { for (let i = 0; i < 40 && g.scene === 'ending'; i++) { d.frame(60); d.frame(1, ['confirm']); } }
 
-test('決着は歯止めの楔で決まる：第 1 夜は打てない。第 2 夜に打つと刻守の部屋で聞かれずに決着の戦い。倒れても同じ夜（楔は残る）。勝てば結末と「記憶の固執」', () => {
+test('決着は歯止めの楔で決まる：第 1 夜は打てない。第 2 夜に打つと刻守の部屋で聞かれずに決着の戦い。倒れても同じ夜（楔は残る）。勝てば結末（真の結末以外は「記憶の固執」なしの終わらない夜）', () => {
   const g = newGame(9); const d = new Driver(g);
   // 第 1 夜：打てない（理由を出す）
   g.talkBrake({});
@@ -194,9 +198,9 @@ test('決着は歯止めの楔で決まる：第 1 夜は打てない。第 2 �
   defeatBoss(g, d);
   assert.equal(g.scene, 'ending'); assert.equal(g.ending.id, 'silence');
   assert.ok(g.meta.flags.ending && g.meta.flags.endings.silence);
-  assert.ok(g.meta.artifacts.includes('persistence'));
+  assert.ok(!g.meta.artifacts.includes('persistence'), 'only the true ending gives the persistence');
   assert.ok(!g.meta.wedges.some((w) => w.target === 'brake'), 'the brake wedge comes out after an ending');
-  assert.ok(g.ending.pages.some((pg) => /記憶の固執/.test(pg[0])));
+  assert.ok(!g.ending.pages.some((pg) => /記憶の固執/.test(pg[0])));
   assert.match(g.ending.pages[g.ending.pages.length - 1][1], /結末 1\/4/);
   finishEnding(g, d);
   // 結末のあとはリザルト（巻き戻り）画面。「次の夜へ」は「タイトル画面に戻る」
@@ -219,8 +223,9 @@ test('決着は歯止めの楔で決まる：第 1 夜は打てない。第 2 �
   assert.ok(h.rewind.touched);
   h.rewind.mode = 'view'; h.rewind.sel = 0; e.frame(1, ['confirm']); e.frame(1);
   assert.equal(h.scene, 'title');
-  // 続きからは終わらない夜（Lv・金貨を持ち越す「記憶の固執」つき）
-  assert.ok(h.meta.flags.ending && h.meta.artifacts.includes('persistence'));
+  // 続きからは（記憶の固執の無い）終わらない夜
+  assert.ok(h.meta.flags.ending && !h.meta.artifacts.includes('persistence'));
+  assert.match(h.titleOptions()[0].label, /^終わらない夜へ/);
 });
 
 test('歯止めの楔は歯止めの所でも抜ける。抜けば決着の戦いではなく、倒すと鐘が鳴って次の夜へ', () => {

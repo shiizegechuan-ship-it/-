@@ -16,8 +16,8 @@ export const ARTIFACTS = {
   goldhand: { rarity: 'gold', name: '黄金の秒針', desc: '連撃の速さ +25%' },
   aegis: { rarity: 'gold', name: '不滅の歯車', desc: 'この夜に一度だけ、倒れてもHP100%で立ち上がる' },
   stormcrown: { rarity: 'gold', name: '雷冠', desc: '2.5秒ごとに近くの敵へ雷が落ちる（50）' },
-  // 伝説：決着の戦いに勝って結末を見ると得る（扉・店・黄金の部屋には出ない）
-  persistence: { rarity: 'legend', name: '記憶の固執', desc: '終わらない夜でも、強化・Lv・金貨を持ったまま次の夜へ。継承の刻印の上限が無くなる' },
+  // 伝説：真の結末「夜明けの楔」を見ると得る（扉・店・黄金の部屋には出ない）
+  persistence: { rarity: 'legend', name: '記憶の固執', desc: '結末のあとの夜でも、強化・Lv・金貨を持ったまま次の夜へ。継承の刻印の上限が無くなる' },
 };
 export const ARTIFACT_COLOR = { normal: '#7fe0d0', gold: '#ffd84a', legend: '#ff9ad8' };
 
