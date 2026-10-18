@@ -1768,34 +1768,19 @@ test('めちゃ簡単：奈落の上の空の敵へ飛び込んで斬ったあ�
   assert.ok(tx < 14 || tx >= 34, 'on the floor beside the pit');
 });
 
-test('強化の選択は 6 枚（3 枚増）。2 段に並び、上下で段を移れる。タップでも選べる。まれに「仲間を呼ぶ」が混ざる', async () => {
+test('強化の選択は今までどおり 3 枚（選択の刻印で 4 枚）。まれに「仲間を呼ぶ」が混ざる', async () => {
   const { OFFER_N } = await import('../src/game.js');
-  const { cardRects } = await import('../src/layout.js');
-  assert.equal(OFFER_N, 6);
+  assert.equal(OFFER_N, 3);
   const g = newGame(81); g.startLoop(); g.modal = null; // 系統の解放は実際の初期値のまま（稀少・伝説は通常の候補に出ない）
   g.openBoonPick(1, null);
-  assert.equal(g.modal.offer.length, 6);
-  const lay = cardRects(6);
-  assert.equal(lay.cols, 3);
-  // カードは画面に収まり、重ならない
-  for (const [i, r] of lay.rects.entries()) {
-    assert.ok(r.x >= 0 && r.x + r.w <= 960 && r.y >= 100 && r.y + r.h <= 420, `card ${i}`);
-    for (const q of lay.rects.slice(i + 1)) assert.ok(r.x + r.w <= q.x || q.x + q.w <= r.x || r.y + r.h <= q.y || q.y + q.h <= r.y);
-  }
-  const d = new Driver(g); g.modal.sel = 1; d.frame(20);
-  d.frame(1, ['down']); d.frame(1); assert.equal(g.modal.sel, 4);
-  d.frame(1, ['up']); d.frame(1); assert.equal(g.modal.sel, 1);
-  // タップ：下の段の右端のカード
-  const r = lay.rects[5];
-  assert.equal(g.handleTap(r.x + r.w / 2, r.y + r.h / 2), false); assert.equal(g.modal.sel, 5);
-  assert.equal(g.handleTap(r.x + r.w / 2, r.y + r.h / 2), true);
+  assert.equal(g.modal.offer.length, 3);
+  g.meta.upgrades.choice = 1; g.modal = null; g.openBoonPick(1, null);
+  assert.equal(g.modal.offer.length, 4);
+  g.meta.upgrades.choice = 0;
   // 仲間を呼ぶ：何度も開くと、まれに混ざる（連れていないお供だけ）
   let calls = 0;
   for (let i = 0; i < 200; i++) { g.modal = null; g.openBoonPick(1, null); if (g.modal.offer.some((id) => id.startsWith('call_'))) calls++; }
   assert.ok(calls > 3 && calls < 40, `call offers ${calls}/200`);
-  // 稀少の選択（レベルごと）は今までどおり 3 枚
-  g.modal = null; g.openRarePick && g.openRarePick();
-  if (g.modal && g.modal.rare) assert.ok(g.modal.offer.length <= 3);
 });
 
 test('グレンは鍛冶の会話で合成の手がかりを教える（手持ちが素材の合成のうち、いちばん近いもの）', () => {

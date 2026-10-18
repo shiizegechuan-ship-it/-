@@ -55,8 +55,8 @@ export const FLOOR_REWARD = { gold: 200, exp: 90 };
 export const ENEMY_SIZE = { look: 1.25, hit: 1.12, big: 1.5 };
 // 刻守との戦いの最短の目安（秒）。時の障壁で、これより早く倒れにくくする
 export const BOSS_MIN_TIME = 20;
-// 強化の候補の枚数（通常の選択）と、そこに「仲間を呼ぶ」が混ざる確率
-export const OFFER_N = 6, CALL_IN_OFFER = 0.08;
+// 強化の候補の枚数（通常の選択。選択の刻印で +1）と、そこに「仲間を呼ぶ」が混ざる確率
+export const OFFER_N = 3, CALL_IN_OFFER = 0.08;
 // タップ移動のあと、次のタップ移動を受け付けるまでの間（秒）
 export const TAP_MOVE_CD = 0.4;
 // タップ移動の行き先（主人公の左上の座標）。x の列ごとに、いちばん下の「上に体が収まる床」を探す

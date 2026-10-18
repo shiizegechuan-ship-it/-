@@ -369,7 +369,7 @@ function drawBoonPick(ctx, game, m) {
       text(ctx, `＋ ${BOONS[f.other].name}`, x + 18, by + 27, { size: 11, color: '#e8e0d0' });
       text(ctx, ready ? `手持ち Lv${f.otherLv} ✓` : have ? `手持ち Lv${f.otherLv}（Lv2 で）` : '未所持', x + cw - 14, by + 27, { size: 10, align: 'right', color: ready ? '#7dff9a' : have ? '#ffe14a' : C.muted });
     });
-    if (!fus.length && !hints.length && RESONANCE[def.school] && !schoolCounts(p.boons)[def.school]) text(ctx, `同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted });
+    if (!fus.length && !hints.length && RESONANCE[def.school] && !schoolCounts(p.boons)[def.school]) text(ctx, `同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted, maxW: cw - 28 });
     ctx.globalAlpha = 1;
   });
   text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : lay.big ? '← → 選ぶ　Z 決定' : '←→↑↓ 選ぶ　Z 決定', VIEW_W / 2, 428, { size: 12, align: 'center', color: C.muted });
