@@ -18,9 +18,9 @@
 - リポジトリ：`shiizegechuan-ship-it/-`、作業ブランチ：`feature/wedge-of-dawn`。ゲームは `game/` の下。
 - 起動（開発）：`cd game && python3 -m http.server 8080` → `http://localhost:8080/index.html`
   - ページの中の `window.__game`（ゲームの状態）、`window.__music`、`__setManual(true)` と `__step(n)`（1 コマずつ進める）がテストに便利。
-- テスト：`cd game && node --test tests/*.test.mjs`（今 **258 件すべて通る**）。
+- テスト：`cd game && node --test tests/*.test.mjs`（今 **259 件すべて通る**）。
 - 1 ファイル版（Artifact 用）：`node tools/build-single.mjs <出力先.html>`。外枠の HTML は `index.html` と別に `tools/build-single.mjs` の中にある（iPhone 向けの設定などは両方へ入れる）。
-- Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v59）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
+- Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v60）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
 - コミットの末尾の署名：
   ```
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -43,6 +43,7 @@
 | `mobile-tap.mjs` | タップ移動・ボタンの二度押し・指が離れた時の入力の解放 |
 | `tapinv2.mjs` | タップ移動の連打で無敵にならないか |
 | `embed.mjs` | 全部屋で敵が壁にめり込んで出ないか |
+| `store.mjs` | ストアの画面写真（1920×1080・8 枚）と紹介動画（約 40 秒、BGM 入り）：`node tools/dev/store.mjs shots` / `video`（ボットが戦う。BGM は `render-bgm.mjs` の出力を使う）|
 | `avoid.mjs` | 刻守・白き刻守の技（と連続の組み合わせ）ごとに、走る・跳ぶ・回避の動き方を試して無傷で済むものがあるかを見る：`node tools/dev/avoid.mjs nightmare 300`。`canAvoid` はテストからも使う |
 | `trueduel.mjs` | 真の結末の決闘（刻守→白き刻守）を実際の HP で戦わせる：`node tools/dev/trueduel.mjs nightmare '{"atk":15,"hp":15}' 6` |
 | `atkbox.mjs` | 刻守・番人の攻撃の当たる範囲を枠で重ねて撮る |
@@ -183,6 +184,15 @@
 - 白き刻守の一撃 ×1.35・休み ×0.45 は難しい・激ムズだけ（`b.fierce`）。ほかは休み ×0.75。
 - 避けられるかの確認（激ムズ・第 3 段階・歯止めの楔で怒った刻守、床の揺れと護衛は除く。回避の待ち時間・無敵時間は実際のまま）：刻守の 4 技・白き刻守の 6 技・連続の組み合わせ 8 通りのすべてで、6 か所の立ち位置すべてに無傷で済む動き方があった（いちばん厳しいのは三連斬→突進を近くで受ける時）。中ボス 2 体も、8 秒間無傷で戦い続ける動き方があった。床の揺れは赤く光ったら跳べば当たらない（既存のテスト）。
 - 確かめていないこと：護衛や雑魚の攻撃が刻守の技と重なった時、人の手でのノーダメージ。
+
+## 4-追加5. 遊び心地と販売の準備
+- 回避の待ち時間を難易度で短く（`DIFFICULTY.dodgeCd`：めちゃ簡単・簡単 0.6、普通 0.8、難しい・激ムズ 1）。ジャスト回避なら待ち時間 0（もとから）。使えない間はタッチの回避ボタンが暗くなる（`game.dodgeReady()` → `touchUI.setDodgeReady`）。
+- 設定に「光の点滅を抑える」（`settings.calmFlash`。`fx.screenFlash` を 0.12 までに抑える）。タイトルの設定と中断メニューの両方。
+- 文字は同梱のフォント（`assets/fonts/DotGothic16-Regular.ttf`、許諾書 `OFL-DotGothic16.txt`）。外部（Google Fonts）から読み込まない。1 ファイル版は base64 で埋め込む（約 3.1MB になる）。
+- 設定 → ゲームについて：生成 AI の利用・フォントの権利・健康のための注意・記録と個人情報・ご利用にあたって を追記。**販売者名・問い合わせ先・版は `src/config.js` の `RELEASE`**（空なら出さない）。
+- 販売の手順書：`docs/RELEASE_GUIDE.md`（売り場の候補と AI の申告のしかた、売れ行きの調べ、売り場が決まってからやること）。**売り場が決まったら、それに合わせてアプリに包む（Steam は Electron／Tauri、スマホは Capacitor）のは依頼者の確定待ち**。
+- ストアの素材：`store/`（画面写真 8 枚・紹介動画 `trailer.mp4`・紹介文の日英 `STORE_PAGE.md`）。作り直しは `node tools/dev/store.mjs shots|video`。
+- 依頼者の判断：実機での確認はここではしない。遊んでもらっての調整はしない（難易度 5 段階で合わせる考え）。AI 生成物の権利の侵害は気にしない。
 
 ## 5. 主な仕組みの場所（早見）
 - 進行・部屋・ダメージ・店・会話・決戦：`src/game.js`（大きい。関数名で検索する）

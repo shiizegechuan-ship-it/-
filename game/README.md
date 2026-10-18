@@ -223,13 +223,16 @@ node tools/build-single.mjs          # dist/wedge-of-dawn.html を作る（esbui
 - `IMPLEMENTATION_PLAN.md`：改修指示書の項目ごとの対応状況。
 - `HANDOFF.md`：別のチャットへの引き継ぎメモ（進め方の希望・動かし方・次に直す一覧）。
 - `tools/dev/`：確認用のスクリプト（ボットでのバランス計測・スクリーンショット・曲の書き出し・スモークテストなど。使い方は HANDOFF.md）。
+- `docs/RELEASE_GUIDE.md`：販売・配布の手順書（売り場の候補・生成 AI の申告・売り場が決まってからやること）。
+- `store/`：ストアページの素材（画面写真・紹介動画・紹介文の日英）。
+- `assets/fonts/`：同梱のフォント（DotGothic16、SIL Open Font License 1.1）と許諾書。
 
 ## テスト
 ```sh
 cd game
 npm test            # node --test：物理・戦闘・ループ状態・部屋の到達可能性・1周の通し
 ```
-今 258 件、すべて通ります。
+今 259 件、すべて通ります。
 
 ## ファイル構成
 ```
