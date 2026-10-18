@@ -2394,7 +2394,8 @@ export class Game {
       if (e.page >= e.pages.length) {
         // 明けない夜：物語は終わらず、巻き戻り画面から次の夜へ
         if (e.bad) { this.scene = 'play'; this.run.ended = false; this.endRun('badend'); return; }
-        this.scene = 'title'; this.titleSel = 0; this.save();
+        // 決着がついた：リザルト（巻き戻り）画面で、終わらない夜のための強化をしてからタイトルへ
+        this.scene = 'play'; this.run.ended = false; this.endRun('ending');
       }
     }
   }
@@ -2402,7 +2403,8 @@ export class Game {
   // ───────── 巻き戻り画面 ─────────
   rewindOptions() {
     const m = this.meta;
-    const opts = [{ id: 'next', label: this.rewind && this.rewind.report.retry ? '同じ夜をもう一度' : '次の夜へ' }];
+    const rep = this.rewind && this.rewind.report;
+    const opts = [{ id: 'next', label: rep && rep.cause === 'ending' ? 'タイトル画面に戻る' : rep && rep.retry ? '同じ夜をもう一度' : '次の夜へ' }];
     opts.push({ id: 'upgrade', label: `刻印を刻む（時の欠片 ${m.shards}）` });
     const lastBoons = (m.lastLoop && m.lastLoop.boons) || [];
     if (this.carryAll()) {
@@ -2441,7 +2443,12 @@ export class Game {
       if (input.pressed('confirm') || input.pressed('jump')) {
         const o = opts[r.sel];
         this.sfx.play('confirm');
-        if (o.id === 'next') this.startLoop();
+        if (o.id === 'next' && r.report.cause === 'ending') {
+          // 決着のあと：何も強化していなければ、一度だけ「終わらない夜」と強化の案内を出す
+          if (!r.touched && !r.warned) { r.warned = true; r.mode = 'notice'; return; }
+          this.scene = 'title'; this.titleSel = 0; this.save();
+        }
+        else if (o.id === 'next') this.startLoop();
         else if (o.id === 'wedgeBoon') { r.mode = 'wedgeBoon'; r.sub = 0; r.scroll = 0; }
         else if (o.id === 'pull') { r.mode = 'pull'; r.sub = 0; r.scroll = 0; }
         else if (o.id === 'upgrade') { r.mode = 'upgrade'; r.sub = 0; r.scroll = 0; }
@@ -2450,6 +2457,7 @@ export class Game {
         else if (o.id === 'companion') this.openCompanionPick();
       }
     } else {
+      if (r.mode === 'notice') { if (input.pressed('confirm') || input.pressed('jump') || input.pressed('back') || input.pressed('dodge')) { r.mode = 'view'; this.sfx.play('select'); } return; }
       if (r.mode === 'upgrade' || r.mode === 'inherit') { this.updateRewindShop(input, r); return; }
       const list = r.mode === 'pull' ? this.meta.wedges : this.wedgeableBoons();
       if (!list.length) { r.mode = 'view'; return; }
@@ -2461,11 +2469,13 @@ export class Game {
         if (r.mode === 'wedgeBoon' && this.carryAll()) { this.sfx.play('deny'); r.lockedT = 1.2; return; } // 自動の楔は外せない・打ち直せない
         if (r.mode === 'pull') {
           const w = removeWedge(this.meta, r.sub);
+          r.touched = true;
           this.sfx.play('door');
           r.report.changed.push({ text: `楔を抜いた：${wedgeLabel(w)}`, tone: 'reset' });
         } else {
           const b = list[r.sub];
           if (addWedge(this.meta, { target: 'boon', boon: { id: b.id, tier: b.tier } })) {
+            r.touched = true;
             this.sfx.play('wedge');
             r.report.changed.push({ text: `楔を打った：強化「${BOONS[b.id].name}${b.tier > 1 ? ' II' : ''}」を持ったまま夜が始まる`, tone: 'gold' });
           }
@@ -2498,6 +2508,7 @@ export class Game {
       const k = list[r.sub];
       if (k === 'inherit' && this.carryAll()) { this.sfx.play('deny'); r.lockedT = 1.2; return; } // めちゃ簡単は最初から無限
       if (buyUpgrade(m, k)) {
+        r.touched = true;
         this.sfx.play('wedge'); r.flash = 0.3;
         r.report.changed.push({ text: `刻印：${UPGRADES[k].name} Lv${upLv(m, k)}（${UPGRADES[k].desc(upLv(m, k))}）`, tone: 'gold' });
         if (k === 'inherit') { const prev = m.inherit.slice(); m.inherit = prev; }
@@ -2506,8 +2517,8 @@ export class Game {
       if (this.carryAll()) { this.sfx.play('deny'); r.lockedT = 1.2; return; } // すべて自動で持ち越す（外せない）
       const b = list[r.sub];
       const i = m.inherit.findIndex((x) => x.id === b.id);
-      if (i >= 0) { m.inherit.splice(i, 1); this.sfx.play('door'); }
-      else if (m.inherit.length < inheritCount(m)) { m.inherit.push({ ...b }); this.sfx.play('confirm'); }
+      if (i >= 0) { m.inherit.splice(i, 1); r.touched = true; this.sfx.play('door'); }
+      else if (m.inherit.length < inheritCount(m)) { m.inherit.push({ ...b }); r.touched = true; this.sfx.play('confirm'); }
       else this.sfx.play('deny');
     }
     this.save();
@@ -2582,6 +2593,7 @@ export class Game {
       const r = this.rewind;
       if (this.modal && this.modal.type === 'journal') return this.tapJournal(x, y);
       if (r.t < 3.2) return true;
+      if (r.mode === 'notice') return true;
       if (r.mode === 'view') {
         const n = this.rewindOptions().length, g = rewindGrid(n);
         for (let i = 0; i < n; i++) {

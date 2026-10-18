@@ -199,7 +199,28 @@ test('決着は歯止めの楔で決まる：第 1 夜は打てない。第 2 �
   assert.ok(g.ending.pages.some((pg) => /記憶の固執/.test(pg[0])));
   assert.match(g.ending.pages[g.ending.pages.length - 1][1], /結末 1\/4/);
   finishEnding(g, d);
+  // 結末のあとはリザルト（巻き戻り）画面。「次の夜へ」は「タイトル画面に戻る」
+  assert.equal(g.scene, 'rewind'); assert.equal(g.rewind.report.cause, 'ending');
+  assert.equal(g.rewindOptions()[0].label, 'タイトル画面に戻る');
+  d.until(() => g.rewind.t > 3.3, 400);
+  // 何も強化せずに押す → 終わらない夜と強化の案内（ライトボックス）。閉じてもう一度押すとタイトルへ
+  g.rewind.sel = 0; d.frame(1, ['confirm']); d.frame(1);
+  assert.equal(g.scene, 'rewind'); assert.equal(g.rewind.mode, 'notice');
+  d.frame(1, ['confirm']); d.frame(1);
+  assert.equal(g.rewind.mode, 'view');
+  d.frame(1, ['confirm']); d.frame(1);
   assert.equal(g.scene, 'title');
+  // 強化（刻印）をしてから押すと、案内なしでタイトルへ
+  const h = newGame(10); const e = new Driver(h);
+  h.meta.loop = 2; addWedge(h.meta, { target: 'brake' }); h.startLoop(); h.modal = null;
+  enterBoss(h, e); defeatBoss(h, e); finishEnding(h, e);
+  e.until(() => h.rewind.t > 3.3, 400);
+  h.meta.shards = 9999; h.rewind.mode = 'upgrade'; h.rewind.sub = 0; e.frame(1, ['confirm']); e.frame(1);
+  assert.ok(h.rewind.touched);
+  h.rewind.mode = 'view'; h.rewind.sel = 0; e.frame(1, ['confirm']); e.frame(1);
+  assert.equal(h.scene, 'title');
+  // 続きからは終わらない夜（Lv・金貨を持ち越す「記憶の固執」つき）
+  assert.ok(h.meta.flags.ending && h.meta.artifacts.includes('persistence'));
 });
 
 test('歯止めの楔は歯止めの所でも抜ける。抜けば決着の戦いではなく、倒すと鐘が鳴って次の夜へ', () => {

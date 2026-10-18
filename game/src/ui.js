@@ -610,8 +610,8 @@ export function drawRewind(ctx, game) {
   ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(VIEW_W / 2, VIEW_H / 2); ctx.lineTo(VIEW_W / 2 + Math.cos(spin) * 190, VIEW_H / 2 + Math.sin(spin) * 190); ctx.stroke();
   ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(VIEW_W / 2, VIEW_H / 2); ctx.lineTo(VIEW_W / 2 + Math.cos(spin / 12) * 120, VIEW_H / 2 + Math.sin(spin / 12) * 120); ctx.stroke();
   ctx.restore();
-  const causeText = rep.cause === 'bell' ? '鐘が鳴った。夜が戻る。' : rep.cause === 'badend' ? '刻守を倒した。けれど、夜は明けない。' : 'あなたは倒れた。同じ夜のはじめに戻る。';
-  text(ctx, causeText + (rep.retry ? `　（第 ${rep.loop} 夜をもう一度）` : `　（第 ${rep.loop} 夜 → 第 ${meta.loop} 夜）`), VIEW_W / 2, 50, { size: 19, align: 'center', font: SERIF, color: rep.cause === 'bell' ? C.gold : '#efe6d2' });
+  const causeText = rep.cause === 'ending' ? '決着がついた。塔に朝が来た。' : rep.cause === 'bell' ? '鐘が鳴った。夜が戻る。' : rep.cause === 'badend' ? '刻守を倒した。けれど、夜は明けない。' : 'あなたは倒れた。同じ夜のはじめに戻る。';
+  text(ctx, causeText + (rep.retry ? `　（第 ${rep.loop} 夜をもう一度）` : rep.cause === 'ending' ? `　（次は終わらない夜・第 ${meta.loop} 夜）` : `　（第 ${rep.loop} 夜 → 第 ${meta.loop} 夜）`), VIEW_W / 2, 50, { size: 19, align: 'center', font: SERIF, color: rep.cause === 'bell' || rep.cause === 'ending' ? C.gold : '#efe6d2' });
   // 夜ごとに変わる語り（時間の経過と、師の変化）
   if (rep.story) { ctx.globalAlpha = clamp(t / 0.8, 0, 1); text(ctx, rep.story, VIEW_W / 2, 80, { size: 14, align: 'center', font: SERIF, color: '#d9c7a8' }); ctx.globalAlpha = 1; }
   if (rep.tip && t > 2.2) text(ctx, '◆ ' + rep.tip, VIEW_W / 2, 366, { size: 12, align: 'center', color: '#f2c14e' });
@@ -675,6 +675,17 @@ export function drawRewind(ctx, game) {
     });
   }
   if (r.mode === 'upgrade' || r.mode === 'inherit') drawRewindShop(ctx, game, r);
+  // 決着のあと、何も強化しないままタイトルへ戻ろうとした時の案内
+  if (r.mode === 'notice') drawLightbox(ctx, game, {
+    title: 'シナリオは終わっても、夜は続く', color: C.gold, sel: -1, st: r,
+    items: [
+      { label: '◆ シナリオが終了しても、「終わらない夜」としてエンドレスで遊べます', color: '#efe6d2' },
+      { label: '◆ 次の終わらない夜のための強化は、この画面で行ってください', color: '#efe6d2' },
+      { label: '　（刻印を刻む・継承する強化を選ぶ・楔を打つ など）', color: C.muted },
+    ],
+    desc: 'もう一度「タイトル画面に戻る」を押すと、強化せずにタイトルへ戻ります。',
+    hint: game.touch ? 'タップで閉じる' : 'Z 閉じる',
+  });
   // 巻き戻り画面の上に開いた窓（記録帳・お供を選ぶ）も描く
   if (game.modal) { ctx.fillStyle = 'rgba(5,4,8,0.7)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); if (game.modal.type === 'journal') drawJournal(ctx, game, game.modal); else drawModal(ctx, game); }
 }
