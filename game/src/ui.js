@@ -9,7 +9,7 @@ import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, bossCounter, 
 import { ENDINGS } from './game.js';
 import { FLOOR_NAMES } from './world.js';
 import { expToNext, LEVEL } from './level.js';
-import { LB, lbStart, rewindGrid, cardRects, PAUSE, TITLE_MENU } from './layout.js';
+import { LB, LB_CLOSE, lbStart, rewindGrid, cardRects, PAUSE, TITLE_MENU, TITLE_GEAR } from './layout.js';
 export { LB, lbRowAt, rewindGrid } from './layout.js';
 
 // ドット文字（DotGothic16）。読み込めない環境では OS の日本語フォントで表示される
@@ -596,9 +596,71 @@ export function drawTitle(ctx, game) {
   }
   const opts = game.titleOptions();
   opts.forEach((o, i) => text(ctx, (i === game.titleSel ? '▶ ' : '') + o.label, VIEW_W / 2, TITLE_MENU.y + i * TITLE_MENU.step, { size: 16, align: 'center', color: i === game.titleSel ? (o.id === 'diff' ? game.difficulty().color : C.gold) : o.id === 'diff' ? game.difficulty().color : '#bbb' }));
-  text(ctx, game.touch ? 'タップで選ぶ' : '↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　術 V　調べる ↑', VIEW_W / 2, VIEW_H - 18, { size: 11, align: 'center', color: C.muted });
-  if (game.meta && game.meta.flags.ending) { const en = game.meta.flags.endings || {}; text(ctx, `★ クリア済み ― 結末 ${ENDING_IDS.filter((k) => en[k]).length}/${ENDING_IDS.length}（${ENDING_IDS.filter((k) => en[k]).map((k) => ENDINGS[k].name).join('・') || '夜明け'}）`, VIEW_W / 2, 506, { size: 12, align: 'center', color: '#ffd38a' }); }
-  else if (game.meta) drawDawnStrip(ctx, game, 506);
+  text(ctx, game.touch ? 'タップで選ぶ' : '↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　術 V　調べる ↑', VIEW_W / 2, VIEW_H - 14, { size: 11, align: 'center', color: C.muted });
+  if (game.meta && game.meta.flags.ending) { const en = game.meta.flags.endings || {}; text(ctx, `★ クリア済み ― 結末 ${ENDING_IDS.filter((k) => en[k]).length}/${ENDING_IDS.length}（${ENDING_IDS.filter((k) => en[k]).map((k) => ENDINGS[k].name).join('・') || '夜明け'}）`, VIEW_W / 2, 510, { size: 12, align: 'center', color: '#ffd38a' }); }
+  else if (game.meta) drawDawnStrip(ctx, game, 510);
+  drawGearButton(ctx, game);
+  if (game.titleSettings) drawTitleSettings(ctx, game, game.titleSettings);
+}
+
+// 左上の設定ボタン（歯車の印と「設定」）
+function drawGearButton(ctx, game) {
+  const { x, y, w, h } = TITLE_GEAR, on = game.titleSel === -1 && !game.titleSettings;
+  panel(ctx, x, y, w, h, on ? C.gold : 'rgba(255,255,255,0.3)', on ? 'rgba(40,30,20,0.9)' : 'rgba(10,8,16,0.75)');
+  const gx = x + 22, gy = y + h / 2, col = on ? C.gold : '#cfc8bb';
+  ctx.fillStyle = col;
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; ctx.fillRect(Math.round(gx + Math.cos(a) * 9 - 2), Math.round(gy + Math.sin(a) * 9 - 2), 4, 4); }
+  ctx.beginPath(); ctx.arc(gx, gy, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = on ? 'rgba(40,30,20,1)' : 'rgba(10,8,16,1)'; ctx.beginPath(); ctx.arc(gx, gy, 3, 0, Math.PI * 2); ctx.fill();
+  text(ctx, '設定', x + 44, y + h / 2 + 6, { size: 16, color: col, maxW: w - 50 });
+}
+// ライトボックスの右上の閉じるボタン（×）
+function drawCloseButton(ctx, color) {
+  const { x, y, w, h } = LB_CLOSE;
+  panel(ctx, x, y, w, h, color, 'rgba(20,16,28,0.95)');
+  ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.beginPath();
+  ctx.moveTo(x + 12, y + 12); ctx.lineTo(x + w - 12, y + h - 12); ctx.moveTo(x + w - 12, y + 12); ctx.lineTo(x + 12, y + h - 12); ctx.stroke();
+}
+// 「ゲームについて」の本文
+export const ABOUT_LINES = [
+  { h: '夜明けの楔　WEDGE OF DAWN' },
+  { t: '同じ夜をくり返す時計塔で、「時の楔」を手に夜明けを目指す、2D アクション・ローグライトです。' },
+  { h: 'つくった人たち' },
+  { t: '原案：当開発元' },
+  { t: 'シナリオの推敲：ChatGPT（OpenAI の AI）' },
+  { t: '制作（プログラム・ドット絵・音楽・効果音・テキストの実装）：Claude（Anthropic の AI）' },
+  { h: 'おことわり' },
+  { t: 'この作品はフィクションです。登場する人物・団体・場所・出来事はすべて架空のものであり、実在の人物・団体、ほかのゲームや創作物とは一切関係ありません。' },
+  { t: '絵・音楽・効果音はすべてプログラムで生成しており、外部の画像や音源は使っていません。文字は「DotGothic16」（SIL Open Font License）で表示しています（読み込めない環境では端末の日本語フォント）。' },
+  { h: '記録と遊び方' },
+  { t: '記録（セーブ）と設定は、この端末のブラウザの中にだけ保存されます。ブラウザのデータを消すと記録も消えます。個人の情報を集めたり、外部へ送ったりはしません。' },
+  { t: '光の点滅や画面の揺れがある場面があります。画面揺れは、この設定で切り替えられます。長く遊ぶときは、適度に休憩をとってください。' },
+  { t: '開発中の版のため、動作は端末やブラウザによって異なる場合があります。' },
+];
+function drawTitleSettings(ctx, game, ts) {
+  if (!ts.about) {
+    const items = game.settingsOptions().map((o) => ({ label: o.label, right: o.right, rightColor: C.muted }));
+    drawLightbox(ctx, game, { title: '設定', items, sel: ts.sel, color: C.gold, st: ts, desc: ts.sel === 2 ? '原案・制作・おことわりなど' : '', hint: game.touch ? 'タップで選択、もう一度タップで決定／×で閉じる' : '↑↓ 選ぶ　Z 決定　C 閉じる' });
+    drawCloseButton(ctx, C.gold);
+    return;
+  }
+  // ゲームについて：本文は枠の中に折り返して描き、入りきらなければ縦にゆっくり送る
+  ctx.fillStyle = 'rgba(4,3,8,0.86)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  const { x, y, w, h } = LB, col = '#9fd0ff';
+  panel(ctx, x, y, w, h, col, 'rgba(14,11,20,0.98)');
+  ctx.fillStyle = col; ctx.fillRect(x, y, w, 4);
+  text(ctx, 'ゲームについて', x + 28, y + 44, { size: 22, color: col });
+  drawCloseButton(ctx, col);
+  const box = { x: x + 20, y: y + 64, w: w - 40, h: h - 100 };
+  const off = vbegin(ctx, 'about', box);
+  let yy = box.y + 22 - off;
+  for (const l of ABOUT_LINES) {
+    if (l.h) { yy += lh(6); text(ctx, '◆ ' + l.h, box.x + 8, yy, { size: 15, color: C.gold }); yy += lh(24); continue; }
+    // 文字を大きくしても横に流さず、描く大きさで折り返す（縦に送るので行が増えてもよい）
+    for (const s of wrap(ctx, l.t, (box.w - 30) / modeScale(), 13)) { text(ctx, s, box.x + 22, yy, { size: 13, color: '#e8e0d0', maxW: box.w - 26 }); yy += lh(20); }
+  }
+  vend(ctx, 'about', yy - lh(20) + 8 + off, box);
+  text(ctx, game.touch ? 'どこかをタップで閉じる' : 'Z / C で閉じる', VIEW_W / 2, y + h - 14, { size: 11, align: 'center', color: C.muted });
 }
 
 // ───────── 巻き戻り ─────────

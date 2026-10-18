@@ -4,8 +4,12 @@ import { clamp } from './util.js';
 
 // 中断メニューとタイトルの項目の位置（1 行目の文字の下端と行の間隔）
 export const PAUSE = { y: 184, step: 30 };
-export const TITLE_MENU = { y: 384, step: 24 };
+export const TITLE_MENU = { y: 392, step: 36 };
+// タイトルの左上の設定ボタンと、ライトボックスの右上の閉じるボタン（×）
+export const TITLE_GEAR = { x: 18, y: 16, w: 124, h: 42 };
+
 export const LB = { x: 100, y: 40, w: VIEW_W - 200, h: VIEW_H - 80, top: 120, rowH: 38, rows: 8 };
+export const LB_CLOSE = { x: LB.x + LB.w - 52, y: LB.y + 12, w: 40, h: 40 };
 // 表示の先頭行。選んでいる行が枠から出たときだけ送る（st.scroll に覚える）
 export function lbStart(n, sel, st) {
   let s = st && st.scroll != null ? st.scroll : 0;

@@ -642,8 +642,10 @@ test('文字の大きさ：標準でも小さな文字は少し大きく、大�
   // 中断メニュー・タイトルで切り替え、保存される
   const st = memStorage();
   const g = newGame(5, st); g.storage.saveSettings = (s) => { g._saved = s; };
-  const i = g.titleOptions().findIndex((o) => o.id === 'text');
-  assert.ok(i >= 0); assert.match(g.titleOptions()[i].label, /標準/);
+  // タイトルでは左上の設定ボタンの中（文字の大きさ・画面揺れ・ゲームについて）
+  assert.ok(!g.titleOptions().some((o) => o.id === 'text' || o.id === 'shake'));
+  const i = g.settingsOptions().findIndex((o) => o.id === 'text');
+  assert.ok(i >= 0); assert.match(g.settingsOptions()[i].label, /標準/);
   g.cycleTextSize(); assert.equal(g.settings.textSize, 'large');
   g.cycleTextSize(); assert.equal(g.settings.textSize, 'xlarge');
   assert.match(g._saved, /xlarge/);
@@ -740,4 +742,25 @@ test('白き刻守の新しい技：白輪の爆ぜ（まわり全体・輪の�
     b.lastJudge = -99; b.setState('idle'); safe = null;
     const hitIn = run(g, b, p, d, 'judge', () => { safe ||= b.safes; const z = (b.safes || safe)[0]; p.x = (z.x0 + z.x1) / 2 - p.w / 2; });
     assert.equal(hitIn, 0, 'safe in a pillar'); }
+});
+
+test('タイトル：左上の設定ボタン（↑で選べる・タップでも開く）に、文字の大きさ・画面揺れ・ゲームについて。ゲームについては×や戻るで閉じる', async () => {
+  const { TITLE_GEAR, LB_CLOSE } = await import('../src/layout.js');
+  const { ABOUT_LINES } = await import('../src/ui.js');
+  const g = newGame(5); g.scene = 'title'; g.titleSel = 0; g.saveSettings = () => {};
+  const d = new Driver(g);
+  assert.deepEqual(g.titleOptions().map((o) => o.id), ['continue', 'new', 'diff']);
+  d.frame(1, ['up']); d.frame(1); assert.equal(g.titleSel, -1, 'up from the first item selects the gear button');
+  d.frame(1, ['confirm']); d.frame(1); assert.ok(g.titleSettings, 'settings open');
+  const shake = g.settings.shake;
+  d.frame(1, ['down']); d.frame(1); d.frame(1, ['confirm']); d.frame(1); assert.equal(g.settings.shake, !shake, 'shake toggled');
+  d.frame(1, ['down']); d.frame(1); d.frame(1, ['confirm']); d.frame(1); assert.ok(g.titleSettings.about, 'about opens');
+  d.frame(1, ['back']); d.frame(1); assert.ok(g.titleSettings && !g.titleSettings.about, 'about closes back to settings');
+  // × で設定を閉じる
+  assert.equal(g.handleTap(LB_CLOSE.x + 20, LB_CLOSE.y + 20), false); assert.equal(g.titleSettings, null);
+  // 設定ボタンをタップ → 決定で開く
+  g.titleSel = 1; assert.equal(g.handleTap(TITLE_GEAR.x + 30, TITLE_GEAR.y + 20), true); assert.equal(g.titleSel, -1);
+  // 本文：原案・ChatGPT・Claude・フィクション・関係ない
+  const all = ABOUT_LINES.map((l) => l.h || l.t).join('\n');
+  for (const k of ['原案', 'ChatGPT', 'Claude', 'フィクション', '一切関係ありません']) assert.ok(all.includes(k), k);
 });

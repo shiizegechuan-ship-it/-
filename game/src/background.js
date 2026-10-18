@@ -263,11 +263,34 @@ function ruinLayer(src, ruin, seed, opaque = false) {
   return c;
 }
 
+// 夜明けの空（真の結末のあとのタイトル）：明けていく空と昇る朝日、朝の光を受けた町並み。星は空の上のほうにかすかに残るだけ
+function dawnBackground() {
+  const mk = () => { const c = makeCanvas(LAYER_W, LAYER_H); return [c, c.getContext('2d')]; };
+  const [sky, s] = mk();
+  bands(s, 0, 160, ['#1b2350', '#34407a', '#6a5c9a', '#b4739a', '#e8907a', '#f6b979', '#ffe0a0']);
+  rect(s, 0, 160, LAYER_W, 110, '#ffe0a0');
+  // 朝日：地平線から半分のぞく。まわりに市松の淡い光
+  const SX = 236, SY = 122;
+  s.fillStyle = 'rgba(255,240,200,0.35)';
+  for (let y = SY - 50; y < SY + 10; y++) for (let x = SX - 70; x < SX + 70; x++) if (((x + y) & 1) === 0 && Math.hypot(x - SX, (y - SY) * 1.3) < 66) s.fillRect(x, y, 1, 1);
+  disc(s, SX, SY, 24, '#ffd890'); disc(s, SX, SY, 19, '#fff0c0'); disc(s, SX, SY, 13, '#fffbe8');
+  // 朝焼けの雲：横に長く、下側が明るい（同じ形を繰り返さない）
+  const cloud = (x, y, w, seed) => { for (let i = 0; i < w; i++) { const hh = 2 + Math.round(Math.sin(i / w * Math.PI) * (4 + hash2(i >> 3, seed, 9) * 3)); rect(s, x + i, y - hh, 1, hh, '#c98a9a'); pset(s, x + i, y, '#ffd0a8'); } };
+  cloud(40, 70, 90, 1); cloud(200, 54, 120, 2); cloud(380, 88, 70, 3); cloud(120, 112, 60, 4);
+  for (let i = 0; i < 18; i++) pset(s, Math.floor(hash2(i, 9, 31) * LAYER_W), Math.floor(hash2(i, 8, 31) * 34), '#c8cce8');
+  const [far, f] = mk();
+  // 遠い山並みと町（朝の光を受けた紫の影。窓明かりは消えかけ）
+  for (let x = 0; x < LAYER_W; x++) { const hgt = 18 + Math.round(Math.sin(x / 47) * 6 + Math.sin(x / 19 + 1) * 3); rect(f, x, 160 - hgt, 1, hgt + 110, '#7a5a8a'); }
+  skyline(f, 168, '#4a3a66', '#ffd890', 23, 8, 30, 0.04);
+  return { layers: [{ c: sky, f: 0.03 }, { c: far, f: 0.12 }], tiles: null };
+}
+
 const cache = new Map();
 // variant：内装の型（0〜2）。ruin：荒れ具合（0 なし・1 少し・2 かなり）
 export function backgroundFor(fi, variant = 0, ruin = 0) {
   const key = `${fi}:${variant}:${ruin}`;
   if (cache.has(key)) return cache.get(key);
+  if (fi === 'dawn') { const out = dawnBackground(); cache.set(key, out); return out; }
   // 鐘の回廊・ステンドグラスの間：1 枚だけの屋内の絵（空・町・月・星は無い）
   if (fi === 2 && (variant === 1 || variant === 2)) {
     let c = variant === 1 ? bellHall() : stainedHall();
@@ -380,7 +403,8 @@ export function backgroundFor(fi, variant = 0, ruin = 0) {
 }
 
 // 背景を描く（camX, camY はドット単位の視点。roomW・roomH は部屋の大きさ（ドット））
-export function drawBackground(ctx, fi, camX, camY, t, maxLayers = 99, variant = 0, ruin = 0, roomW = PW, roomH = PH) {
+// still：星をまたたかせない（タイトル：手前の文字が読みにくくならないように）
+export function drawBackground(ctx, fi, camX, camY, t, maxLayers = 99, variant = 0, ruin = 0, roomW = PW, roomH = PH, still = false) {
   const bg = backgroundFor(fi, variant, ruin);
   for (const L of bg.layers.slice(0, maxLayers)) {
     if (L.single) {
@@ -394,7 +418,7 @@ export function drawBackground(ctx, fi, camX, camY, t, maxLayers = 99, variant =
     for (let x = ox - LAYER_W; x < PW; x += LAYER_W) if (x + LAYER_W > 0) ctx.drawImage(L.c, x, oy);
     if (L === bg.layers[0] && bg.stars) {
       for (const s of bg.stars) {
-        const tw = Math.sin(t * 2 + s.p) > 0.6;
+        const tw = !still && Math.sin(t * 2 + s.p) > 0.6;
         const x = ((s.x - camX * 0.03) % (PW * 1.5) + PW * 1.5) % (PW * 1.5);
         if (x < PW) rect(ctx, x, s.y + oy, 1, 1, tw ? '#ffffff' : '#8a96c8');
       }

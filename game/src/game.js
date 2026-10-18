@@ -13,7 +13,7 @@ import { NullSfx } from './audio.js';
 import { AXIS } from './input.js';
 import { BOONS, FUSIONS, LEGEND_IDS, rollOffer, rollRare, boonMax, canForge, PASSIVE_IDS, passiveWeight, readyFusions, countsForThreat } from './boons.js';
 import { expToNext, expFor, levelBonus, LEVEL } from './level.js';
-import { rewindGrid, lbRowAt, cardRects, PAUSE, TITLE_MENU } from './layout.js';
+import { rewindGrid, lbRowAt, cardRects, PAUSE, TITLE_MENU, TITLE_GEAR, LB_CLOSE } from './layout.js';
 import { nightLook } from './nightlook.js';
 import { FLOOR_NAMES, buildPlan, layoutRows, extraEnemyTypes } from './world.js';
 import {
@@ -2538,9 +2538,20 @@ export class Game {
     if (this.meta) o.push({ id: 'continue', label: this.meta.flags.ending ? `${endlessName(this.meta)}へ（第 ${this.meta.loop} 夜）` : `続きから（第 ${this.meta.loop} 夜）` });
     o.push({ id: 'new', label: this.meta ? 'はじめから（記録を消す）' : 'はじめる' });
     o.push({ id: 'diff', label: `難易度：${this.difficulty().name}（決定で切り替え）` });
-    o.push({ id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}` });
-    o.push({ id: 'text', label: `文字の大きさ：${{ normal: '標準', large: '大', xlarge: '特大' }[this.settings.textSize || 'normal']}` });
     return o;
+  }
+  // タイトルの設定（左上の設定ボタンから開く）
+  settingsOptions() {
+    return [
+      { id: 'text', label: `文字の大きさ：${{ normal: '標準', large: '大', xlarge: '特大' }[this.settings.textSize || 'normal']}`, right: '決定で切り替え' },
+      { id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}`, right: '決定で切り替え' },
+      { id: 'about', label: 'ゲームについて', right: '' },
+    ];
+  }
+  pickSetting(id) {
+    if (id === 'text') this.cycleTextSize();
+    else if (id === 'shake') { this.settings.shake = !this.settings.shake; this.saveSettings(); }
+    else if (id === 'about') { this.titleSettings.about = true; this.titleSettings.t = 0; }
   }
   // メニューの方向入力：スティックで斜めに倒れたときは、強く倒れている軸の向きだけを受け付ける
   menuPress(input, dir) {
@@ -2566,17 +2577,30 @@ export class Game {
       else if (input.pressed('back') || input.pressed('dodge')) { this.titleConfirm = false; this.sfx.play('select'); }
       return;
     }
-    if (input.pressed('up')) { this.titleSel = (this.titleSel + opts.length - 1) % opts.length; this.sfx.play('select'); }
-    if (input.pressed('down')) { this.titleSel = (this.titleSel + 1) % opts.length; this.sfx.play('select'); }
-    this.titleSel = clamp(this.titleSel, 0, opts.length - 1);
+    // 設定（左上のボタンから）：文字の大きさ・画面揺れ・ゲームについて
+    const ts = this.titleSettings;
+    if (ts) {
+      ts.t = (ts.t || 0) + DT;
+      const close = input.pressed('back') || input.pressed('dodge');
+      if (ts.about) { if (close || input.pressed('confirm') || input.pressed('jump')) { ts.about = false; this.sfx.play('select'); } return; }
+      const so = this.settingsOptions();
+      if (input.pressed('up')) { ts.sel = (ts.sel + so.length - 1) % so.length; this.sfx.play('select'); }
+      if (input.pressed('down')) { ts.sel = (ts.sel + 1) % so.length; this.sfx.play('select'); }
+      if (close) { this.titleSettings = null; this.sfx.play('select'); return; }
+      if (input.pressed('confirm') || input.pressed('jump')) { this.sfx.play('confirm'); this.pickSetting(so[ts.sel].id); }
+      return;
+    }
+    // 項目の上（-1）は左上の設定ボタン
+    if (input.pressed('up')) { this.titleSel = this.titleSel <= -1 ? opts.length - 1 : this.titleSel - 1; this.sfx.play('select'); }
+    if (input.pressed('down')) { this.titleSel = this.titleSel >= opts.length - 1 ? -1 : this.titleSel + 1; this.sfx.play('select'); }
+    this.titleSel = clamp(this.titleSel, -1, opts.length - 1);
     if (input.pressed('confirm') || input.pressed('jump')) {
-      const o = opts[this.titleSel];
       this.sfx.play('confirm');
+      if (this.titleSel === -1) { this.titleSettings = { sel: 0, about: false, t: 0 }; return; }
+      const o = opts[this.titleSel];
       if (o.id === 'continue') this.continueGame();
       else if (o.id === 'new') { if (this.meta) this.titleConfirm = true; else this.newGame(); }
-      else if (o.id === 'shake') { this.settings.shake = !this.settings.shake; this.saveSettings(); }
       else if (o.id === 'diff') this.cycleDifficulty();
-      else if (o.id === 'text') this.cycleTextSize();
     }
   }
   cycleTextSize() { const ms = ['normal', 'large', 'xlarge']; this.settings.textSize = ms[(ms.indexOf(this.settings.textSize || 'normal') + 1) % ms.length]; this.saveSettings(); }
@@ -2586,6 +2610,19 @@ export class Game {
     const row = (y0, step, n, h = 24) => { for (let i = 0; i < n; i++) if (Math.abs(y - (y0 + i * step - 5)) < h / 2) return i; return -1; };
     if (this.scene === 'title') {
       if (this.titleConfirm) return y > 390 && y < 470;
+      const inBox = (r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+      const ts = this.titleSettings;
+      if (ts) {
+        // 右上の×・枠の外で閉じる。ゲームについては、どこを押しても閉じる
+        if (ts.about) { ts.about = false; this.sfx.play('select'); return false; }
+        if (inBox({ x: LB_CLOSE.x - 8, y: LB_CLOSE.y - 8, w: LB_CLOSE.w + 16, h: LB_CLOSE.h + 16 })) { this.titleSettings = null; this.sfx.play('select'); return false; }
+        const so = this.settingsOptions(), i = lbRowAt(so.length, ts.sel, x, y, ts);
+        if (i === -2) { this.titleSettings = null; this.sfx.play('select'); return false; }
+        if (i < 0) return false;
+        if (i === ts.sel) return true;
+        ts.sel = i; this.sfx.play('select'); return false;
+      }
+      if (inBox(TITLE_GEAR)) { this.titleSel = -1; return true; }
       const i = row(TITLE_MENU.y, TITLE_MENU.step, this.titleOptions().length, TITLE_MENU.step - 2);
       if (i < 0 || Math.abs(x - VIEW_W / 2) > 200) return false;
       this.titleSel = i; return true;

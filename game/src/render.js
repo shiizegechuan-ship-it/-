@@ -41,17 +41,20 @@ export function render(ctx, game) {
   ctx.restore();
 }
 
-// タイトル：星空の時計塔（ドット絵）
+// タイトル：星空の時計塔（ドット絵）。真の結末を見たあとは、夜明けの空の時計塔
 function drawTitleScene(ctx, game) {
   const b = buffer();
   const t = game.time;
-  drawBackground(b, 2, t * 6, 30, t, 2);
+  const dawn = !!(game.meta && game.meta.flags.endings && game.meta.flags.endings.true);
+  drawBackground(b, dawn ? 'dawn' : 2, t * 6, 30, t, 2, 0, 0, PW, PH, true); // 背景はゆっくり横に流れる（星はまたたかせない）
   // 時計塔
-  const tx = PW / 2;
-  rect(b, tx - 22, 52, 44, 140, '#0a0d1e');
-  for (let i = 0; i < 26; i++) rect(b, tx - 26 + i, 52 - i, 52 - i * 2, 1, '#0a0d1e');
-  rect(b, tx - 1, 18, 2, 10, '#0a0d1e');
-  for (let y = 104; y < 180; y += 16) for (const dx of [-12, 9]) rect(b, tx + dx, y, 3, 6, (Math.floor(t * 0.4 + y * 0.37 + dx) % 4) ? '#1c2244' : '#f2c14e');
+  const tx = PW / 2, tower = dawn ? '#3a2c4e' : '#0a0d1e';
+  rect(b, tx - 22, 52, 44, 140, tower);
+  for (let i = 0; i < 26; i++) rect(b, tx - 26 + i, 52 - i, 52 - i * 2, 1, tower);
+  rect(b, tx - 1, 18, 2, 10, tower);
+  if (dawn) { rect(b, tx + 20, 52, 2, 140, '#c98a7a'); for (let i = 0; i < 26; i++) pset(b, tx + 26 - i, 52 - i, '#e8a888'); } // 朝日の当たる縁
+  // 窓の明かり：点けたまま（点滅させると、手前のタイトルの文字が読みにくい）
+  for (let y = 104; y < 180; y += 16) for (const dx of [-12, 9]) rect(b, tx + dx, y, 3, 6, dawn ? '#5a4870' : (y + dx * 3) % 3 === 0 ? '#c9a052' : '#1c2244');
   disc(b, tx, 70, 13, '#e8dcc4'); circle(b, tx, 70, 13, '#8c6d2a');
   for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; pset(b, tx + Math.cos(a) * 11, 70 + Math.sin(a) * 11, '#5a4a3a'); }
   // 逆回りの針
@@ -62,7 +65,7 @@ function drawTitleScene(ctx, game) {
   for (let i = 0; i < 9; i++) rect(b, tx - 4 + Math.floor(i / 2), 86 + i, 9 - Math.floor(i / 2) * 2, 1, '#f2c14e');
   ctx.drawImage(buf, 0, 0, VIEW_W, VIEW_H);
   // 文字を読みやすくする帯
-  ctx.fillStyle = 'rgba(5,6,16,0.55)'; ctx.fillRect(0, 300, VIEW_W, 240);
+  ctx.fillStyle = dawn ? 'rgba(30,18,40,0.55)' : 'rgba(5,6,16,0.55)'; ctx.fillRect(0, 300, VIEW_W, 240);
 }
 
 function renderPlay(ctx, game) {
