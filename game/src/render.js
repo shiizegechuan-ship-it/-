@@ -13,6 +13,7 @@ export const roomInterior = (game) => (game.run && game.room && game.run.fi === 
 export const ruinLevel = (meta) => (!meta || meta.flags.ending ? 0 : meta.loop >= 3 ? 2 : meta.loop === 2 ? 1 : 0);
 import { spr } from './sprites.js';
 import { PRISM } from './arts.js';
+import { NOVA_R } from './boss.js';
 
 const SC = VIEW_W / PW; // 3
 let buf = null, b = null;
@@ -1289,12 +1290,38 @@ function outlinedImg(b, img, x, y, color) {
 
 function drawBoss(b, game, e, bx, by, t, flash, slowGlow) {
   const f = e.face, duel = e.finalForm ? 'final' : e.trueDuel;
-  const wind = ['swingWind', 'handsWind', 'stopWind', 'stepWind', 'antiAirWind', 'leapWind', 'feint', 'punishWind', 'rainWind', 'ringsWind', 'tripleWind', 'dashWind'].includes(e.state);
-  // 白き刻守の技の予告
-  if (e.state === 'rainWind' && e.rainXs) for (const x of e.rainXs) { const gx = Math.round(x / 2), gy = Math.round(Math.min(game.map.groundBelow(x, e.y), game.map.pxH) / 2); b.globalAlpha = 0.3 + 0.5 * e.tell; rect(b, gx - 3, gy - 2, 7, 2, '#ff4a2a'); line(b, gx, gy - 4, gx, gy - 4 - Math.round(e.tell * 30), '#ff8a6a'); b.globalAlpha = 1; }
-  if (e.state === 'dashWind') { b.globalAlpha = 0.25 + 0.5 * e.tell; rect(b, bx + (f > 0 ? 0 : -160), Math.round(cy(e) / 2) - 1, 160, 3, '#ff4a2a'); b.globalAlpha = 1; }
-  if (e.state === 'tripleWind') wedge(b, bx, Math.round(cy(e) / 2) - 2, 56, f > 0 ? -0.8 : Math.PI - 0.6, f > 0 ? 0.6 : Math.PI + 0.8, e.tell > 0.6 ? 'rgba(255,74,42,0.5)' : 'rgba(255,90,60,0.3)');
-  if (e.state === 'ringsWind') circle(b, bx, Math.round(cy(e) / 2), 8 + Math.round(e.tell * 10), '#ffffff');
+  const wind = ['swingWind', 'handsWind', 'stopWind', 'stepWind', 'antiAirWind', 'leapWind', 'feint', 'punishWind', 'rainWind', 'ringsWind', 'tripleWind', 'dashWind', 'novaWind', 'judgeWind'].includes(e.state);
+  // 白き刻守の技の予告：当たる範囲を、実際の当たり判定どおりに大きく描く（色が赤 → 放つ直前に白へ変わる）
+  const hot = e.tell > 0.75, warn = hot ? '#ffffff' : '#ff4a2a', pulse = 0.5 + 0.5 * Math.sin(t * (hot ? 30 : 14));
+  if (e.state === 'rainWind' && e.rainXs) for (const x of e.rainXs) {
+    const gx = Math.round(x / 2), gy = Math.round(Math.min(game.map.groundBelow(x, e.y), game.map.pxH) / 2);
+    b.globalAlpha = 0.12 + 0.22 * e.tell; rect(b, gx - 4, camPY, 9, gy - camPY, '#ff4a2a'); // 針が降る筋
+    b.globalAlpha = 0.5 + 0.5 * e.tell * pulse; rect(b, gx - 5, gy - 2, 11, 2, warn); b.globalAlpha = 1;
+  }
+  if (e.state === 'dashWind') { const x1 = f > 0 ? game.map.pxW / 2 : 0, x0 = Math.round(cx(e) / 2); b.globalAlpha = 0.14 + 0.24 * e.tell; rect(b, Math.min(x0, x1), Math.round(e.y / 2), Math.abs(x1 - x0), Math.round(e.h / 2), '#ff4a2a'); b.globalAlpha = 0.6 + 0.4 * pulse * e.tell; rect(b, Math.min(x0, x1), Math.round(cy(e) / 2) - 1, Math.abs(x1 - x0), 2, warn); b.globalAlpha = 1; }
+  if (e.state === 'tripleWind' || e.state === 'triple') { const box = e.frontBox(110, 70, -4), bxx = Math.round(box.x / 2), byy = Math.round(box.y / 2), bw = Math.round(box.w / 2), bh = Math.round(box.h / 2); b.globalAlpha = e.state === 'triple' ? 0.35 : 0.14 + 0.26 * e.tell; rect(b, bxx, byy, bw, bh, e.state === 'triple' ? '#ffffff' : '#ff4a2a'); b.globalAlpha = 0.5 + 0.5 * pulse; rect(b, bxx, byy, bw, 1, warn); rect(b, bxx, byy + bh - 1, bw, 1, warn); rect(b, f > 0 ? bxx + bw - 1 : bxx, byy, 1, bh, warn); b.globalAlpha = 1; }
+  if (e.state === 'ringsWind') { for (let i = 0; i < 3; i++) { b.globalAlpha = (0.25 + 0.5 * e.tell) * (1 - i * 0.25); circle(b, bx, Math.round(cy(e) / 2), 10 + i * 12 + Math.round(e.tell * 16), i === 0 ? warn : '#ffd0c0'); } b.globalAlpha = 1; }
+  if (e.state === 'novaWind') {
+    const R = Math.round(NOVA_R / 2), ccy = Math.round(cy(e) / 2);
+    b.globalAlpha = 0.1 + 0.22 * e.tell; disc(b, bx, ccy, R, '#ff4a2a');
+    b.globalAlpha = 0.6 + 0.4 * pulse; circle(b, bx, ccy, R, warn); circle(b, bx, ccy, R - 1, warn);
+    b.globalAlpha = 0.8; circle(b, bx, ccy, Math.max(4, Math.round(R * e.tell)), '#ffffff'); b.globalAlpha = 1; // 内側の輪が外の輪に届いたら弾ける
+  }
+  if (e.state === 'judgeWind' && e.safes) {
+    // 部屋全体が赤く染まり、金の光の柱（安全地帯）だけが残る
+    const L = camPX, R = camPX + PW, s = e.safes.map((z) => [Math.round(z.x0 / 2), Math.round(z.x1 / 2)]).sort((a, c) => a[0] - c[0]);
+    let x = L; b.globalAlpha = 0.12 + 0.3 * e.tell;
+    for (const [a, c] of s) { if (a > x) rect(b, x, camPY, a - x, PH, hot ? '#ffb0a0' : '#ff3a2a'); x = Math.max(x, c); }
+    if (x < R) rect(b, x, camPY, R - x, PH, hot ? '#ffb0a0' : '#ff3a2a');
+    for (const [a, c] of s) {
+      b.globalAlpha = 0.18 + 0.3 * e.tell; rect(b, a, camPY, c - a, PH, '#ffd84a');
+      b.globalAlpha = 0.7 + 0.3 * pulse; rect(b, a, camPY, 1, PH, '#ffe9a0'); rect(b, c - 1, camPY, 1, PH, '#ffe9a0');
+      for (let k = 0; k < 6; k++) pset(b, a + 2 + ((k * 7 + Math.floor(t * 9)) % Math.max(1, c - a - 4)), camPY + PH - ((t * 40 + k * 29) % PH), '#fff6d0'); // 立ちのぼる光
+    }
+    b.globalAlpha = 1;
+  }
+  // 白き刻守の構え：体が赤く脈打って光る（放つ直前は白く速く）。巨体でも予兆が見える
+  if (e.finalForm && wind) { b.globalAlpha = 0.35 + 0.45 * e.tell; glow(b, bx, by - 40, 34 + 14 * e.tell + 4 * pulse, hot ? '#ffffff' : '#ff4a2a', 0.5 + 0.5 * e.tell); b.globalAlpha = 1; if (e.stateT < 0.3) { rect(b, bx - 1, by - 112, 3, 9, '#ff4a2a'); rect(b, bx - 1, by - 101, 3, 3, '#ff4a2a'); } }
   if (e.state === 'triple' && e.stateT < 0.16) arc(b, bx + f * 6, Math.round(cy(e) / 2), 40, f > 0 ? -1.0 : Math.PI - 0.8, f > 0 ? 0.8 : Math.PI + 1.0, '#ffffff', 3);
   // 白き刻守：白く大きい（体を 1.45 倍に描く）。白い光をまとう
   const big = e.finalForm ? 1.45 : 1;

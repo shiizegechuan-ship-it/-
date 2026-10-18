@@ -3,6 +3,7 @@ import { Enemy, Projectile } from './enemies.js';
 import { COUNTERS } from './meta.js';
 import { approach, clamp, cx, cy, sign } from './util.js';
 
+export const NOVA_R = 190; // 白輪の爆ぜの届く半径（体の中心から）
 export class Tokimori extends Enemy {
   constructor(x, y, opts) {
     super('boss', x, y - 58, 34, 58, 800);
@@ -35,7 +36,8 @@ export class Tokimori extends Enemy {
     this.ownVx = this.vx;
   }
   get enraged() { return this.brake && this.phase >= 2; }
-  get speedMul() { return (this.phase === 3 ? 0.85 : 1) * (this.enraged ? 0.85 : 1) * (this.trueDuel ? 0.9 : 1) * (this.finalForm ? 0.85 : 1); }
+  // 予備動作の長さ。白き刻守は予兆を見やすくするため速めない（そのかわり技と技の間が短い：nextCool）
+  get speedMul() { return (this.phase === 3 ? 0.85 : 1) * (this.enraged ? 0.85 : 1) * (this.trueDuel && !this.finalForm ? 0.9 : 1); }
   get invuln() { return this.state === 'phaseShift' || this.state === 'intro' || this.state === 'defeated' || this.state === 'talk' || this.state === 'transform'; }
 
   think(game, dt) {
@@ -228,6 +230,30 @@ export class Tokimori extends Enemy {
         this.attacks.push({ x: this.x - 6, y: this.y, w: this.w + 12, h: this.h, dmg: 20, knock: 520, key: this.id * 1000 + this.swing });
         if (this.stateT >= 0.5 || (this.coll && this.coll.hitX)) { this.vx = 0; game.fx.shake(6, 0.2); this.recover(0.9); }
         break;
+      case 'novaWind': // 白輪の爆ぜ：体のまわり全体（上も下も）に白い光が膨らんで弾ける。輪の外へ出れば当たらない
+        this.vx = 0; this.tell = clamp(this.stateT / (0.95 * wm), 0, 1); this.tellKind = 'red';
+        if (this.stateT >= 0.95 * wm) {
+          this.setState('nova'); this.swing++;
+          game.fx.ring(cx(this), cy(this), '#ffffff', NOVA_R, 0.35); game.fx.ring(cx(this), cy(this), '#ffd0c0', NOVA_R * 0.7, 0.3);
+          game.fx.shake(9, 0.3); game.fx.screenFlash('#ffffff', 0.3); game.sfx.play('guardBreak');
+        }
+        break;
+      case 'nova':
+        if (this.stateT < 0.12 && Math.hypot(cx(p) - cx(this), cy(p) - cy(this)) < NOVA_R) this.attacks.push({ x: p.x, y: p.y, w: p.w, h: p.h, dmg: 24, knock: 460, key: this.id * 1000 + this.swing });
+        if (this.stateT >= 0.12) this.recover(0.85);
+        break;
+      case 'judgeWind': // 審判の鐘：部屋全体が光に包まれる。金の光の柱（安全地帯）の中だけが助かる
+        this.vx = 0; this.tell = clamp(this.stateT / (1.5 * wm), 0, 1); this.tellKind = 'watch';
+        if (Math.floor(this.stateT * 4) !== Math.floor((this.stateT - dt) * 4)) game.sfx.play('tick');
+        if (this.stateT >= 1.5 * wm) {
+          this.setState('judge'); this.swing++;
+          game.fx.screenFlash('#ffffff', 0.7); game.fx.shake(12, 0.45); game.sfx.play('bossBell'); game.sfx.play('guardBreak');
+        }
+        break;
+      case 'judge':
+        if (this.stateT < 0.1 && !this.safes.some((s) => cx(p) >= s.x0 && cx(p) <= s.x1)) this.attacks.push({ x: p.x, y: p.y, w: p.w, h: p.h, dmg: 30, knock: 380, key: this.id * 1000 + this.swing });
+        if (this.stateT >= 0.1) { this.safes = null; this.recover(1.0); }
+        break;
       case 'recover':
         this.vx = approach(this.vx, 0, 900 * dt);
         if (this.stateT >= this.recT) { this.cool = this.nextCool(); this.setState('idle'); }
@@ -248,7 +274,7 @@ export class Tokimori extends Enemy {
   }
   nextCool() {
     const base = this.phase === 1 ? 0.75 : this.phase === 2 ? 0.55 : 0.4;
-    return base * (this.enraged ? 0.7 : 1) + this.rng.next() * 0.3;
+    return (base * (this.enraged ? 0.7 : 1) + this.rng.next() * 0.3) * (this.finalForm ? 0.45 : 1); // 白き刻守は休まず攻め続ける
   }
   recover(t) { this.setState('recover'); this.recT = t; }
   aimHands(p) {
@@ -262,7 +288,13 @@ export class Tokimori extends Enemy {
     if (adx > 120) opts.push('hands', 'leap');
     opts.push('hands', 'leap');
     // 白き刻守：攻撃の選択肢が増える
-    if (this.finalForm) { opts.push('rain', 'rain', 'rings', 'rings', 'dash'); if (adx < 200) opts.push('triple', 'triple'); else opts.push('dash', 'rain'); }
+    if (this.finalForm) {
+      opts.push('rain', 'rain', 'rings', 'rings', 'dash', 'nova');
+      if (adx < 200) opts.push('triple', 'triple'); else opts.push('dash', 'rain');
+      // 巨体の死角（すぐ近く・頭上・足元）にいると、まわり全体を打つ白輪の爆ぜが増える
+      if (adx < 130 || Math.abs(this.dy(p)) > 60) opts.push('nova', 'nova', 'nova');
+      if (game.run.clock - (this.lastJudge ?? -99) > 9) opts.push('judge', 'judge');
+    }
     if (this.phase >= 2 && !this.brake && this.lastMoveName !== 'stop') opts.push('stop', 'stop');
     let m = this.rng.pick(opts);
     // 同じ技の3連続は避ける
@@ -278,12 +310,24 @@ export class Tokimori extends Enemy {
     if (m === 'rings') { this.setState('ringsWind'); game.sfx.play('tellBig'); }
     if (m === 'triple') { this.setState('tripleWind'); this.hits = 3; game.sfx.play('tellBig'); }
     if (m === 'dash') { this.facePlayer(p); this.setState('dashWind'); game.sfx.play('tellBig'); }
+    if (m === 'nova') { this.setState('novaWind'); game.sfx.play('tellBig'); }
+    if (m === 'judge') { this.setState('judgeWind'); this.safes = this.planSafes(game); this.lastJudge = game.run.clock; game.sfx.play('bossBell'); }
   }
   // 時針の雨：主人公の位置と、その左右に間隔を空けて落とす（すき間に入れば当たらない）
   planRain(game) {
     const p = game.player, xs = [], base = cx(p), gap = 64;
     for (let i = -4; i <= 4; i++) if (i !== 1 && i !== -3) xs.push(clamp(base + i * gap + (this.rng.next() - 0.5) * 16, 30, game.map.pxW - 30));
     return xs;
+  }
+  // 審判の鐘の安全地帯：光の柱 2 本。1 本は主人公から少し離れた所（走れば間に合う）、もう 1 本は部屋の別の所
+  planSafes(game) {
+    const p = game.player, W = game.map.pxW, w = 84, x0 = (c) => clamp(c - w / 2, 20, W - 20 - w);
+    const side = this.rng.next() < 0.5 ? -1 : 1, d = 150 + this.rng.next() * 110;
+    let c1 = cx(p) + side * d; if (c1 < 60 || c1 > W - 60) c1 = cx(p) - side * d;
+    const a = x0(c1);
+    let b = x0(30 + this.rng.next() * (W - 60));
+    for (let i = 0; i < 8 && Math.abs(b - a) < w * 2.5; i++) b = x0(30 + this.rng.next() * (W - 60));
+    return [{ x0: a, x1: a + w }, { x0: b, x1: b + w }];
   }
   tryCounter(game, adx) {
     const p = game.player;

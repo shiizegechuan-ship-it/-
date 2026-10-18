@@ -695,3 +695,44 @@ test('結末のあと（終わらない夜）：楔が無ければ、倒して�
   assert.equal(g.ending.id, 'sleep');
   assert.match(g.ending.pages[g.ending.pages.length - 1][1], /結末 2\/4/);
 });
+
+test('白き刻守の新しい技：白輪の爆ぜ（まわり全体・輪の外なら当たらない）と審判の鐘（画面全体・光の柱の中なら当たらない）', async () => {
+  const { NOVA_R } = await import('../src/boss.js');
+  const setup = () => {
+    const g = newGame(8); g.meta.loop = 5; g.startLoop(); g.modal = null;
+    g.enterRoom(2, g.run.plan.floors[2].findIndex((r) => r.type === 'boss')); g.modal = null;
+    const b = g.room.boss; b.trueDuel = true; b.brake = true; g.room.duel = true;
+    g.beginFinalForm(b); g.modal = null;
+    for (const e of g.room.enemies) if (e !== b) e.alive = false;
+    const p = g.player; p.hp = p.maxHp = 1e7;
+    return { g, b, p, d: new Driver(g) };
+  };
+  const run = (g, b, p, d, m, place) => {
+    const pick0 = b.rng.pick.bind(b.rng);
+    b.setState('idle'); b.cool = 0; g.room.projectiles = [];
+    b.rng.pick = () => m; b.chooseMove(g, 100); b.rng.pick = pick0;
+    place(); p.iframeT = 0; const hp0 = p.hp;
+    for (let i = 0; i < 60 * 3 && b.state !== 'recover'; i++) { place(); d.frame(1); p.iframeT = Math.min(p.iframeT, 0); if (g.modal) g.modal = null; }
+    d.frame(2);
+    return hp0 - p.hp;
+  };
+  // 選択肢に入っている。すぐ近く（死角）にいると白輪の爆ぜが増える
+  { const { g, b, p } = setup(); let opts; const pick0 = b.rng.pick.bind(b.rng); b.rng.pick = (o) => { opts = o.slice(); return pick0(o); };
+    p.x = cx(b) + 20; b.chooseMove(g, 20); b.rng.pick = pick0;
+    assert.ok(opts.filter((x) => x === 'nova').length >= 3 && opts.includes('judge')); }
+  // 白輪の爆ぜ：輪の中（頭上でも）は当たり、外なら当たらない
+  { const { g, b, p, d } = setup();
+    const inside = run(g, b, p, d, 'nova', () => { p.x = cx(b) - p.w / 2; p.y = b.y - 40; p.vy = 0; });
+    assert.ok(inside > 0, 'hits above the giant body');
+    b.setState('idle');
+    const outside = run(g, b, p, d, 'nova', () => { p.x = cx(b) + NOVA_R + 40; p.y = b.y + b.h - p.h; });
+    assert.equal(outside, 0, 'safe outside the ring'); }
+  // 審判の鐘：光の柱の外は当たり、中なら当たらない
+  { const { g, b, p, d } = setup();
+    let safe = null;
+    const hitOut = run(g, b, p, d, 'judge', () => { safe ||= b.safes; const s = b.safes || safe; const xs = [40, g.map.pxW - 60, g.map.pxW / 2].find((x) => !s.some((z) => x >= z.x0 - 20 && x <= z.x1 + 20)); p.x = xs; });
+    assert.ok(hitOut > 0, 'hits outside the pillars');
+    b.lastJudge = -99; b.setState('idle'); safe = null;
+    const hitIn = run(g, b, p, d, 'judge', () => { safe ||= b.safes; const z = (b.safes || safe)[0]; p.x = (z.x0 + z.x1) / 2 - p.w / 2; });
+    assert.equal(hitIn, 0, 'safe in a pillar'); }
+});

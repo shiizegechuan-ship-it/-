@@ -2271,6 +2271,7 @@ export class Game {
     b.maxHp = Math.round(b.maxHp * 1.1); b.hp = b.maxHp;
     b.barrier = null; // HP が戻ったので、時の障壁も数え直す
     b.poiseDmg = 0; b.cool = 1.2; b.ownVx = 0; b.vx = 0;
+    b.dmgMul = (b.dmgMul || 1) * 1.35; // 白き刻守：一撃が重い（予兆は大きく長いが、当たれば痛い）
     b.setState('transform');
     this.room.projectiles = [];
     this.fx.screenFlash('#ffffff', 0.7); this.fx.shake(12, 0.8); this.sfx.play('bossBell'); this.sfx.play('guardBreak');
