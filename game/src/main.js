@@ -17,6 +17,8 @@ const storage = {
   saveSettings(s) { try { localStorage.setItem(SAVE_KEY + ':settings', s); } catch { /* 保存できない環境でも遊べる */ } },
 };
 
+// 同梱のフォントを先に読み込む（読み込むまでは端末の日本語フォントで描く）
+try { document.fonts && document.fonts.load("16px 'DotGothic16'"); } catch { /* 古いブラウザ */ }
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const input = new Input();
