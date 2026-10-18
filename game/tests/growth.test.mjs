@@ -1958,3 +1958,19 @@ test('黄金の宝箱：低い確率で、3 枚のうち 1 枚が伝説の強化
   // 普通の扉のアーティファクトには混ざらない
   for (let i = 0; i < 100; i++) { g.modal = null; g.openArtifactPick('normal', 2, false); assert.ok(g.modal.offer.every((id) => !id.startsWith('boon:'))); }
 });
+
+test('明けない夜（バッドエンドのあと）も、Lv・経験値・金貨を持ったまま次の夜へ。結末を見たら（真の結末以外）持ち越さない', () => {
+  const g = newGame(23); g.meta.loop = 3; g.startLoop(); g.modal = null;
+  g.run.level = 7; g.run.exp = 5; g.run.gold = 321;
+  g.meta.flags.endings.night = 3; // 明けない夜を見た
+  g.endRun('badend');
+  assert.ok(g.rewind.report.kept.some((k) => /明けない夜：Lv7/.test(k.text)));
+  g.startLoop(); g.modal = null;
+  assert.equal(g.run.level, 7); assert.equal(g.run.exp, 5); assert.equal(g.run.gold, 321);
+  // 倒れて同じ夜をやり直しても、明けない夜の間は持ち越す
+  g.run.level = 8; g.run.gold = 400; g.endRun('death'); g.startLoop(); g.modal = null;
+  assert.equal(g.run.level, 8); assert.equal(g.run.gold, 400);
+  // ほかの結末を見たら、ふつうの終わらない夜（持ち越さない）
+  g.meta.flags.ending = true; g.endRun('death'); g.startLoop(); g.modal = null;
+  assert.equal(g.run.level, 1); assert.equal(g.run.gold, 0);
+});

@@ -18,7 +18,7 @@
 - リポジトリ：`shiizegechuan-ship-it/-`、作業ブランチ：`feature/wedge-of-dawn`。ゲームは `game/` の下。
 - 起動（開発）：`cd game && python3 -m http.server 8080` → `http://localhost:8080/index.html`
   - ページの中の `window.__game`（ゲームの状態）、`window.__music`、`__setManual(true)` と `__step(n)`（1 コマずつ進める）がテストに便利。
-- テスト：`cd game && node --test tests/*.test.mjs`（今 **255 件すべて通る**）。
+- テスト：`cd game && node --test tests/*.test.mjs`（今 **256 件すべて通る**）。
 - 1 ファイル版（Artifact 用）：`node tools/build-single.mjs <出力先.html>`。外枠の HTML は `index.html` と別に `tools/build-single.mjs` の中にある（iPhone 向けの設定などは両方へ入れる）。
 - Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v57）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
 - コミットの末尾の署名：
@@ -167,6 +167,8 @@
 - 結末の種類でエンドレスを分けた：真の結末のあとだけ「記憶の固執」を得て「記憶の固執の夜」、ほかの結末のあとは「終わらない夜」（`meta.js` の `endlessName`）。古いセーブは真の結末を見ていれば記憶の固執を与える。
 - タイトル：文字の裏の点滅（塔の窓明かり・星のまたたき）をやめた。横に流れるのはそのまま。真の結末のあとは夜明けの空（`background.js` の `dawnBackground`）。
 - タイトル：左上の設定ボタン（`TITLE_GEAR`、`titleSel === -1`）→ 設定のライトボックス（文字の大きさ・画面揺れ・ゲームについて、右上の×＝`LB_CLOSE`）。「ゲームについて」の本文は `ui.js` の `ABOUT_LINES`（原案：当開発元／シナリオの推敲：ChatGPT／制作：Claude、フィクションのおことわり、素材・フォント、記録の保存先、点滅と休憩の注意）。
+
+- 明けない夜（バッドエンドを見たあと、まだ結末を見ていない間）も、Lv・経験値・金貨を持ったまま次の夜へ（倒れてやり直す時も）。結末を見たら、真の結末の記憶の固執の夜だけが持ち越す（`endLoop` の `m.carry`）。
 
 ## 5. 主な仕組みの場所（早見）
 - 進行・部屋・ダメージ・店・会話・決戦：`src/game.js`（大きい。関数名で検索する）

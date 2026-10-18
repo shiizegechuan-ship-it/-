@@ -215,8 +215,8 @@ export class Game {
     // 最後の夜（第 3 夜から）は、新しい力「暁の剣」を授かる
     if (meta.loop >= LAST_NIGHT && !wedgedBoons.some((b) => b.id === 'dawnblade')) wedgedBoons.push({ id: 'dawnblade', tier: 1 });
     this.player.setBoons(wedgedBoons);
-    // 「記憶の固執」（終わらない夜）：前の夜の Lv・経験値・金貨のまま始まる
-    if (meta.carry && meta.flags.ending && hasPersistence(meta)) {
+    // 「記憶の固執の夜」と「明けない夜」：前の夜の Lv・経験値・金貨のまま始まる（持ち越すかどうかは endLoop で決める）
+    if (meta.carry) {
       this.run.level = Math.max(1, meta.carry.level | 0); this.run.exp = meta.carry.exp || 0; this.run.gold = meta.carry.gold || 0;
       this.player.baseMaxHp += LEVEL.hpPer * (this.run.level - 1);
       this.player.setBoons(this.player.boons);

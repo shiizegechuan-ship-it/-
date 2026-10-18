@@ -307,10 +307,12 @@ export function endLoop(m, run) {
   else if (report.loop === 1) report.tip = '金の時計の印がついたもの（人・残骸・仕掛け）に楔を打つと、次の夜もその状態のまま残る。';
   else report.tip = progressLine(m, advance ? m.loop + 1 : m.loop) || TIPS[((m.runs || 0) + report.loop) % TIPS.length];
   // 「記憶の固執」：終わらない夜では、Lv・経験値・金貨も持ったまま次の夜へ
-  m.carry = hasPersistence(m) && m.flags.ending ? { level: run.level || 1, exp: run.exp || 0, gold: run.gold || 0 } : null;
+  // 明けない夜（バッドエンドのあと、まだ結末を見ていない間）も、Lv・経験値・金貨を持ったまま次の夜へ
+  const persist = hasPersistence(m) && m.flags.ending, unbroken = !m.flags.ending && !!m.flags.endings.night;
+  m.carry = persist || unbroken ? { level: run.level || 1, exp: run.exp || 0, gold: run.gold || 0 } : null;
   if (m.carry && run.gold) report.reset = report.reset.filter((x) => !/^金貨/.test(x.text));
   if (m.carry && (run.level || 1) > 1) report.reset = report.reset.filter((x) => !/^レベル/.test(x.text));
-  if (m.carry) report.kept.push({ text: `記憶の固執：Lv${m.carry.level}・金貨 ${m.carry.gold}`, sub: '記憶の固執の夜では、Lv と金貨も持ったまま次の夜へ' });
+  if (m.carry) report.kept.push(persist ? { text: `記憶の固執：Lv${m.carry.level}・金貨 ${m.carry.gold}`, sub: '記憶の固執の夜では、Lv と金貨も持ったまま次の夜へ' } : { text: `明けない夜：Lv${m.carry.level}・金貨 ${m.carry.gold}`, sub: '明けない夜が続く間は、Lv と金貨も持ったまま次の夜へ' });
   m.lastLoop = { dmgByCat: { ...(run.dmgByCat || {}) }, cause: run.cause, floor: run.floor, boons: (run.boons || []).map((b) => ({ ...b })), loop: m.loop, dodges: run.dodges || 0, clock: run.clock || 0 };
   const nextCounter = bossCounter(m.lastLoop);
   if (nextCounter) {
