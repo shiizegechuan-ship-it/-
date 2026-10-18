@@ -207,6 +207,8 @@ node tools/build-single.mjs          # dist/wedge-of-dawn.html を作る（esbui
 ## 開発の手引き
 - `DEV_GUIDE.md`：今後のゲーム作りにも使える汎用の開発ガイド（第 1 部が汎用、第 2 部がこのゲーム固有）。
 - `IMPLEMENTATION_PLAN.md`：改修指示書の項目ごとの対応状況。
+- `HANDOFF.md`：別のチャットへの引き継ぎメモ（進め方の希望・動かし方・次に直す一覧）。
+- `tools/dev/`：確認用のスクリプト（ボットでのバランス計測・スクリーンショット・曲の書き出し・スモークテストなど。使い方は HANDOFF.md）。
 
 ## テスト
 ```sh
