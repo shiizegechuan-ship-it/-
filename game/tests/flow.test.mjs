@@ -87,11 +87,11 @@ test('死亡 → 巻き戻り → 強化に楔 → 次の夜をその強化で�
   assert.deepEqual(g.player.boons, [{ id: 'lag', tier: 1 }]);
 });
 
-test('真の結末：最終夜（第5夜以降）に、条件を満たして第3段階で言葉を伝え、白き刻守（第2形態）まで倒す', () => {
+test('真の結末：歯止めに楔を打った夜の決着の戦いで、条件を満たして第3段階で言葉を伝え、白き刻守（第2形態）まで倒す', () => {
   const g = newGame(7);
   const d = new Driver(g);
   g.meta.slots = 3; g.meta.loop = 5;
-  addWedge(g.meta, { target: 'lira' });
+  addWedge(g.meta, { target: 'lira' }); addWedge(g.meta, { target: 'brake' });
   learn(g.meta, 'lira_message'); learn(g.meta, 'master_reason');
   g.enterRoom(2, g.run.plan.floors[2].findIndex((r) => r.type === 'boss'));
   while (g.modal) { d.frame(10); d.frame(1, ['confirm']); }
@@ -157,30 +157,92 @@ test('第 1 夜は決着の戦いではない（倒しても鐘が鳴る）。�
   assert.ok(g.modal.lines.some((l) => l.text.includes('決着の戦いでなければ')));
 });
 
-test('第 2 夜：刻守の部屋で「ここで決着を着けますか？」。はい＝倒せば結末、いいえ＝夜が戻って第 3 夜（必ず決着）', () => {
-  // いいえ
-  let g = newGame(7); let d = new Driver(g);
-  g.meta.loop = 2; g.startLoop(); g.modal = null;
-  g.enterRoom(2, g.run.plan.floors[2].findIndex((r) => r.type === 'boss'));
-  while (g.modal && g.modal.type === 'analysis') { d.frame(30); d.frame(1, ['confirm']); }
-  assert.ok(g.modal.lines.some((l) => l.text === 'ここで決着を着けますか？'));
-  enterBoss(g, d, 1);
-  d.frame(5);
-  assert.equal(g.scene, 'rewind'); assert.equal(g.meta.loop, 3);
-  // 第 3 夜は聞かずに決着の戦い
-  d.until(() => g.rewind.t > 3.3, 400); g.startLoop(); g.modal = null;
-  enterBoss(g, d);
-  assert.ok(g.run.decisive, 'night 3 is always decisive');
-  // はい：倒すと結末（条件が無ければ「鐘の沈黙」）
-  g = newGame(9); d = new Driver(g);
-  g.meta.loop = 2; g.startLoop(); g.modal = null;
-  enterBoss(g, d, 0);
-  assert.ok(g.run.decisive);
+// 刻守を（第 3 段階の残り HP 1 から）倒す
+function defeatBoss(g, d) {
   while (g.modal) { d.frame(10); d.frame(1, ['confirm']); }
   const b = g.room.boss; b.phase = 3; b.hp = 1; b.state = 'idle'; b.takeHit(g, { dmg: 5, dir: 1, knock: 0, cat: 'combo' });
-  d.until(() => g.scene === 'ending', 60 * 8);
+  d.until(() => g.scene !== 'play', 60 * 8);
+}
+// 結末のページを最後まで送る
+function finishEnding(g, d) { for (let i = 0; i < 40 && g.scene === 'ending'; i++) { d.frame(60); d.frame(1, ['confirm']); } }
+
+test('決着は歯止めの楔で決まる：第 1 夜は打てない。第 2 夜に打つと刻守の部屋で聞かれずに決着の戦い。倒れても同じ夜（楔は残る）。勝てば結末と「記憶の固執」', () => {
+  const g = newGame(9); const d = new Driver(g);
+  // 第 1 夜：打てない（理由を出す）
+  g.talkBrake({});
+  assert.ok(!g.modal.choices, 'no wedge choice on night 1');
+  assert.ok(g.modal.lines.some((l) => /第 2 夜から/.test(l.note || '')));
+  g.modal = null;
+  // 第 2 夜：打てる
+  g.meta.loop = 2; g.startLoop(); g.modal = null;
+  g.talkBrake({});
+  assert.match(g.modal.choices[0].label, /決着の戦い/);
+  g.modal = null;
+  g.doWedge({ target: 'brake' }, {}); d.frame(80);
+  assert.ok(g.meta.wedges.some((w) => w.target === 'brake'));
+  enterBoss(g, d);
+  assert.ok(g.run.decisive, 'decisive without asking');
+  assert.ok(!g.modal || !g.modal.choices, 'no question');
+  // 倒れる → 同じ第 2 夜。楔は残る
+  g.player.hp = 0; g.player.state = 'dead'; g.run.deathT = 1.6; g.endRun('death');
+  assert.equal(g.scene, 'rewind'); assert.equal(g.meta.loop, 2); assert.ok(g.rewind.report.retry);
+  assert.ok(g.meta.wedges.some((w) => w.target === 'brake'), 'the wedge stays');
+  g.startLoop(); g.modal = null;
+  enterBoss(g, d);
+  assert.ok(g.run.decisive);
+  // 勝つ → 結末（条件が無ければ「鐘の沈黙」）と「記憶の固執」。歯止めの楔は抜ける
+  defeatBoss(g, d);
   assert.equal(g.scene, 'ending'); assert.equal(g.ending.id, 'silence');
-  assert.ok(g.meta.flags.endings.silence && !g.meta.flags.endings.true);
+  assert.ok(g.meta.flags.ending && g.meta.flags.endings.silence);
+  assert.ok(g.meta.artifacts.includes('persistence'));
+  assert.ok(!g.meta.wedges.some((w) => w.target === 'brake'), 'the brake wedge comes out after an ending');
+  assert.ok(g.ending.pages.some((pg) => /記憶の固執/.test(pg[0])));
+  assert.match(g.ending.pages[g.ending.pages.length - 1][1], /結末 1\/4/);
+  finishEnding(g, d);
+  assert.equal(g.scene, 'title');
+});
+
+test('歯止めの楔は歯止めの所でも抜ける。抜けば決着の戦いではなく、倒すと鐘が鳴って次の夜へ', () => {
+  const g = newGame(9); const d = new Driver(g);
+  g.meta.loop = 2; addWedge(g.meta, { target: 'brake' }); g.startLoop(); g.modal = null;
+  const it = { wedged: true };
+  g.talkBrake(it);
+  const pull = g.modal.choices.find((c) => /楔を抜く/.test(c.label));
+  assert.ok(pull); g.modal = null; pull.fn();
+  assert.ok(!g.meta.wedges.some((w) => w.target === 'brake') && !it.wedged);
+  enterBoss(g, d);
+  assert.ok(!g.run.decisive && !g.run.badFinal);
+  defeatBoss(g, d);
+  assert.equal(g.scene, 'rewind'); assert.equal(g.meta.loop, 3);
+});
+
+test('第 3 夜から楔なしで刻守に勝つと、バッドエンド「明けない夜」（結末に数える）→ 次の夜へ。その後に楔を打てば、決着の戦いで結末へ', () => {
+  const g = newGame(9); const d = new Driver(g);
+  g.meta.loop = 3; g.startLoop(); g.modal = null;
+  enterBoss(g, d);
+  assert.ok(!g.run.decisive && g.run.badFinal);
+  defeatBoss(g, d);
+  assert.equal(g.scene, 'ending'); assert.equal(g.ending.id, 'night');
+  assert.ok(g.meta.flags.endings.night && !g.meta.flags.ending, 'counted, but the story goes on');
+  assert.ok(!g.meta.artifacts.includes('persistence'));
+  assert.match(g.ending.pages[g.ending.pages.length - 1][1], /結末 1\/4/);
+  finishEnding(g, d);
+  assert.equal(g.scene, 'rewind'); assert.equal(g.meta.loop, 4);
+  // 楔を打てば決着の戦い → 結末
+  addWedge(g.meta, { target: 'brake' }); g.startLoop(); g.modal = null;
+  enterBoss(g, d);
+  assert.ok(g.run.decisive && !g.run.badFinal);
+  defeatBoss(g, d);
+  assert.equal(g.ending.id, 'silence');
+  assert.match(g.ending.pages[g.ending.pages.length - 1][1], /結末 2\/4/);
+});
+
+test('倒れても夜は進まない（どの夜でも）。第 1 夜の説明はやり直しでは出ない', () => {
+  const g = newGame(9);
+  for (let i = 0; i < 3; i++) { g.endRun('death'); assert.equal(g.meta.loop, 1); g.startLoop(); }
+  assert.ok(!g.modal, 'no intro dialog on a retry');
+  g.endRun('bell'); assert.equal(g.meta.loop, 2);
+  g.startLoop(); g.endRun('death'); assert.equal(g.meta.loop, 2);
 });
 
 test('結末の条件：日誌を読んでいれば「師の眠り」、リラの伝言を伝えれば「夜明けの楔」。人に楔を打たなくてもクリアできる', async () => {
@@ -192,17 +254,17 @@ test('結末の条件：日誌を読んでいれば「師の眠り」、リラ�
   assert.equal(endingFor(g.meta, true), 'sleep', 'telling needs the wedge and the message');
   addWedge(g.meta, { target: 'lira' }); learn(g.meta, 'lira_message');
   assert.equal(endingFor(g.meta, true), 'true');
-  // 人の楔なしで、決着の戦いに勝つと結末（日誌あり＝師の眠り）
+  // 人物（リラ・グレン）に楔を打たなくても、歯止めの楔の決着の戦いに勝つと結末（日誌あり＝師の眠り）
   const h = newGame(4); const d = new Driver(h);
-  learn(h.meta, 'master_reason'); h.meta.loop = 3; h.startLoop(); h.modal = null;
-  assert.equal(h.meta.wedges.filter((w) => w.target !== 'boon').length, 0);
+  learn(h.meta, 'master_reason'); h.meta.loop = 3; addWedge(h.meta, { target: 'brake' }); h.startLoop(); h.modal = null;
+  assert.equal(h.meta.wedges.filter((w) => w.target === 'lira' || w.target === 'glen').length, 0);
   enterBoss(h, d);
   while (h.modal) { d.frame(10); d.frame(1, ['confirm']); }
   const b = h.room.boss; b.phase = 3; b.hp = 1; b.state = 'idle'; b.takeHit(h, { dmg: 5, dir: 1, knock: 0, cat: 'combo' });
   d.until(() => h.scene === 'ending', 60 * 8);
   assert.equal(h.ending.id, 'sleep');
   // 最後のページは見た結末の数
-  assert.match(h.ending.pages[h.ending.pages.length - 1][1], /結末 1\/3/);
+  assert.match(h.ending.pages[h.ending.pages.length - 1][1], /結末 1\/4/);
 });
 
 test('白き刻守は新しい技（時針の雨・光輪・三連斬・突進）を使い、それぞれ当たる', async () => {
@@ -584,25 +646,21 @@ test('黄金の部屋（戦いの無い部屋）でも、跳ぶボタンで右�
   assert.equal(g.nearestInteractable(), chest);
 });
 
-test('結末のあと（終わらない夜）も、刻守の部屋で決着を選べ、ほかの結末へ行ける。「いいえ」なら決着を着けずに戦う', () => {
+test('結末のあと（終わらない夜）：楔が無ければ、倒しても鐘が鳴って夜が戻る。歯止めに楔を打てば決着の戦いで、ほかの結末へ行ける', () => {
   const g = newGame(12); const d = new Driver(g);
-  g.meta.flags.ending = true; g.meta.flags.endings = { silence: 3 }; g.meta.loop = 4;
+  g.meta.flags.ending = true; g.meta.flags.endings = { silence: 3 }; g.meta.loop = 4; g.meta.artifacts.push('persistence');
   learn(g.meta, 'master_reason');
   g.startLoop(); g.modal = null;
   assert.ok(g.player.boons.some((b) => b.id === 'dawnblade'), 'the dawn sword stays after an ending');
-  // いいえ：決着ではない（倒すと鐘が鳴って夜が戻る）
-  enterBoss(g, d, 1);
-  assert.equal(g.scene, 'play'); assert.ok(!g.run.decisive);
-  // はい：別の結末（日誌を読んだので「師の眠り」）
-  const h = newGame(12); const e = new Driver(h);
-  h.meta.flags.ending = true; h.meta.flags.endings = { silence: 3 }; h.meta.loop = 4;
-  learn(h.meta, 'master_reason');
-  h.startLoop(); h.modal = null;
-  enterBoss(h, e, 0);
-  assert.ok(h.run.decisive);
-  while (h.modal) { e.frame(10); e.frame(1, ['confirm']); }
-  const b = h.room.boss; b.phase = 3; b.hp = 1; b.state = 'idle'; b.takeHit(h, { dmg: 5, dir: 1, knock: 0, cat: 'combo' });
-  e.until(() => h.scene === 'ending', 60 * 8);
-  assert.equal(h.ending.id, 'sleep');
-  assert.match(h.ending.pages[h.ending.pages.length - 1][1], /結末 2\/3/);
+  enterBoss(g, d);
+  assert.ok(!g.run.decisive && !g.run.badFinal);
+  defeatBoss(g, d);
+  assert.equal(g.scene, 'rewind'); assert.equal(g.meta.loop, 5);
+  // 楔を打つ → 決着の戦い → 別の結末（日誌を読んだので「師の眠り」）
+  addWedge(g.meta, { target: 'brake' }); g.startLoop(); g.modal = null;
+  enterBoss(g, d);
+  assert.ok(g.run.decisive);
+  defeatBoss(g, d);
+  assert.equal(g.ending.id, 'sleep');
+  assert.match(g.ending.pages[g.ending.pages.length - 1][1], /結末 2\/4/);
 });

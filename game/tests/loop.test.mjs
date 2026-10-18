@@ -58,7 +58,7 @@ test('周回の終わり：強化はリセット、楔の強化は保持、知�
   g.meta.slots = 2;
   addWedge(g.meta, { target: 'boon', boon: { id: 'echo', tier: 2 } });
   g.learnK('code');
-  g.endRun('death');
+  g.endRun('bell'); // 刻守を倒して鐘が鳴った（夜が進む）
   assert.equal(g.scene, 'rewind');
   const rep = g.rewind.report;
   assert.ok(rep.kept.some((k) => k.text.includes('残響')));
@@ -430,10 +430,14 @@ test('古いセーブ：人物・残骸に打った楔が人の楔の枠より�
   assert.equal(r.flags.endings.true, 6);
 });
 
-test('巻き戻り画面の助言は「次の夜」に合っている（第 1 夜の後は楔の案内、第 2 夜の後は最後の夜）', () => {
+test('巻き戻り画面の助言は「次の夜」に合っている（第 1 夜の後は楔の案内、第 2 夜の後は「楔の無い勝利では夜が明けない」）', () => {
   const m = newMeta(4);
-  let r = endLoop(m, { cause: 'death', floor: 1, boons: [], dmgByCat: {}, learned: [] });
+  m.flags.diaryRead = true; // 「鐘が鳴っても夜は戻る」の案内を出さない
+  let r = endLoop(m, { cause: 'bell', floor: 3, boons: [], dmgByCat: {}, learned: [] });
   assert.equal(m.loop, 2); assert.match(r.tip, /楔を打つ/, 'after night 1 the wedge tutorial comes first');
-  r = endLoop(m, { cause: 'wait', floor: 3, boons: [], dmgByCat: {}, learned: [] });
-  assert.equal(m.loop, 3); assert.match(r.tip, /最後の夜/);
+  r = endLoop(m, { cause: 'bell', floor: 3, boons: [], dmgByCat: {}, learned: [] });
+  assert.equal(m.loop, 3); assert.match(r.tip, /楔を打たずに刻守を倒しても、夜は明けない/);
+  // 倒れた時は同じ夜の助言（夜の番号は進まない）
+  r = endLoop(m, { cause: 'death', floor: 1, boons: [], dmgByCat: {}, learned: [] });
+  assert.equal(m.loop, 3); assert.ok(r.retry);
 });

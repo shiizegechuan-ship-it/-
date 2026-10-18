@@ -568,9 +568,12 @@ test('床を攻める常時の術（地走り・時針の剣山・灼熱の床�
 test('巻き戻りの語りと助言は夜ごとに変わる', () => {
   const g = newGame(35);
   const stories = new Set(), tips = new Set();
-  for (let i = 0; i < 5; i++) { g.endRun('death'); stories.add(g.rewind.report.story); tips.add(g.rewind.report.tip); g.startLoop(); g.modal = null; }
+  g.meta.flags.diaryRead = true;
+  for (let i = 0; i < 5; i++) { g.endRun('bell'); stories.add(g.rewind.report.story); tips.add(g.rewind.report.tip); g.startLoop(); g.modal = null; }
   assert.equal(stories.size, 5);
-  assert.ok(tips.size >= 4);
+  assert.ok(tips.size >= 2); // 第 3 夜からは「楔の無い勝利では夜が明けない」の案内が優先される
+  // 倒れた時は「同じ夜をもう一度」の語り
+  g.endRun('death'); assert.match(g.rewind.report.story, /もう一度/);
 });
 
 test('刻守の撃破：爆発の連鎖のあと消滅し、鐘が鳴って巻き戻る', () => {
@@ -852,9 +855,12 @@ test('楔の枠：どの難易度でもはじめは 3 つ、3 夜ごとに 1 つ
   for (const diff of ['veryeasy', 'easy', 'normal', 'hard', 'nightmare']) { const g = newGame(9); g.meta.difficulty = diff; g.startLoop(); assert.equal(g.meta.slots, 3, diff); }
   const m = newMeta(9);
   assert.equal(m.slots, 3);
-  for (let i = 0; i < 3; i++) endLoop(m, { cause: 'death', floor: 1, boons: [] });
+  m.flags.bossBeaten = true; // 初めて刻守に勝った時の枠 +1 は別に数える
+  for (let i = 0; i < 5; i++) endLoop(m, { cause: 'death', floor: 1, boons: [] }); // 倒れても夜は進まない（枠も増えない）
+  assert.equal(m.slots, 3);
+  for (let i = 0; i < 3; i++) endLoop(m, { cause: 'bell', floor: 1, boons: [] });
   assert.equal(m.slots, 4);
-  for (let i = 0; i < 30; i++) endLoop(m, { cause: 'death', floor: 1, boons: [] });
+  for (let i = 0; i < 30; i++) endLoop(m, { cause: 'bell', floor: 1, boons: [] });
   assert.equal(m.slots, 6);
 });
 
@@ -1894,4 +1900,36 @@ test('背景の新しい内装は上層・鐘楼だけ（下層・中層の戦�
   assert.deepEqual([...seen[2]].sort(), [0, 1, 2]);
   g.meta.loop = 2; assert.equal(ruinLevel(g.meta), 1);
   g.meta.loop = 3; assert.equal(ruinLevel(g.meta), 2);
+});
+
+test('記憶の固執：終わらない夜では Lv・経験値・金貨を持ったまま次の夜へ。継承の刻印の上限が無くなる（無ければ今までどおり）', async () => {
+  const { upMax, hasPersistence } = await import('../src/meta.js');
+  // 持っていない：Lv と金貨はその夜だけ、継承の刻印は最大 4
+  const a = newGame(21); a.startLoop(); a.modal = null;
+  a.run.level = 6; a.run.exp = 3; a.run.gold = 500;
+  a.endRun('bell'); a.startLoop(); a.modal = null;
+  assert.equal(a.run.level, 1); assert.equal(a.run.gold, 0);
+  assert.equal(upMax(a.meta, 'inherit'), 4);
+  // 持っている（結末のあと）
+  const g = newGame(21); g.meta.flags.ending = true; g.meta.artifacts.push('persistence'); g.startLoop(); g.modal = null;
+  assert.ok(hasPersistence(g.meta));
+  const hp1 = g.player.maxHp;
+  g.run.level = 6; g.run.exp = 3; g.run.gold = 500;
+  g.endRun('death');
+  assert.ok(g.rewind.report.kept.some((k) => /記憶の固執/.test(k.text)));
+  assert.ok(!g.rewind.report.reset.some((k) => /^金貨|^レベル/.test(k.text)));
+  g.startLoop(); g.modal = null;
+  assert.equal(g.run.level, 6); assert.equal(g.run.exp, 3); assert.equal(g.run.gold, 500);
+  assert.ok(g.player.maxHp > hp1, 'level HP comes along');
+  assert.equal(g.player.hp, g.player.maxHp);
+  // 継承の刻印は Lv4 を超えて刻める
+  assert.equal(upMax(g.meta, 'inherit'), Infinity);
+  g.meta.shards = 1e6; g.meta.upgrades.inherit = 4;
+  assert.ok(buyUpgrade(g.meta, 'inherit')); assert.ok(buyUpgrade(g.meta, 'inherit'));
+  assert.equal(inheritCount(g.meta), 9);
+  // 簡単は普通と同じ（自動ですべて持ち越すのはめちゃ簡単だけ）
+  g.meta.difficulty = 'easy'; assert.equal(inheritCount(g.meta), 9);
+  // 扉・店・黄金の部屋には出ない
+  const { rollArtifacts } = await import('../src/artifacts.js');
+  for (const r of ['normal', 'gold']) assert.ok(!rollArtifacts(makeRng(1), [], r, 99).includes('persistence'));
 });

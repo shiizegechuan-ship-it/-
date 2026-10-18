@@ -18,7 +18,7 @@
 - リポジトリ：`shiizegechuan-ship-it/-`、作業ブランチ：`feature/wedge-of-dawn`。ゲームは `game/` の下。
 - 起動（開発）：`cd game && python3 -m http.server 8080` → `http://localhost:8080/index.html`
   - ページの中の `window.__game`（ゲームの状態）、`window.__music`、`__setManual(true)` と `__step(n)`（1 コマずつ進める）がテストに便利。
-- テスト：`cd game && node --test tests/*.test.mjs`（今 **246 件すべて通る**）。
+- テスト：`cd game && node --test tests/*.test.mjs`（今 **250 件すべて通る**）。
 - 1 ファイル版（Artifact 用）：`node tools/build-single.mjs <出力先.html>`。外枠の HTML は `index.html` と別に `tools/build-single.mjs` の中にある（iPhone 向けの設定などは両方へ入れる）。
 - Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v53）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
 - コミットの末尾の署名：
@@ -87,7 +87,13 @@
 - 回答用の事実：上層の曲「鐘楼へ」（`songs.js` の `belfry`）は、最初から「重く、厳か」に作った曲（116BPM・長い和音の `pad` 型）。上層の戦闘部屋でも、この階の曲として流れている。戦闘向けにしなかった特別な理由は無い（雰囲気を優先した）。
 - 依頼者に聞く：上層の戦闘部屋は、速い戦闘向けの曲に替えるか（新しく作るか）。
 
-### 4-6. 決戦の仕組みを作り直す（第 2 夜に刻守に聞くのをやめる）
+### 4-6. 決戦の仕組みを作り直す（第 2 夜に刻守に聞くのをやめる）【済み】
+- **作った**（`meta.js`：`canWedgeBrake`・`decisiveNight`・`badFinalNight`・`hasPersistence`・`upMax`、`game.js`：`setupBoss`・`talkBrake`／`pullBrake`・`onBossDefeated`・`startEnding`）：
+  - 倒れても夜は進まない（`endLoop` の `advance`）。同じ夜でも部屋の並びは揺らぐ（`meta.runs` を種に）。第 1 夜の説明はやり直しでは出ない。
+  - 刻守の部屋の問いと `postponeDecision` を削除。歯止めに楔を打った夜（第 2 夜から）が決着の戦い。第 1 夜は打てない（理由を出す）。歯止めの所で「楔を抜く」。
+  - 第 3 夜から楔なしで勝つ → バッドエンド「明けない夜」（`ENDINGS.night`、結末 n/4 に数える、`flags.ending` は立てず次の夜へ）。
+  - 楔の決着の戦いに勝つ → 3 つの結末＋伝説のアーティファクト「記憶の固執」（`persistence`）。結末で歯止めの楔は自動で抜ける（終わらない夜で同じ結末が毎晩くり返されないように。打ち直せばほかの結末を探せる）。
+  - 終わらない夜：楔があれば決着の戦い、無ければ倒しても鐘が鳴る。「記憶の固執」で Lv・経験値・金貨も持ち越し（`meta.carry`）、継承の刻印は上限なし（Lv4 から先は少しずつ高く）。古いセーブで結末を見ていれば「記憶の固執」を与える。
 - 依頼者の新しい仕様：
   - 第 2 夜の刻守の部屋での「ここで決着を着けますか？」は**やめる**。3 夜目へ行くとしても、2 夜目のボス戦は無くさない。
   - 代わりに「**歯止めの楔**」で決戦かどうかを決める。**2 夜目に楔を打てば 2 夜目で決戦、3 夜目に打てば 3 夜目で決戦。**

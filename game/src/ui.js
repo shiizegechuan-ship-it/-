@@ -5,7 +5,7 @@ import { COMPANIONS, allComps, unionReady } from './companion.js';
 import { BOONS, forgeDiff, SCHOOLS, RESONANCE, synergyHints, schoolCounts, fusionsFor } from './boons.js';
 import { ACTIVE_ARTS } from './arts.js';
 import { ARTIFACTS, ARTIFACT_COLOR } from './artifacts.js';
-import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, inheritLabel, DAWN_STEPS, dawnProgress, ENDING_IDS } from './meta.js';
+import { KNOWLEDGE, WEDGE_TARGETS, COUNTERS, fmtClock, wedgeLabel, bossCounter, GLEN_DEADLINE, hasWedge, UPGRADES, upLv, upMax, inheritLabel, DAWN_STEPS, dawnProgress, ENDING_IDS } from './meta.js';
 import { ENDINGS } from './game.js';
 import { FLOOR_NAMES } from './world.js';
 import { expToNext, LEVEL } from './level.js';
@@ -607,8 +607,8 @@ export function drawRewind(ctx, game) {
   ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(VIEW_W / 2, VIEW_H / 2); ctx.lineTo(VIEW_W / 2 + Math.cos(spin) * 190, VIEW_H / 2 + Math.sin(spin) * 190); ctx.stroke();
   ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(VIEW_W / 2, VIEW_H / 2); ctx.lineTo(VIEW_W / 2 + Math.cos(spin / 12) * 120, VIEW_H / 2 + Math.sin(spin / 12) * 120); ctx.stroke();
   ctx.restore();
-  const causeText = rep.cause === 'bell' ? '鐘が鳴った。夜が戻る。' : rep.cause === 'wait' ? '決着を延ばした。鐘が鳴り、夜が戻る。' : 'あなたは倒れた。夜が戻る。';
-  text(ctx, causeText + `　（第 ${rep.loop} 夜 → 第 ${meta.loop} 夜）`, VIEW_W / 2, 50, { size: 19, align: 'center', font: SERIF, color: rep.cause === 'bell' ? C.gold : '#efe6d2' });
+  const causeText = rep.cause === 'bell' ? '鐘が鳴った。夜が戻る。' : rep.cause === 'badend' ? '刻守を倒した。けれど、夜は明けない。' : 'あなたは倒れた。同じ夜のはじめに戻る。';
+  text(ctx, causeText + (rep.retry ? `　（第 ${rep.loop} 夜をもう一度）` : `　（第 ${rep.loop} 夜 → 第 ${meta.loop} 夜）`), VIEW_W / 2, 50, { size: 19, align: 'center', font: SERIF, color: rep.cause === 'bell' ? C.gold : '#efe6d2' });
   // 夜ごとに変わる語り（時間の経過と、師の変化）
   if (rep.story) { ctx.globalAlpha = clamp(t / 0.8, 0, 1); text(ctx, rep.story, VIEW_W / 2, 80, { size: 14, align: 'center', font: SERIF, color: '#d9c7a8' }); ctx.globalAlpha = 1; }
   if (rep.tip && t > 2.2) text(ctx, '◆ ' + rep.tip, VIEW_W / 2, 366, { size: 12, align: 'center', color: '#f2c14e' });
@@ -706,8 +706,8 @@ function drawRewindShop(ctx, game, r) {
     const items = Object.entries(UPGRADES).map(([k, u]) => {
       // めちゃ簡単：継承は最初から無限（刻印は要らない）
       if (k === 'inherit' && game.carryAll()) return { label: `${u.name}　∞`, right: '無限', rightColor: C.gold, desc: 'めちゃ簡単：前の夜の強化と術を、すべて Lv ごと持ち越す（刻む必要はない）' };
-      const lv = upLv(m, k), maxed = lv >= u.max, c = maxed ? 0 : u.cost(lv);
-      return { label: `${u.name}　Lv${lv}/${u.max}`, right: maxed ? '最大' : `欠片 ${c}`, rightColor: maxed ? C.muted : m.shards >= c ? '#9fd0ff' : '#8a6a7a', desc: maxed ? u.desc(lv) : `いま：${lv ? u.desc(lv) : 'なし'}　→　次：${u.desc(lv + 1)}` };
+      const mx = upMax(m, k), lv = upLv(m, k), maxed = lv >= mx, c = maxed ? 0 : u.cost(lv);
+      return { label: `${u.name}　Lv${lv}/${Number.isFinite(mx) ? mx : '∞'}`, right: maxed ? '最大' : `欠片 ${c}`, rightColor: maxed ? C.muted : m.shards >= c ? '#9fd0ff' : '#8a6a7a', desc: maxed ? u.desc(lv) : `いま：${lv ? u.desc(lv) : 'なし'}　→　次：${u.desc(lv + 1)}` };
     });
     drawLightbox(ctx, game, { title: '刻印 ― 夜を越えて残る力', right: `時の欠片 ${m.shards}`, items, sel: r.sub, color: '#9fd0ff', desc: items[r.sub] ? items[r.sub].desc : '', st: r });
   } else {

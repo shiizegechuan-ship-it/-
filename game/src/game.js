@@ -18,7 +18,7 @@ import { nightLook } from './nightlook.js';
 import { FLOOR_NAMES, buildPlan, layoutRows, extraEnemyTypes } from './world.js';
 import {
   newMeta, serialize, deserialize, endLoop, learn, knows, hasWedge, addWedge, removeWedge, freeSlots,
-  bossCounter, trueEndReady, finalReady, FINAL_NIGHT, LAST_NIGHT, asksDecision, alwaysDecisive, endingFor, ENDING_IDS, PERSON_MAX, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
+  bossCounter, trueEndReady, finalReady, FINAL_NIGHT, LAST_NIGHT, canWedgeBrake, decisiveNight, badFinalNight, hasPersistence, upMax, endingFor, ENDING_IDS, PERSON_MAX, GLEN_DEADLINE, KNOWLEDGE, COUNTERS, MAX_SLOTS, fmtClock, wedgeLabel,
   upLv, enemyScale, UPGRADES, buyUpgrade, inheritCount, inheritLabel, habitAnalysis, dawnProgress, MOB_COUNTERS} from './meta.js';
 
 const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
@@ -137,7 +137,8 @@ export class Game {
     if (!this.meta) return this.newGame();
     this.startLoop();
   }
-  loopSeed() { return (Math.imul(this.meta.seed ^ 0x9e3779b9, 31) + this.meta.loop * 7919) >>> 0; }
+  // 倒れて同じ夜をやり直すときも、部屋の並びは揺らぐ（runs：夜を終えた回数）
+  loopSeed() { return (Math.imul(this.meta.seed ^ 0x9e3779b9, 31) + this.meta.loop * 7919 + (this.meta.runs || 0) * 104729) >>> 0; }
 
   startLoop() {
     const meta = this.meta;
@@ -212,6 +213,12 @@ export class Game {
     // 最後の夜（第 3 夜から）は、新しい力「暁の剣」を授かる
     if (meta.loop >= LAST_NIGHT && !wedgedBoons.some((b) => b.id === 'dawnblade')) wedgedBoons.push({ id: 'dawnblade', tier: 1 });
     this.player.setBoons(wedgedBoons);
+    // 「記憶の固執」（終わらない夜）：前の夜の Lv・経験値・金貨のまま始まる
+    if (meta.carry && meta.flags.ending && hasPersistence(meta)) {
+      this.run.level = Math.max(1, meta.carry.level | 0); this.run.exp = meta.carry.exp || 0; this.run.gold = meta.carry.gold || 0;
+      this.player.baseMaxHp += LEVEL.hpPer * (this.run.level - 1);
+      this.player.setBoons(this.player.boons);
+    }
     this.player.hp = this.player.maxHp;
     this.player.gauge = Math.min(PC.gaugeMax, 20 * upLv(meta, 'gauge'));
     this.combo = { n: 0, t: 0, max: 0, pop: 0 };
@@ -227,10 +234,11 @@ export class Game {
     // 夜ごとの様相の一言（天気や塔の変化）
     const note = nightLook(meta).note;
     this.nightNote = note ? { text: note, t: 0 } : null;
-    if (alwaysDecisive(meta) && !meta.flags.ending) this.fx.setBanner(`第 ${meta.loop} 夜 ― 最後の夜`, finalReady(meta) ? '鐘楼で、リラの言葉を師に届けよ' : '刻守との戦いが、決着になる', '#ffd38a', 3);
-    else if (asksDecision(meta) && !meta.flags.ending) this.fx.setBanner(`第 ${meta.loop} 夜 ― 決着を選べる夜`, finalReady(meta) ? 'リラの言葉はそろった。鐘楼で決着を' : '刻守の部屋の前で、決着を着けるかを選べる', '#ffd38a', 3);
+    if (decisiveNight(meta)) this.fx.setBanner(`第 ${meta.loop} 夜 ― 決着の夜`, finalReady(meta) ? '鐘楼で、リラの言葉を師に届けよ' : '歯止めの楔：刻守との戦いが決着になる', '#ffd38a', 3);
+    else if (badFinalNight(meta)) this.fx.setBanner(`第 ${meta.loop} 夜`, '鐘はもう夜を戻せない。けれど、楔の無い勝利で朝は来るだろうか', '#ffd38a', 3);
+    else if (canWedgeBrake(meta) && !meta.flags.ending) this.fx.setBanner(`第 ${meta.loop} 夜`, '鐘楼の歯止めに楔を打てば、この夜の刻守戦が決着の戦いになる', '#ffd38a', 3);
     else this.fx.setBanner(`第 ${meta.loop} 夜`, pr.next ? `夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}` : `終わらない夜　深さLv${this.run.scale.level}`, '#f2c14e', 2.6);
-    if (meta.loop === 1 && !meta.flags.ending) this.openDialog([
+    if (meta.loop === 1 && !meta.flags.ending && !meta.flags.seenRewind) this.openDialog([
       { who: '', text: 'あなたは時計塔の主「刻守」の弟子。この町は、同じ夜を繰り返している。' },
       { who: '', text: '夜の終わりに師が鐘を鳴らすと、時は夜のはじめに戻る。それを覚えていられるのは、師から「時の楔」を習ったあなただけ。' },
       { who: '', text: '時戻しの鐘は禁忌の技。鳴らすたびに、鳴らした者の命を一夜ぶん削る。このままでは、師は朝を待たずに尽きてしまう。' },
@@ -699,35 +707,14 @@ export class Game {
     else lines.push({ who: '刻守（師）', text: '弟子よ、時戻しは禁忌だ。代償は私の命で払っている。お前が背負うものではない……下がっていろ。' });
     if (counter) lines.push({ who: '刻守（師）', text: `前の夜、お前は${COUNTERS[counter].habit}に頼りすぎた。もう通じんぞ。` });
     if (hasWedge(this.meta, 'brake')) lines.push({ who: '刻守（師）', text: '歯止めに楔を……！ 私の教えた技で、私を止めるか。ならば力で応えよう！', note: '時止め封印／第2段階が早まり、技が速くなる' });
-    // 決着：第 2 夜は「ここで決着を着けるか」を聞く。第 3 夜からは必ず決着の戦い
-    let choices = null;
-    this.run.decisive = false;
-    if (!this.meta.flags.ending && alwaysDecisive(this.meta)) {
-      this.run.decisive = true;
-      lines.push({ who: '', text: '最後の夜。鐘はもう、夜を戻せない。この戦いで決着がつく。', note: '倒れても、次の夜にもう一度挑める' });
-    } else if (this.meta.flags.ending) {
-      // 結末を見たあと（終わらない夜）：毎回、決着を着けるかを選べる（ほかの結末を探せるように）
-      lines.push({ who: '', text: 'ここで決着を着けますか？', note: 'はい：決着の戦い（勝てば、今そろっている条件の結末へ）／いいえ：決着を着けずに戦う（夜は戻り、終わらない夜が続く）' });
-      choices = [
-        { label: 'はい（決着を着ける）', fn: () => { this.run.decisive = true; this.fx.setBanner('決着の戦い', '鐘はもう鳴らさせない', '#ffd38a', 2); } },
-        { label: 'いいえ（決着を着けずに戦う）', fn: () => {} },
-      ];
-    } else if (asksDecision(this.meta)) {
-      lines.push({ who: '', text: 'ここで決着を着けますか？', note: 'はい：この戦いで物語が終わる（勝てば結末へ）／いいえ：夜が戻り、第 3 夜（最後の夜）へ' });
-      choices = [
-        { label: 'はい（ここで決着を着ける）', fn: () => { this.run.decisive = true; this.fx.setBanner('決着の戦い', '鐘はもう鳴らさせない', '#ffd38a', 2); } },
-        { label: 'いいえ（もう一夜、準備する）', fn: () => this.postponeDecision() },
-      ];
-    }
+    // 決着：歯止めに楔を打った夜（第 2 夜から）の刻守戦は決着の戦い。第 3 夜から楔が無ければ、勝っても夜は明けない
+    this.run.decisive = decisiveNight(this.meta);
+    this.run.badFinal = badFinalNight(this.meta);
+    if (this.run.decisive) lines.push({ who: '', text: '歯止めの楔が、鐘を止めている。この戦いで決着がつく。', note: '倒れても、同じ夜にもう一度挑める（楔は歯止めか巻き戻り画面で抜ける）' });
+    else if (this.run.badFinal) lines.push({ who: '', text: '鐘はもう掠れて、夜を戻せない。……けれど、歯止めは動いたままだ。', note: '歯止めに楔を打たずに勝っても、夜は明けない' });
     // 前の夜の戦い方の分析を先に見せる
-    if (counter) this.modal = { type: 'analysis', a: habitAnalysis(this.meta.lastLoop), counter, next: lines, nextChoices: choices, t: 0 };
-    else this.openDialog(lines, choices);
-  }
-  // 決着を先へ延ばす：師が鐘を鳴らし、夜が戻って最後の夜へ
-  postponeDecision() {
-    this.fx.setBanner('鐘が鳴る', '――決着は、最後の夜に', '#f2c14e', 2);
-    this.sfx.play('bossBell');
-    this.endRun('wait');
+    if (counter) this.modal = { type: 'analysis', a: habitAnalysis(this.meta.lastLoop), counter, next: lines, nextChoices: null, t: 0 };
+    else this.openDialog(lines);
   }
 
   // ───────── 毎フレーム ─────────
@@ -2150,15 +2137,35 @@ export class Game {
     }
     this.openDialog(lines);
   }
+  // 歯止め：楔を打った夜の刻守戦が決着の戦いになる（第 2 夜から）。打ってある楔は、ここでも抜ける
   talkBrake(it) {
-    if (hasWedge(this.meta, 'brake')) {
-      this.openDialog([{ who: '', text: '歯止めには金の楔が打ち込まれている。鐘楼の時止めの機構は動かない。' }]);
+    const m = this.meta;
+    if (hasWedge(m, 'brake')) {
+      this.openDialog([{ who: '', text: '歯止めには金の楔が打ち込まれている。鐘楼の時止めの機構は動かない。', note: '楔があるかぎり、刻守との戦いは決着の戦いになる' }], [
+        { label: 'そのままにする', fn: () => {} },
+        { label: '楔を抜く（決着の戦いをやめる）', fn: () => this.pullBrake(it) },
+      ]);
+      return;
+    }
+    if (!canWedgeBrake(m)) {
+      this.openDialog([{ who: '', text: '鐘楼へ続く歯止め。師の「時止め」は、この機構から力を引いている。' }, { who: '', text: '……楔を当てても、はじかれてしまう。この夜の鐘は、まだ一度も鳴っていない。', note: `歯止めに楔を打てるのは第 ${FINAL_NIGHT} 夜から（打った夜の刻守戦が決着の戦いになる）` }]);
+      this.sfx.play('deny');
       return;
     }
     this.openDialog([{ who: '', text: '鐘楼へ続く歯止め。師の「時止め」は、この機構から力を引いている。' }], [
-      { label: '楔を打つ（時止めを封じる。代償：刻守が怒る）', fn: () => this.doWedge({ target: 'brake' }, it) },
+      { label: '楔を打つ（この夜の刻守戦が決着の戦いになる。時止めを封じる代償に刻守が怒る）', fn: () => this.doWedge({ target: 'brake' }, it) },
       { label: 'やめる', fn: () => {} },
     ]);
+  }
+  pullBrake(it) {
+    const i = this.meta.wedges.findIndex((w) => w.target === 'brake');
+    if (i < 0) return;
+    removeWedge(this.meta, i);
+    this.run.newWedges = this.run.newWedges.filter((w) => w.target !== 'brake');
+    if (it) it.wedged = false;
+    this.sfx.play('door');
+    this.fx.setBanner('楔を抜いた', '刻守との戦いは、決着の戦いではなくなった', '#c9a052', 1.8);
+    this.save();
   }
 
   doWedge(w, it) {
@@ -2300,6 +2307,11 @@ export class Game {
       this.room.finale = endingFor(this.meta, false);
       this.learnK('boss_bell', true);
       this.fx.setBanner('鐘が砕ける', '――夜は、もう戻らない', '#ffd38a', 3);
+    } else if (this.run.badFinal) {
+      // 楔の無い勝利：鐘は鳴らないが、夜も明けない（バッドエンド「明けない夜」）
+      this.room.finale = 'night';
+      this.learnK('boss_bell', true);
+      this.fx.setBanner('鐘が砕ける', '――それでも、夜は明けない', '#9aa0c0', 3);
     } else {
       this.learnK('boss_bell');
       this.sfx.play('bossBell');
@@ -2326,7 +2338,7 @@ export class Game {
     if (this.room) this.flushPickups();
     run.ended = true;
     const report = endLoop(this.meta, {
-      cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock, shards: run.shards, dodges: p.dodgeCount || 0, level: run.level || 1, gold: run.gold || 0, artifacts: p.artifacts || [], comp: this.comp ? { id: this.comp.id, stage: this.comp.stage } : null, comps: allComps(this).map((c) => ({ id: c.id, stage: c.stage })),
+      cause, floor: run.fi + 1, boons: p.boons, dmgByCat: run.dmgByCat, newWedges: run.newWedges, learned: run.learned, clock: run.clock, shards: run.shards, dodges: p.dodgeCount || 0, level: run.level || 1, exp: run.exp || 0, gold: run.gold || 0, artifacts: p.artifacts || [], comp: this.comp ? { id: this.comp.id, stage: this.comp.stage } : null, comps: allComps(this).map((c) => ({ id: c.id, stage: c.stage })),
     });
     this.save();
     this.sfx.play('rewind');
@@ -2340,17 +2352,30 @@ export class Game {
   startEnding(id = 'true') {
     const m = this.meta;
     this.run.ended = true;
-    m.flags.ending = true;
     m.flags.endings ||= {};
     if (!m.flags.endings[id]) m.flags.endings[id] = m.loop;
+    const bad = id === 'night';
+    let gotPersistence = false, pulled = false;
+    if (!bad) {
+      m.flags.ending = true;
+      // 決着の戦いに勝ってシナリオをクリアした：伝説のアーティファクト「記憶の固執」
+      if (!hasPersistence(m)) { m.artifacts = [...(m.artifacts || []), 'persistence']; gotPersistence = true; }
+      // 歯止めの楔は抜ける（終わらない夜で同じ結末が毎晩くり返されないように。打ち直せば、ほかの結末を探せる）
+      const bi = m.wedges.findIndex((w) => w.target === 'brake');
+      if (bi >= 0) { removeWedge(m, bi); pulled = true; }
+    }
     this.save();
     this.scene = 'ending';
     const pages = ENDINGS[id].pages.slice();
     // グレンを助けていたら、どの結末にも鍛冶場の朝が添えられる
     if (this.run.glen === 'saved' || hasWedge(m, 'glen')) pages.splice(pages.length - 1, 0, ['鍛冶場から、槌の音が聞こえる。', 'グレンは今日も、誰かの剣を打っている。']);
     const seen = ENDING_IDS.filter((k) => m.flags.endings[k]).length;
-    pages.push(['クリア', `結末 ${seen}/${ENDING_IDS.length} を見た`, seen < ENDING_IDS.length ? 'ほかの結末を探すことも、続けて「終わらない夜」に挑むこともできる。' : 'すべての結末を見た。続けて「終わらない夜」に挑むこともできる。']);
-    this.ending = { t: 0, page: 0, id, pages, tone: ENDINGS[id].tone };
+    if (bad) pages.push(['夜は続く', `結末 ${seen}/${ENDING_IDS.length} を見た`, '鐘楼の歯止めに楔を打った夜の決着の戦いで勝てば、朝が来るかもしれない。']);
+    else {
+      if (gotPersistence) pages.push(['伝説のアーティファクト「記憶の固執」', ARTIFACTS.persistence.desc, '']);
+      pages.push(['クリア', `結末 ${seen}/${ENDING_IDS.length} を見た`, pulled ? 'ほかの結末は、歯止めに楔を打ち直して探せる。「終わらない夜」にも挑める。' : seen < ENDING_IDS.length ? 'ほかの結末を探すことも、続けて「終わらない夜」に挑むこともできる。' : 'すべての結末を見た。続けて「終わらない夜」に挑むこともできる。']);
+    }
+    this.ending = { t: 0, page: 0, id, pages, tone: ENDINGS[id].tone, bad };
     this.emit('ending', { id });
   }
   updateEnding(input) {
@@ -2359,14 +2384,18 @@ export class Game {
     if (e.t > 0.8 && (input.pressed('confirm') || input.pressed('attack') || input.pressed('jump'))) {
       e.page++; e.t = 0;
       this.sfx.play('select');
-      if (e.page >= e.pages.length) { this.scene = 'title'; this.titleSel = 0; this.save(); }
+      if (e.page >= e.pages.length) {
+        // 明けない夜：物語は終わらず、巻き戻り画面から次の夜へ
+        if (e.bad) { this.scene = 'play'; this.run.ended = false; this.endRun('badend'); return; }
+        this.scene = 'title'; this.titleSel = 0; this.save();
+      }
     }
   }
 
   // ───────── 巻き戻り画面 ─────────
   rewindOptions() {
     const m = this.meta;
-    const opts = [{ id: 'next', label: '次の夜へ' }];
+    const opts = [{ id: 'next', label: this.rewind && this.rewind.report.retry ? '同じ夜をもう一度' : '次の夜へ' }];
     opts.push({ id: 'upgrade', label: `刻印を刻む（時の欠片 ${m.shards}）` });
     const lastBoons = (m.lastLoop && m.lastLoop.boons) || [];
     if (this.carryAll()) {
@@ -2887,6 +2916,12 @@ export const ENDINGS = {
     ['鐘は鳴らなかった。', '塔に朝が来た。師は、深い眠りについたまま。'],
     ['駅のホームで、少女がひとり、塔を見上げている。', '――いってきます。お父さん、起きたら手紙を書くね。'],
     ['結末「師の眠り」', 'リラの言葉を師に届けていたら、別の朝があったかもしれない。'],
+  ] },
+  night: { name: '明けない夜', tone: 0.15, pages: [
+    ['刻守――師は、崩れ落ちた。', '掠れた鐘は、もう鳴らなかった。'],
+    ['けれど、窓の外は暗いままだった。', '歯止めは軋みながら回りつづけ、止まった夜を手放さない。'],
+    ['師は何も言わず、塔の闇に消えた。', '町の灯りが、またひとつ暗くなる。'],
+    ['結末「明けない夜」', '夜は、まだ続いている。'],
   ] },
   silence: { name: '鐘の沈黙', tone: 0.35, pages: [
     ['刻守――師は、崩れ落ちた。', '鐘楼の鐘に、ひびが走る。'],

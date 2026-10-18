@@ -1,5 +1,5 @@
 // アーティファクト：特殊効果を持つ品。一度手に入れると夜が戻っても失われない（そのぶん出にくい）。
-// 通常（扉の報酬・ショップ）と黄金（黄金の部屋でのみ手に入る強いもの）がある。
+// 通常（扉の報酬・ショップ）と黄金（黄金の部屋でのみ手に入る強いもの）、伝説（結末で得る「記憶の固執」）がある。
 export const ARTIFACTS = {
   whetstone: { rarity: 'normal', name: '鍛冶屋の砥石', desc: 'すべての与ダメージ +15%' },
   guardgear: { rarity: 'normal', name: '守りの歯車', desc: '受けるダメージ -15%' },
@@ -16,8 +16,10 @@ export const ARTIFACTS = {
   goldhand: { rarity: 'gold', name: '黄金の秒針', desc: '連撃の速さ +25%' },
   aegis: { rarity: 'gold', name: '不滅の歯車', desc: 'この夜に一度だけ、倒れてもHP100%で立ち上がる' },
   stormcrown: { rarity: 'gold', name: '雷冠', desc: '2.5秒ごとに近くの敵へ雷が落ちる（50）' },
+  // 伝説：決着の戦いに勝って結末を見ると得る（扉・店・黄金の部屋には出ない）
+  persistence: { rarity: 'legend', name: '記憶の固執', desc: '終わらない夜でも、強化・Lv・金貨を持ったまま次の夜へ。継承の刻印の上限が無くなる' },
 };
-export const ARTIFACT_COLOR = { normal: '#7fe0d0', gold: '#ffd84a' };
+export const ARTIFACT_COLOR = { normal: '#7fe0d0', gold: '#ffd84a', legend: '#ff9ad8' };
 
 // まだ持っていないものから n 個（rarity で絞る）
 export function rollArtifacts(rng, owned, rarity, n) {

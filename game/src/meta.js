@@ -14,7 +14,7 @@ export const WEDGE_TARGETS = {
   lira: { name: 'リラ（師の娘）', kind: '人物', effect: '次の夜も、あなたを覚えている', cost: '人の楔の枠を 1 つ使う' },
   glen: { name: 'グレン（鍛冶屋）', kind: '人物', effect: '生きたまま塔の入口に現れ、強化を鍛えてくれる', cost: '人の楔の枠を 1 つ使う' },
   knight: { name: '歯車騎士の残骸', kind: '敵', effect: '騎士は倒れたまま。昇降機で上層へ直行できる', cost: '飛ばした部屋の報酬は得られない' },
-  brake: { name: '鐘楼の歯止め', kind: '仕掛け', effect: '刻守は「時止め」を使えない', cost: '刻守が怒り、第2段階が早く・速くなる' },
+  brake: { name: '鐘楼の歯止め', kind: '仕掛け', effect: '楔を打った夜の刻守戦が決着の戦いになる。刻守は「時止め」を使えない', cost: '刻守が怒り、第2段階が早く・速くなる' },
   boon: { name: '強化', kind: '強化', effect: 'その強化を持ったまま夜が始まる', cost: '技の楔の枠を 1 つ使う' },
 };
 
@@ -97,6 +97,8 @@ export function newMeta(seed = (Date.now() & 0x7fffffff)) {
     allies: [], // 稀少の強化で呼んだ仲間のお供（持ち越す）
     bonds: [], // 絆の強化（すべて持ち越す）
     lastLoop: null,
+    runs: 0, // 夜を終えた回数（倒れて同じ夜をやり直しても増える。部屋の並びの揺らぎに使う）
+    carry: null, // 「記憶の固執」で次の夜へ持ち越す Lv・経験値・金貨
     flags: { bossBeaten: false, diaryRead: false, archiveOpened: false, ending: false, seenRewind: false, endings: {} },
     stats: { deaths: 0, falseWins: 0, bestFloor: 0 },
   };
@@ -107,7 +109,8 @@ const cost = (base, g) => (lv) => Math.round(base * Math.pow(g, lv));
 export const UPGRADES = {
   atk: { name: '刃の刻印', max: 30, desc: (lv) => `基礎攻撃 +${lv * 10}%`, cost: cost(12, 1.22) },
   hp: { name: '命の刻印', max: 20, desc: (lv) => `最大HP +${lv * 15}`, cost: cost(10, 1.22) },
-  inherit: { name: '継承の刻印', max: 4, desc: (lv) => `前の夜の強化を ${3 + lv} 個まで持ち越せる`, cost: cost(40, 1.9) },
+  // 「記憶の固執」を得ると上限が無くなる（upMax）。Lv4 から先は少しずつ高くなる
+  inherit: { name: '継承の刻印', max: 4, desc: (lv) => `前の夜の強化を ${3 + lv} 個まで持ち越せる`, cost: (lv) => (lv < 4 ? Math.round(40 * Math.pow(1.9, lv)) : Math.round(40 * Math.pow(1.9, 3) * (1 + 0.5 * (lv - 3)))) },
   crit: { name: '会心の刻印', max: 10, desc: (lv) => `会心率 +${lv * 2}%`, cost: cost(16, 1.3) },
   combo: { name: '連撃の刻印', max: 5, desc: (lv) => `コンボの持続 +${(lv * 0.4).toFixed(1)}秒`, cost: cost(18, 1.4) },
   gauge: { name: '秒針の刻印', max: 5, desc: (lv) => `夜のはじめの秒針ゲージ +${lv * 20}`, cost: cost(14, 1.4) },
@@ -115,11 +118,15 @@ export const UPGRADES = {
   choice: { name: '選択の刻印', max: 1, desc: (lv) => `強化の候補が ${3 + lv} 枚になる`, cost: () => 150 },
 };
 export const upLv = (m, k) => (m.upgrades && m.upgrades[k]) || 0;
+// 伝説のアーティファクト「記憶の固執」：決着の戦いに勝って結末を見ると得る。終わらない夜でも、強化・Lv・金貨を持ったまま次の夜へ
+export const hasPersistence = (m) => (m.artifacts || []).includes('persistence');
+// 刻印の上限（「記憶の固執」があれば、継承の刻印は上限なし。めちゃ簡単は最初から継承が無限なので関係ない）
+export const upMax = (m, k) => (k === 'inherit' && hasPersistence(m) ? Infinity : UPGRADES[k].max);
 export const inheritCount = (m) => (m.difficulty === 'veryeasy' ? Infinity : 3 + upLv(m, 'inherit')); // 基本 3 個（刻印で +1 ずつ）。めちゃ簡単は無限
 export const inheritLabel = (m) => (Number.isFinite(inheritCount(m)) ? String(inheritCount(m)) : '∞');
 export function buyUpgrade(m, k) {
   const u = UPGRADES[k], lv = upLv(m, k);
-  if (lv >= u.max) return false;
+  if (lv >= upMax(m, k)) return false;
   const c = u.cost(lv);
   if (m.shards < c) return false;
   m.shards -= c;
@@ -151,6 +158,9 @@ function migrate(m) {
   m.shards ??= 0; m.upgrades ??= {}; m.inherit ??= []; m.artifacts ??= []; m.compStage ??= {}; m.bonds ??= []; m.allies ??= [];
   for (const k of ['power', 'arts', 'bond', 'ward', 'hex']) if (!m.unlocked.includes(k)) m.unlocked.push(k);
   m.companion ??= 'hotaru';
+  m.runs ??= 0;
+  // 以前の版で結末を見たセーブは、「記憶の固執」を得たことにする
+  if (m.flags.ending && !m.artifacts.includes('persistence')) m.artifacts.push('persistence');
   return m;
 }
 
@@ -188,18 +198,23 @@ export function wedgeLabel(w) {
 export function trueEndReady(m) {
   return hasWedge(m, 'lira') && knows(m, 'lira_message') && knows(m, 'master_reason');
 }
-// 決着：2〜3 夜で物語が終わる。
-//  第 2 夜：刻守の部屋の前で「ここで決着を着けますか？」と聞く（はい＝その戦いで終わる／いいえ＝第 3 夜へ）
-//  第 3 夜から：刻守との戦いはいつも決着の戦い（倒れたら次の夜に、もう一度決着の戦い）
+// 決着は「歯止めの楔」で決める。夜が進むのは刻守を倒した時だけ（倒れたら同じ夜をやり直す）
+//  第 1 夜：歯止めに楔は打てない（刻守に勝っても偽りの勝利。鐘が鳴って第 2 夜へ）
+//  第 2 夜から：歯止めに楔を打った夜の刻守戦が決着の戦い。勝てば、知ったことしだいの 3 つの結末。
+//               倒れたら同じ夜をやり直す（楔は残る。巻き戻り画面か歯止めで抜ける）
+//  第 3 夜から：楔が無くても鐘はもう夜を戻せないが、楔の無い勝利では夜は明けない（バッドエンド「明けない夜」→ 次の夜へ）
+//  結末のあと（終わらない夜）：楔を打った夜だけ決着の戦い。楔が無ければ、倒しても鐘が鳴って夜が戻る
 export const FINAL_NIGHT = 2, LAST_NIGHT = 3;
-export const finalReady = (m) => trueEndReady(m) && m.loop >= FINAL_NIGHT;
-export const asksDecision = (m) => m.loop === FINAL_NIGHT;
-export const alwaysDecisive = (m) => m.loop >= LAST_NIGHT;
+export const canWedgeBrake = (m) => m.loop >= FINAL_NIGHT;
+export const decisiveNight = (m) => m.loop >= FINAL_NIGHT && hasWedge(m, 'brake');
+export const badFinalNight = (m) => m.loop >= LAST_NIGHT && !hasWedge(m, 'brake') && !m.flags.ending;
+export const finalReady = (m) => trueEndReady(m) && decisiveNight(m);
 // 結末（決着の戦いに勝ったとき）。条件は、物語を追えば自然に満たせるもの
 //  true    夜明けの楔：リラに楔を打ち、伝言を聞き、師の日誌を読んで、第三楽章で伝言を伝えた
 //  sleep   師の眠り：師の日誌を読んで、師が夜を戻す理由を知っている（伝言は届けていない）
 //  silence 鐘の沈黙：理由を知らないまま、力で鐘を止めた
-export const ENDING_IDS = ['true', 'sleep', 'silence'];
+//  night   明けない夜（バッドエンド）：歯止めに楔を打たないまま、第 3 夜から刻守を倒した。物語は終わらず、次の夜へ
+export const ENDING_IDS = ['true', 'sleep', 'silence', 'night'];
 export function endingFor(m, conveyed) {
   if (conveyed && trueEndReady(m)) return 'true';
   if (knows(m, 'master_reason')) return 'sleep';
@@ -234,8 +249,12 @@ export function endLoop(m, run) {
   const report = { kept: [], reset: [], changed: [], cause: run.cause, loop: m.loop, shards: run.shards || 0 };
   m.shards = (m.shards || 0) + (run.shards || 0);
   if (run.cause === 'death') m.stats.deaths++;
-  if (run.cause === 'wait') report.changed.push({ text: '決着を延ばした。次は最後の夜――刻守との戦いが決着になる', tone: 'gold' });
-  if (run.cause === 'bell') {
+  // 夜が進むのは刻守を倒した時（鐘が鳴った・明けない夜）だけ。倒れたら同じ夜をやり直す
+  const advance = run.cause !== 'death';
+  report.retry = !advance;
+  if (!advance) report.changed.push({ text: `倒れた。夜は進まず、第 ${m.loop} 夜をもう一度`, tone: 'blue' });
+  if (run.cause === 'badend') report.changed.push({ text: '刻守を倒したが、夜は明けなかった。歯止めに楔を打った夜の決着の戦いでなければ、朝は来ない', tone: 'risk' });
+  if (run.cause === 'bell' || run.cause === 'badend') {
     m.stats.falseWins++;
     if (!m.flags.bossBeaten) {
       m.flags.bossBeaten = true;
@@ -284,7 +303,12 @@ export function endLoop(m, run) {
   for (const k of run.learned || []) if (KNOWLEDGE[k] && KNOWLEDGE[k].cat !== '敵') report.changed.push({ text: `知った：${KNOWLEDGE[k].title}`, tone: 'blue' });
   if (run.cause === 'bell' && !m.flags.diaryRead) report.tip = '刻守を倒しても、鐘が鳴れば夜は戻る。師が命を削ってまで夜を止める理由を探そう（記録帳「夜明けへの道」）。';
   else if (report.loop === 1) report.tip = '金の時計の印がついたもの（人・残骸・仕掛け）に楔を打つと、次の夜もその状態のまま残る。';
-  else report.tip = progressLine(m) || TIPS[(report.loop - 2) % TIPS.length];
+  else report.tip = progressLine(m, advance ? m.loop + 1 : m.loop) || TIPS[((m.runs || 0) + report.loop) % TIPS.length];
+  // 「記憶の固執」：終わらない夜では、Lv・経験値・金貨も持ったまま次の夜へ
+  m.carry = hasPersistence(m) && m.flags.ending ? { level: run.level || 1, exp: run.exp || 0, gold: run.gold || 0 } : null;
+  if (m.carry && run.gold) report.reset = report.reset.filter((x) => !/^金貨/.test(x.text));
+  if (m.carry && (run.level || 1) > 1) report.reset = report.reset.filter((x) => !/^レベル/.test(x.text));
+  if (m.carry) report.kept.push({ text: `記憶の固執：Lv${m.carry.level}・金貨 ${m.carry.gold}`, sub: '終わらない夜では、Lv と金貨も持ったまま次の夜へ' });
   m.lastLoop = { dmgByCat: { ...(run.dmgByCat || {}) }, cause: run.cause, floor: run.floor, boons: (run.boons || []).map((b) => ({ ...b })), loop: m.loop, dodges: run.dodges || 0, clock: run.clock || 0 };
   const nextCounter = bossCounter(m.lastLoop);
   if (nextCounter) {
@@ -294,12 +318,16 @@ export function endLoop(m, run) {
     report.changed.push({ text: `塔の番人たちも学んだ：${MOB_COUNTERS[nextCounter]}`, tone: 'risk', sub: '雑魚・中ボスにも効く。戦い方を変えれば次の夜は外れる' });
   }
   else if (!nextCounter && prevCounter) report.changed.push({ text: '刻守の対策が消えた', tone: 'blue' });
-  m.loop++;
+  m.runs = (m.runs || 0) + 1;
   m.flags.seenRewind = true;
-  // 夜を 3 つ越えるごとに楔の枠 +1
-  if ((m.loop - 1) % 3 === 0 && m.slots < MAX_SLOTS) { m.slots++; report.changed.push({ text: `技の楔の枠が1つ増えた（${m.loop - 1} 夜を越えた）`, tone: 'gold' }); }
-  if (m.loop === LAST_NIGHT && !m.flags.ending) report.changed.push({ text: `第 ${LAST_NIGHT} 夜：最後の夜。刻守との戦いが決着になる。新しい力「暁の剣」を得る`, tone: 'gold' });
-  report.story = nightStory(m);
+  if (advance) {
+    m.loop++;
+    // 夜を 3 つ越えるごとに楔の枠 +1
+    if ((m.loop - 1) % 3 === 0 && m.slots < MAX_SLOTS) { m.slots++; report.changed.push({ text: `技の楔の枠が1つ増えた（${m.loop - 1} 夜を越えた）`, tone: 'gold' }); }
+    if (m.loop === FINAL_NIGHT && !m.flags.ending) report.changed.push({ text: `第 ${FINAL_NIGHT} 夜から、鐘楼の歯止めに楔を打てる。楔を打った夜の刻守戦が決着の戦いになる`, tone: 'gold' });
+    if (m.loop === LAST_NIGHT && !m.flags.ending) report.changed.push({ text: `第 ${LAST_NIGHT} 夜：鐘はもう夜を戻せない。新しい力「暁の剣」を得る`, tone: 'gold' });
+  }
+  report.story = advance ? nightStory(m) : retryStory(m);
   const sc = enemyScale(m);
   report.changed.push({ text: `夜の深さ Lv${sc.level}：敵のHP ×${sc.hp.toFixed(2)}・攻撃 ×${sc.dmg.toFixed(2)}`, tone: 'risk' });
   if (sc.tier > prevTier) report.changed.push({ text: sc.tier === 2 ? '敵が新しい攻撃を覚えた（二段斬り・連続急降下・3方向弾 ほか）' : '敵がさらに凶暴になった（突き・爆弾・速射・跳躍叩きつけ ほか）', tone: 'risk' });
@@ -326,21 +354,25 @@ const STORY = [
   '市場の灯りが、少しずつ暗くなっていく。同じ夜を生きる人々の顔からも、色が抜けていく。',
   '師の背中は、もう老人のそれだった。残された夜は、きっと多くない。',
 ];
+// 倒れて同じ夜をやり直すとき
+export function retryStory(m) {
+  if (m.flags.ending) return `第${m.loop}夜。終わらない夜の、同じはじまりにもう一度立つ。`;
+  return `第${m.loop}夜のはじめに戻った。夜は進んでいない――もう一度、同じ夜を。`;
+}
 export function nightStory(m) {
   const n = m.loop;
   if (m.flags.ending) return `第${n}夜。夜明けを知った塔に、それでも夜は来る――終わらない夜。`;
-  if (n === LAST_NIGHT) return '最後の夜。雨は上がり、塔の上に澄んだ月と、白い光の帯がかかっている。鐘は、もう掠れて鳴らない。';
-  if (n > LAST_NIGHT) return `第${n}夜。月は澄んだまま。鐘はもう鳴らない――決着をつけよう。`;
+  if (n === LAST_NIGHT) return '第3夜。雨は上がり、塔の上に澄んだ月と、白い光の帯がかかっている。鐘は、もう掠れて鳴らない。';
+  if (n > LAST_NIGHT) return `第${n}夜。月は澄んだまま。鐘はもう鳴らないのに、朝は来ない――歯止めに楔を。`;
   const line = STORY[Math.min(n - 2, STORY.length - 1)] || STORY[0];
   return n - 2 >= STORY.length ? `第${n}夜。${line}` : line;
 }
 // 物語の進み具合に応じた一言（あれば巻き戻りの助言の代わりに出す）
-// 巻き戻り画面で出す（夜の番号が増える前に呼ばれる）ので、「次の夜」を見て言う
-function progressLine(m) {
-  const next = m.loop + 1;
-  if (trueEndReady(m) && next >= FINAL_NIGHT) return 'リラの言葉を、師に届ける時が来た。次の夜の決着の戦いで、第三楽章まで戦い抜け。';
-  if (next === FINAL_NIGHT) return '次の夜は、刻守の部屋の前で決着を着けるかを選べる。まだ準備が足りなければ、もう一夜だけ待てる。';
-  if (next === LAST_NIGHT && !m.flags.ending) return '次は最後の夜。刻守との戦いが、決着になる。';
+// 巻き戻り画面で出す（夜の番号が増える前に呼ばれる）ので、「次の夜」（倒れた時は同じ夜）を見て言う
+function progressLine(m, next = m.loop + 1) {
+  if (trueEndReady(m) && next >= FINAL_NIGHT) return hasWedge(m, 'brake') ? 'リラの言葉を、師に届ける時が来た。決着の戦いの第三楽章まで戦い抜け。' : 'リラの言葉を、師に届ける時が来た。鐘楼の歯止めに楔を打ち、その夜の決着の戦いで第三楽章まで戦い抜け。';
+  if (next === FINAL_NIGHT && !hasWedge(m, 'brake') && !m.flags.ending) return `第 ${FINAL_NIGHT} 夜から、鐘楼の歯止めに楔を打てる。楔を打った夜の刻守戦が、決着の戦いになる。`;
+  if (next >= LAST_NIGHT && !hasWedge(m, 'brake') && !m.flags.ending) return '鐘はもう夜を戻せない。けれど、歯止めに楔を打たずに刻守を倒しても、夜は明けない。';
   if (hasWedge(m, 'lira') && !knows(m, 'lira_message')) return 'リラだけが、この夜を覚えている。名前で呼びかけてみよう。';
   if (knows(m, 'master_reason') && !hasWedge(m, 'lira')) return '師は命と引き換えに夜を買っている。止められるのは、師が守ろうとしている娘の言葉だけかもしれない。';
   return null;
@@ -364,7 +396,7 @@ export const DAWN_STEPS = [
   { title: '師の日誌を読む', hint: '中層の書庫の扉を番号で開ける', done: (m) => knows(m, 'master_reason') },
   { title: 'リラに楔を打つ', hint: '市場の少女に楔を打てば、次の夜もあなたを覚えている', done: (m) => hasWedge(m, 'lira') },
   { title: 'リラの伝言を聞く', hint: '覚えているリラに、名前で呼びかける（楔を打った次の夜）', done: (m) => knows(m, 'lira_message') },
-  { title: '夜明けの決闘に勝つ', hint: '決着の戦い（第 2 夜で「はい」を選ぶか、第 3 夜）の第三楽章で「リラは覚えている」と伝え、白き刻守まで倒す', done: (m) => !!(m.flags.endings && m.flags.endings.true) },
+  { title: '夜明けの決闘に勝つ', hint: '鐘楼の歯止めに楔を打ち（第 2 夜から）、その夜の決着の戦いの第三楽章で「リラは覚えている」と伝え、白き刻守まで倒す', done: (m) => !!(m.flags.endings && m.flags.endings.true) },
 ];
 export function dawnProgress(m) {
   const done = DAWN_STEPS.filter((s) => s.done(m)).length;

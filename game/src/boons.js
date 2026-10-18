@@ -127,7 +127,7 @@ export const BOONS = {
   stareater: { school: 'legend', name: '星喰らい', desc: () => '敵を倒すたび、近くの敵 3 体へ流星が降る（各70）' },
   towerblessing: { school: 'legend', name: '時計塔の加護', desc: () => '常時の術のダメージ ×2、発動の速さ ×1.5' },
   // 最後の夜（第 3 夜）にだけ授かる力（店や候補には出ない）
-  dawnblade: { school: 'legend', special: true, name: '暁の剣', desc: () => '最後の夜の力。5 秒ごとに、部屋じゅうの敵（8 体まで）へ暁の光の剣が降る（各 90）。直接攻撃 +25%' },
+  dawnblade: { school: 'legend', special: true, name: '暁の剣', desc: () => '第 3 夜からの力。5 秒ごとに、部屋じゅうの敵（8 体まで）へ暁の光の剣が降る（各 90）。直接攻撃 +25%' },
   midas: { school: 'legend', name: '黄金律', desc: () => '敵から得る金貨 ×2。金貨を拾うたびに秒針ゲージ +2、HP +1' },
   // 仲間を呼ぶ（稀少）：選ぶと、そのお供がもう 1 匹ついてくる（夜をまたいで残る）
   call_hotaru: { school: 'rare', name: '仲間：ホタル', desc: () => 'お供のホタル（光の弾・光の帯・星火の雨）が仲間に加わる。夜が戻っても残る' },
