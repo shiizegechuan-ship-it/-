@@ -53,8 +53,14 @@ test('BGM の主旋律は曲どうしで似ない（同じ音の動きが 6 音�
   }
 });
 
-test('場面ごとの曲：各階・刻守・白き刻守。タイトル・倒れた時・刻守を倒した直後は無音', () => {
+test('場面ごとの曲：戦いのある部屋は各階の曲、戦いの無い部屋とタイトルは「夜明けを待つ塔」、刻守・白き刻守。倒れた時・刻守を倒した直後は無音', () => {
   const g = newGame(5); g.startLoop(); g.modal = null;
+  // 夜のはじめの入口（戦いの無い部屋）はタイトルと同じ曲
+  assert.equal(g.room.desc.type, 'entry'); assert.equal(musicFor(g), 'title');
+  // 書庫も同じ
+  const fi = g.run.plan.floors.findIndex((fl) => fl.some((r) => r.type === 'archive'));
+  if (fi >= 0) { g.enterRoom(fi, g.run.plan.floors[fi].findIndex((r) => r.type === 'archive')); g.modal = null; assert.equal(musicFor(g), 'title'); }
+  g.run.fi = 0; g.room.desc = { type: 'combat' }; g.room.cleared = false;
   assert.equal(musicFor(g), 'market');
   g.run.fi = 1; assert.equal(musicFor(g), 'gears');
   g.run.fi = 2; assert.equal(musicFor(g), 'belfry');
@@ -62,13 +68,14 @@ test('場面ごとの曲：各階・刻守・白き刻守。タイトル・倒�
   const keep = g.room.desc; g.room.desc = { type: 'combat' }; g.room.cleared = true;
   assert.equal(musicFor(g), 'calm');
   g.room.cleared = false; assert.equal(musicFor(g), 'belfry');
-  g.room.desc = { type: 'shop' }; g.room.cleared = true; assert.equal(musicFor(g), 'belfry'); g.room.desc = keep;
+  g.room.desc = { type: 'shop' }; g.room.cleared = true; assert.equal(musicFor(g), 'title'); g.room.desc = keep;
   g.room.desc = { type: 'boss' }; g.room.boss = { defeated: false, finalForm: false };
   assert.equal(musicFor(g), 'boss');
   g.room.boss.defeated = true; assert.equal(musicFor(g), null);
   g.room.boss = { defeated: false, finalForm: true }; assert.equal(musicFor(g), 'final');
   g.player.state = 'dead'; assert.equal(musicFor(g), null);
-  g.scene = 'title'; assert.equal(musicFor(g), null);
+  g.scene = 'title'; assert.equal(musicFor(g), 'title');
+  g.scene = 'rewind'; assert.equal(musicFor(g), null);
 });
 
 // 鳴らした音を記録するだけの、偽の音の出口
@@ -88,7 +95,7 @@ function fakeAudio() {
 }
 
 test('BGM の演奏：同時に鳴る音は通常の階と戦いのあとで 5 音まで、刻守で 7 音まで（エコーは数えない）。エコーとビブラートがある', () => {
-  for (const [id, max] of [['market', 5], ['gears', 5], ['belfry', 5], ['calm', 5], ['boss', 7], ['final', 7]]) {
+  for (const [id, max] of [['market', 5], ['gears', 5], ['belfry', 5], ['calm', 5], ['title', 5], ['boss', 7], ['final', 7]]) {
     const { ctx, nodes } = fakeAudio();
     const m = new Music({ ctx, master: { connect() {} } });
     globalThis.setTimeout ??= () => {};

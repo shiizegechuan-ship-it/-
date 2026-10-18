@@ -1,7 +1,7 @@
 // BGM の楽譜（DOM に依存しない。テストからも読める）。音はすべてビット音（矩形波・三角波・ノイズ）。
 //
 // 声部の数（エコーは数えない）
-//   通常の階・戦いのあと：主旋律 1・和音 3（根音＋2 声）・ドラム 1
+//   通常の階・戦いのあと・タイトル：主旋律 1・和音 3（根音＋2 声）・ドラム 1
 //   刻守の部屋：主旋律 1・副旋律 1・和音 4（根音＋3 声）・ドラム 1
 //
 // 書き方
@@ -87,6 +87,19 @@ export const SONGS = {
       'G4/8 B4/8', 'A4/8 E4/8', 'A4/8 C#5/8', 'F#4/8 D4/8', 'B4/8 G4/8', 'A4/8 C#5/8', 'A4/8 F#4/8', 'B4/8 A#4/8',
     ],
     drum: { a: 'k...s.h.k.k.s.h.', b: 'k.h.s.h.k.hks.h.', f: 'k.s.k.s.s.ssssss' }, order: 'abababafabababaf',
+  },
+  // タイトル・戦いの無い部屋：夜明けを待つ時計塔。ゆっくり、オルゴールのように（ト短調）
+  title: {
+    name: '夜明けを待つ塔', bpm: 80, style: 'arp', echo: 4,
+    // 宙づりの Dsus4 から D7、下がる低音（Gm→Gm/F→E♭maj7）、短調の ii–V（Am7♭5→D7）、平行調の B♭maj7・F7
+    chords: 'Gm Ebmaj7 Cm7 Dsus4|D7 Gm Gm/F Ebmaj7 Am7b5|D7 Bbmaj7 F7 Ebmaj7 Cm7|D7 Gm Cm7 Am7b5 D7',
+    lead: [
+      'D5/6 Bb4/2 G4/8', 'Bb4/4 Eb5/4 G5/8', 'Eb5/6 C5/2 G4/8', 'A4/4 D5/4 C5/2 B4/1 Bb4/1 A4/4',
+      'D5/4 G5/4 Bb5/6 A5/2', 'G5/6 Eb5/2 D5/8', 'Eb5/6 D5/2 Bb4/8', 'C5/4 Eb5/4 D5/4 F#4/4',
+      'A4/4 D5/4 F5/8', 'Eb5/6 C5/2 A4/8', 'Bb4/4 G4/4 Eb5/8', 'G5/4 Eb5/4 D5/4 C5/4',
+      'Bb4/6 A4/2 G4/8', 'C5/4 Eb5/4 G5/8', 'Eb5/4 C5/4 A4/4 C5/4', 'D5/6 C5/2 A4/4 F#4/4',
+    ],
+    drum: { a: 'k.......h.......', f: 'k.......h...h.h.' }, order: 'aaaaaaafaaaaaaaf',
   },
   // 戦いのあと：部屋を制圧したあとの静けさ。ゆっくり、やわらかく（ヘ長調）
   calm: {
@@ -203,6 +216,7 @@ export function buildSong(id) {
 
 // その場面で流す曲（null は無音）
 export function musicFor(game) {
+  if (game.scene === 'title') return 'title';
   if (game.scene !== 'play' || !game.run || !game.room || !game.player) return null;
   if (game.player.state === 'dead') return null;
   const b = game.room.boss;
@@ -211,6 +225,9 @@ export function musicFor(game) {
     return b.defeated ? null : 'boss';
   }
   // 戦いを終えた部屋（制圧したあと）は、静かな曲に替わる
-  if (game.room.cleared && ['combat', 'trial', 'elite', 'elite2'].includes(game.room.desc.type)) return 'calm';
+  const fight = ['combat', 'trial', 'elite', 'elite2'].includes(game.room.desc.type);
+  if (game.room.cleared && fight) return 'calm';
+  // 戦いの無い部屋（書庫・書斎・店・祠・鍛冶場・入口など）は、タイトルと同じ曲（敵が出ている間は階の曲）
+  if (!fight && !game.room.enemies.some((e) => e.alive)) return 'title';
   return ['market', 'gears', 'belfry'][Math.min(2, game.run.fi)];
 }
