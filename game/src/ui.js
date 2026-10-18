@@ -52,9 +52,9 @@ function vend(ctx, key, bottom, box) {
   VSCROLL[key] = over;
   if (over > 0) { ctx.fillStyle = 'rgba(255,255,255,0.45)'; const ax = box.x + box.w - 14, ay = box.y + box.h - 8; ctx.fillRect(ax - 4, ay - 3, 9, 1); ctx.fillRect(ax - 3, ay - 2, 7, 1); ctx.fillRect(ax - 2, ay - 1, 5, 1); ctx.fillRect(ax - 1, ay, 3, 1); } // 続きがある印（▼）
 }
-function text(ctx, str, x, y, { size = 14, color = C.text, align = 'left', bold = false, font = FONT, shadow = true, maxW } = {}) {
-  // ドット文字は太字にしない（にじむため）。影は 2px の硬い影
-  const fs = fontSize(size);
+function text(ctx, str, x, y, { size = 14, color = C.text, align = 'left', bold = false, font = FONT, shadow = true, maxW, fixed = false } = {}) {
+  // ドット文字は太字にしない（にじむため）。影は 2px の硬い影。fixed：文字の大きさの設定で拡大しない（題字など）
+  const fs = fixed ? Math.round(size) : fontSize(size);
   ctx.font = `${fs}px ${font}`;
   ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
   x = Math.round(x); y = Math.round(y);
@@ -577,8 +577,9 @@ export function drawJournal(ctx, game, m) {
 export function drawTitle(ctx, game) {
   const t = game.time;
   // 背景（星空の時計塔）は render.js がドット絵で描く
-  text(ctx, '夜明けの楔', VIEW_W / 2, 352, { size: 56, align: 'center', bold: true, font: SERIF, color: '#f3e7cf' });
-  text(ctx, 'WEDGE OF DAWN', VIEW_W / 2, 378, { size: 12, align: 'center', color: C.gold });
+  // 題字は項目（TITLE_MENU）より上に収める
+  text(ctx, '夜明けの楔', VIEW_W / 2, TITLE_MENU.y - 46, { size: 50, align: 'center', bold: true, font: SERIF, color: '#f3e7cf', fixed: true });
+  text(ctx, 'WEDGE OF DAWN', VIEW_W / 2, TITLE_MENU.y - 26, { size: 12, align: 'center', color: C.gold, fixed: true });
   if (game.titleConfirm) {
     panel(ctx, VIEW_W / 2 - 200, 390, 400, 80, '#e35d5d');
     text(ctx, '記録をすべて消して、はじめから遊びますか？', VIEW_W / 2, 422, { size: 14, align: 'center' });
