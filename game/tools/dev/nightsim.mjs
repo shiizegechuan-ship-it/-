@@ -11,6 +11,8 @@ const out = { minHp: 0, bossHp0: 0, bossT: 0, nb: 0, clear: 0, deaths: {}, lv: 0
 for (let seed = 1; seed <= +seedsArg; seed++) {
   const g = newGame(seed * 7919);
   g.meta.loop = +loop; g.meta.slots = 3; g.meta.difficulty = process.env.DIFF || 'normal'; if (process.env.COMP) g.meta.companion = process.env.COMP;
+  if (process.env.UPG) Object.assign(g.meta.upgrades, JSON.parse(process.env.UPG)); // 刻印（例：UPG='{"atk":10,"hp":10}'）
+  if (process.env.ARTS) g.meta.artifacts = JSON.parse(process.env.ARTS);
   g.startLoop(); g.modal = null; if (process.env.NOCOMP) g.comp = null;
   if (startBoons.length) g.player.setBoons(startBoons);
   const d = new Driver(g);
@@ -51,6 +53,7 @@ for (let seed = 1; seed <= +seedsArg; seed++) {
     if (desc.type === 'combat') { g.takeReward(desc.rewardChoices[0]); for (let k = 0; k < 5 && g.modal; k++) choose(); }
     if (desc.type === 'elite' || desc.type === 'elite2' || desc.type === 'trial') { for (let k = 0; k < 5 && g.modal; k++) choose(); }
   }
+  out.shards = (out.shards || 0) + g.run.shards;
   out.n++; out.minHp += Math.max(0, minHp); out.gold = (out.gold || 0) + g.run.gold;
   if (!died) out.clear++; else out.deaths[died] = (out.deaths[died] || 0) + 1;
   out.lv += g.run.level; out.threat += g.threatStep(); out.boons += g.player.boons.length;
@@ -59,4 +62,4 @@ for (let seed = 1; seed <= +seedsArg; seed++) {
 }
 const n = out.n;
 if (process.env.DMG) console.log(JSON.stringify(Object.entries(globalThis.DMG || {}).sort((a, b) => b[1] - a[1])));
-console.log(`${skill}/${pick}/night${loop} start=${startBoons.length}: clear ${out.clear}/${n}  avgLv ${(out.lv / n).toFixed(1)}  threat ${(out.threat / n).toFixed(1)}  boons ${(out.boons / n).toFixed(1)}  passiveLv ${(out.passiveLv / n).toFixed(1)}  time ${(out.time / n).toFixed(0)}s  gold ${Math.round(out.gold / n)}  minHp ${Math.round(out.minHp / n * 100)}%  hpAtBoss ${Math.round(out.bossHp0 / Math.max(1, out.nb) * 100)}%  bossFight ${(out.bossT / Math.max(1, out.nb)).toFixed(0)}s  deaths ${JSON.stringify(out.deaths)}  kills/room ${(out.kN / out.cN).toFixed(1)}  combatAvg ${(out.cT / out.cN).toFixed(1)}s min ${out.cMin?.toFixed(1)}s`);
+console.log(`${skill}/${pick}/night${loop} start=${startBoons.length}: clear ${out.clear}/${n}  avgLv ${(out.lv / n).toFixed(1)}  threat ${(out.threat / n).toFixed(1)}  boons ${(out.boons / n).toFixed(1)}  passiveLv ${(out.passiveLv / n).toFixed(1)}  time ${(out.time / n).toFixed(0)}s  gold ${Math.round(out.gold / n)}  minHp ${Math.round(out.minHp / n * 100)}%  hpAtBoss ${Math.round(out.bossHp0 / Math.max(1, out.nb) * 100)}%  bossFight ${(out.bossT / Math.max(1, out.nb)).toFixed(0)}s  deaths ${JSON.stringify(out.deaths)}  kills/room ${(out.kN / out.cN).toFixed(1)}  combatAvg ${(out.cT / out.cN).toFixed(1)}s min ${out.cMin?.toFixed(1)}s  shards ${Math.round(out.shards / n)}`);
