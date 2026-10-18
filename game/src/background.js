@@ -60,19 +60,79 @@ export function gearFrame(r, teeth, color, hole, step, steps = 8) {
   return c;
 }
 
-// 内装の型（上層・鐘楼だけ 3 通り：0 はもとの型。ほかの階はもとの型だけ）。部屋ごとに替わる
-function interior(fi, v) {
-  const c = makeCanvas(LAYER_W, LAYER_H), m = c.getContext('2d');
-  if (fi === 2 && v === 1) {
-    // 鐘の並ぶ回廊：梁から小さな鐘がいくつも下がる
-    rect(m, 0, 24, LAYER_W, 6, '#121830'); rect(m, 0, 24, LAYER_W, 1, '#2a3358');
-    for (let x = 20; x < LAYER_W; x += 60) {
-      const len = 20 + (x % 120 ? 18 : 0); line(m, x, 30, x, 30 + len, '#2a3358');
-      for (let y = 0; y < 18; y++) { const w = Math.round(4 + Math.pow(y / 18, 1.5) * 9); rect(m, x - w, 30 + len + y, w * 2, 1, '#1a2244'); }
-      rect(m, x - 13, 30 + len + 18, 26, 2, '#38457a');
+// 内装の型（上層・鐘楼だけ 3 通り：0 はもとの型、1 は鐘の回廊、2 はステンドグラスの間。ほかの階はもとの型だけ）。部屋ごとに替わる
+// 1・2 は屋内の 1 枚絵（後ろの空・町・月・星は描かない）
+// 屋内の石壁：切り石の大きさと明るさを場所ごとに変える（同じ模様の繰り返しにしない）
+function stoneWall(m, seed) {
+  bands(m, 0, LAYER_H, ['#07081a', '#0c1026', '#111733', '#141b3a', '#10152e']);
+  for (let y = 0, row = 0; y < LAYER_H; y += 9 + (row % 3), row++) {
+    let x = -Math.floor(hash2(row, 1, seed) * 20);
+    while (x < LAYER_W) {
+      const w = 16 + Math.floor(hash2(x, row, seed + 1) * 18), k = hash2(x, row, seed + 2);
+      if (k < 0.25) rect(m, x + 1, y + 1, w - 2, 7, '#151c3c'); else if (k > 0.85) rect(m, x + 1, y + 1, w - 2, 7, '#0b0f24');
+      rect(m, x, y, 1, 9, '#090c1e'); x += w;
     }
-    for (let x = 0; x < LAYER_W; x += 120) rect(m, x, 30, 10, 240, '#121830');
+    rect(m, 0, y, LAYER_W, 1, '#090c1e');
   }
+}
+// 鐘（青銅）。cx・top：吊り金具の位置、h：高さ。長さの違う鐘を並べて、同じ絵の繰り返しにしない
+function bell(m, cx, top, h, swing = 0) {
+  const body = '#3a2e1e', hi = '#6a5430', dark = '#22190f';
+  rect(m, cx - 3, top, 7, 4, dark); // 吊り金具
+  for (let y = 0; y < h; y++) {
+    const t = y / h, w = Math.round(h * (0.16 + Math.pow(t, 1.7) * 0.34)), x0 = Math.round(cx - w + swing * t);
+    rect(m, x0, top + 4 + y, w * 2 + 1, 1, body);
+    pset(m, x0 + Math.round(w * 0.45), top + 4 + y, hi); pset(m, x0 + Math.round(w * 0.45) + 1, top + 4 + y, hi);
+    if (y === Math.round(h * 0.3) || y === Math.round(h * 0.82)) rect(m, x0, top + 4 + y, w * 2 + 1, 1, dark); // 帯
+  }
+  const lw = Math.round(h * 0.5);
+  rect(m, Math.round(cx - lw + swing) - 2, top + 4 + h, lw * 2 + 5, 3, hi); rect(m, Math.round(cx - lw + swing) - 2, top + 6 + h, lw * 2 + 5, 1, dark); // 口のふち
+  disc(m, Math.round(cx + swing * 1.1), top + 8 + h, Math.max(2, Math.round(h * 0.07)), dark); // 舌
+}
+// 鐘の回廊（上層・内装 1）：鐘楼の中。太い木の梁と筋交い、中央の大鐘、大きさの違う鐘、鐘を鳴らす木の車輪、鎧戸の窓
+function bellHall() {
+  const c = makeCanvas(LAYER_W, LAYER_H), m = c.getContext('2d');
+  stoneWall(m, 61);
+  const wood = '#1c1618', woodHi = '#2c2226', woodDk = '#100c0e'; // 足場（明るい茶色の板）と見間違えないよう、暗く冷たい色の木
+  // 両端の鎧戸の窓：尖ったアーチの中に夜空と星、斜めの板（板は太く短く。細い長い斜め線は雨に見えるので使わない）
+  const louver = (cx) => {
+    const w = 34, top = 40, h = 110;
+    for (let y = top - 4; y < top + h + 4; y++) for (let x = cx - w / 2 - 4; x <= cx + w / 2 + 4; x++) {
+      const dy = top + w / 2 - y, inArch = y >= top + w / 2 ? Math.abs(x - cx) <= w / 2 : Math.hypot(x - cx, dy) <= w / 2;
+      const inFrame = y >= top + w / 2 ? Math.abs(x - cx) <= w / 2 + 4 : Math.hypot(x - cx, dy) <= w / 2 + 4;
+      if (inArch && y < top + h) pset(m, x, y, y < top + 40 ? '#0c1434' : '#101a40');
+      else if (inFrame && y < top + h + 4) pset(m, x, y, '#1d2547');
+    }
+    for (let i = 0; i < 9; i++) pset(m, cx - 12 + Math.floor(hash2(cx, i, 3) * 24), top + 6 + Math.floor(hash2(i, cx, 4) * 60), hash2(i, cx, 5) < 0.4 ? '#c8d0f0' : '#6a76a8');
+    for (let y = top + 30; y < top + h - 4; y += 11) rect(m, cx - w / 2, y, w + 1, 5, '#141b3a'), rect(m, cx - w / 2, y, w + 1, 1, '#2a3358');
+  };
+  louver(34); louver(446);
+  // 天井の太い梁と、中央の三角の筋交い（大鐘を吊る枠）
+  rect(m, 0, 0, LAYER_W, 14, '#05060f');
+  rect(m, 0, 14, LAYER_W, 9, wood); rect(m, 0, 14, LAYER_W, 1, woodHi); rect(m, 0, 22, LAYER_W, 1, woodDk);
+  for (let x = 0; x < LAYER_W; x += 37 + (x % 11)) rect(m, x, 16, 2, 2, woodDk); // 釘
+  const post = (x, w) => { rect(m, x, 23, w, 247, wood); rect(m, x + 1, 23, 1, 247, woodHi); rect(m, x + w - 1, 23, 1, 247, woodDk); };
+  post(170, 9); post(301, 9);
+  for (let i = 0; i < 60; i++) { rect(m, 179 + i, 23 + Math.round(i * 0.62), 4, 3, wood); rect(m, 301 - i - 4, 23 + Math.round(i * 0.62), 4, 3, wood); } // 筋交い
+  rect(m, 170, 96, 140, 7, wood); rect(m, 170, 96, 140, 1, woodHi); // 鐘を吊る横木
+  // 中央の大鐘（横木から下がる）
+  rect(m, 238, 103, 5, 8, woodDk);
+  bell(m, 240, 110, 58);
+  line(m, 241, 182, 241, 270, '#4a3a2a'); // 鐘の綱
+  // 左：別の梁から、大きさも高さも違う 2 つの鐘
+  rect(m, 70, 52, 100, 6, wood); rect(m, 70, 52, 100, 1, woodHi); post(72, 6);
+  bell(m, 104, 58, 30, -1); line(m, 104, 96, 104, 270, '#3e3024');
+  bell(m, 148, 58, 20, 1); line(m, 148, 84, 148, 200, '#3e3024');
+  // 右：鐘を鳴らす木の車輪（輻のある大きな輪）と、それにつながる鐘
+  const wx = 372, wy = 92, wr = 30;
+  for (let a = 0; a < 6; a++) { const t = a / 6 * Math.PI * 2; line(m, wx, wy, Math.round(wx + Math.cos(t) * wr), Math.round(wy + Math.sin(t) * wr), wood, 2); }
+  circle(m, wx, wy, wr, woodHi); circle(m, wx, wy, wr - 1, wood); circle(m, wx, wy, wr - 2, wood); disc(m, wx, wy, 5, woodDk);
+  rect(m, 330, 52, 110, 6, wood); rect(m, 330, 52, 110, 1, woodHi); post(432, 6);
+  rect(m, wx - 2, 58, 4, wy - 58, woodDk);
+  bell(m, 410, 58, 36, 2); line(m, 412, 102, 412, 270, '#3e3024');
+  line(m, wx, wy + wr, wx, 270, '#4a3a2a'); // 車輪の綱
+  // 腰壁（床の近くは暗く落とす）
+  rect(m, 0, 204, LAYER_W, LAYER_H - 204, '#0a0d22'); rect(m, 0, 204, LAYER_W, 1, '#1d2547');
   return c;
 }
 // ステンドグラスの間（上層・内装 2）：部屋ぜんたいで 1 枚の絵。同じ絵を繰り返して貼らない。
@@ -83,17 +143,7 @@ const dim = (hex, k) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice
 function stainedHall() {
   const c = makeCanvas(LAYER_W, LAYER_H), m = c.getContext('2d');
   const G = 0.7; // 色ガラスの明るさ
-  // 壁：上ほど暗い石。切り石の大きさと明るさを場所ごとに変える（同じ模様の繰り返しにしない）
-  bands(m, 0, LAYER_H, ['#07081a', '#0c1026', '#111733', '#141b3a', '#10152e']);
-  for (let y = 0, row = 0; y < LAYER_H; y += 9 + (row % 3), row++) {
-    let x = -Math.floor(hash2(row, 1, 41) * 20);
-    while (x < LAYER_W) {
-      const w = 16 + Math.floor(hash2(x, row, 42) * 18), k = hash2(x, row, 43);
-      if (k < 0.25) rect(m, x + 1, y + 1, w - 2, 7, '#151c3c'); else if (k > 0.85) rect(m, x + 1, y + 1, w - 2, 7, '#0b0f24');
-      rect(m, x, y, 1, 9, '#090c1e'); x += w;
-    }
-    rect(m, 0, y, LAYER_W, 1, '#090c1e');
-  }
+  stoneWall(m, 41);
   // 天井のアーチ（肋骨のような梁）
   rect(m, 0, 0, LAYER_W, 10, '#05060f');
   for (const [x0, x1] of [[0, 150], [150, 330], [330, 480]]) for (let i = 0; i <= x1 - x0; i++) {
@@ -199,7 +249,7 @@ function ruinLayer(src, ruin, seed, opaque = false) {
   for (let i = 0; i < n; i++) {
     const x = hash2(i, 1, seed) * LAYER_W, y = 40 + hash2(i, 2, seed) * 180, r = 6 + hash2(i, 3, seed) * (ruin === 1 ? 10 : 22);
     // 1 枚絵の部屋：大きな黒い穴は開けず、小さく欠けた石（縁だけ明るい）にする
-    if (opaque) { const q = Math.max(3, Math.round(r * 0.35)); disc(m, x, y, q + 1, '#1d2547'); disc(m, x, y, q, '#080a18'); disc(m, x + q, y + q * 0.5, Math.max(2, q - 2), '#080a18'); continue; }
+    if (opaque) { const q = Math.min(6, Math.max(3, Math.round(r * 0.3))); disc(m, x, y, q + 1, '#1d2547'); disc(m, x, y, q, '#0b0e22'); disc(m, x + q * 0.8, y + q * 0.4, Math.max(2, q - 2), '#0b0e22'); pset(m, x - 1, y - 1, '#070918'); continue; }
     disc(m, x, y, r, '#000'); disc(m, x + r * 0.8, y + r * 0.4, r * 0.6, '#000');
   }
   m.globalCompositeOperation = 'source-over';
@@ -218,20 +268,20 @@ const cache = new Map();
 export function backgroundFor(fi, variant = 0, ruin = 0) {
   const key = `${fi}:${variant}:${ruin}`;
   if (cache.has(key)) return cache.get(key);
-  // ステンドグラスの間：1 枚だけの屋内の絵（空・町・月・星は無い）
-  if (fi === 2 && variant === 2) {
-    let c = stainedHall();
+  // 鐘の回廊・ステンドグラスの間：1 枚だけの屋内の絵（空・町・月・星は無い）
+  if (fi === 2 && (variant === 1 || variant === 2)) {
+    let c = variant === 1 ? bellHall() : stainedHall();
     if (ruin) c = ruinLayer(c, ruin, 31 + fi * 7 + variant, true);
     const out = { layers: [{ c, single: true }], indoor: true, tiles: backgroundFor(fi).tiles };
     cache.set(key, out);
     return out;
   }
-  if (variant || ruin) {
+  if (ruin) {
     const base = backgroundFor(fi), layers = base.layers.slice(), last = layers.length - 1;
-    let mid = variant ? interior(fi, variant) : layers[last].c;
-    if (ruin) mid = ruinLayer(mid, ruin, 31 + fi * 7 + variant);
+    let mid = layers[last].c;
+    if (ruin) mid = ruinLayer(mid, ruin, 31 + fi * 7);
     layers[last] = { ...layers[last], c: mid };
-    const out = { ...base, layers, lanterns: variant ? null : base.lanterns, chains: base.chains };
+    const out = { ...base, layers };
     cache.set(key, out);
     return out;
   }
