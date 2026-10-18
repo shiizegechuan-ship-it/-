@@ -553,6 +553,7 @@ export class Game {
         const k = big ? ENEMY_SIZE.big : ENEMY_SIZE.hit, foot = e.y + e.h, mid = e.x + e.w / 2;
         e.w = Math.round(e.w * k); e.h = Math.round(e.h * k); e.x = mid - e.w / 2; e.y = foot - e.h;
         e.drawScale = big ? ENEMY_SIZE.big : ENEMY_SIZE.look;
+        e.atkScale = k;
       }
     }
     this.room.enemies.push(e);

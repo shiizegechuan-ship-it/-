@@ -108,7 +108,9 @@ export class Enemy {
     const fx = dir > 0 ? this.x + this.w + 2 : this.x - 2;
     return map.solidAt(fx, this.y + this.h - 4);
   }
+  // 体の前の攻撃の範囲。大きくした敵は、その倍率（atkScale）だけ範囲も大きい（見た目の武器と当たる範囲を合わせる）
   frontBox(w, h, oy = 0) {
+    const k = this.atkScale || 1; w *= k; h *= k; oy *= k;
     return { x: this.face > 0 ? this.x + this.w : this.x - w, y: this.y + this.h / 2 - h / 2 + oy, w, h };
   }
   // 被弾。戻り値 {blocked, flinched}

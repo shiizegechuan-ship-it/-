@@ -32,6 +32,26 @@ export function marqueeOffset(over, t) {
   const k = t % period;
   return k < pause ? 0 : k < pause + run ? (k - pause) * speed : over;
 }
+// 行の間隔：文字の倍率に合わせて広げる（大・特大で行が重ならないように）
+export const modeScale = () => (TEXT.mode === 'xlarge' ? 1.4 : TEXT.mode === 'large' ? 1.2 : 1);
+export const lh = (n) => Math.round(n * modeScale());
+// 縦に収まらない枠：中身を縦に流す（はじめを見せてから下まで流し、少し止まって戻る）。key ごとに前のフレームではみ出した量を覚える
+const VSCROLL = {};
+export function vOffset(over, t) {
+  const pause = 1.5, speed = 22, run = over / speed, period = pause * 2 + run;
+  const k = t % period;
+  return k < pause ? 0 : k < pause + run ? (k - pause) * speed : over;
+}
+function vbegin(ctx, key, box) {
+  ctx.save(); ctx.beginPath(); ctx.rect(box.x, box.y, box.w, box.h); ctx.clip();
+  return Math.round(vOffset(VSCROLL[key] || 0, TEXT.t));
+}
+function vend(ctx, key, bottom, box) {
+  ctx.restore();
+  const over = Math.max(0, Math.ceil(bottom - (box.y + box.h)));
+  VSCROLL[key] = over;
+  if (over > 0) { ctx.fillStyle = 'rgba(255,255,255,0.45)'; const ax = box.x + box.w - 14, ay = box.y + box.h - 8; ctx.fillRect(ax - 4, ay - 3, 9, 1); ctx.fillRect(ax - 3, ay - 2, 7, 1); ctx.fillRect(ax - 2, ay - 1, 5, 1); ctx.fillRect(ax - 1, ay, 3, 1); } // 続きがある印（▼）
+}
 function text(ctx, str, x, y, { size = 14, color = C.text, align = 'left', bold = false, font = FONT, shadow = true, maxW } = {}) {
   // ドット文字は太字にしない（にじむため）。影は 2px の硬い影
   const fs = fontSize(size);
@@ -289,15 +309,16 @@ function drawDialog(ctx, game, m) {
   const CH = 28; // 選択肢の行の高さ
   const lines = wrap(ctx, line.text, w - 36, 16, SERIF);
   // 本文・補足・選択肢がすべて収まる高さにする（補足と選択肢が重ならないように）
-  const bodyH = 52 + lines.length * 22 + (line.note ? 22 : 0);
+  const LH = lh(22);
+  const bodyH = 52 + lines.length * LH + (line.note ? LH : 0);
   const h = Math.max(110, bodyH + (choices.length ? 22 : 8)) + choices.length * CH;
   const top = bottom - h;
   panel(ctx, x, top, w, h, 'rgba(242,193,78,0.35)');
   if (line.who) text(ctx, line.who, x + 18, top + 26, { size: 13, bold: true, color: C.gold });
   const shown = Math.floor(clamp(m.t * 60, 0, 999)); // 文字送り
   let used = 0;
-  lines.forEach((l, i) => { const s = l.slice(0, Math.max(0, shown - used)); used += l.length; text(ctx, s, x + 18, top + 52 + i * 22, { size: 16, font: SERIF, maxW: w - 36 }); });
-  if (line.note) text(ctx, '◆ ' + line.note, x + 18, top + 52 + lines.length * 22 + 4, { size: 11, color: '#7fb8ff', maxW: w - 36 });
+  lines.forEach((l, i) => { const s = l.slice(0, Math.max(0, shown - used)); used += l.length; text(ctx, s, x + 18, top + 52 + i * LH, { size: 16, font: SERIF, maxW: w - 36 }); });
+  if (line.note) text(ctx, '◆ ' + line.note, x + 18, top + 52 + lines.length * LH + 4, { size: 11, color: '#7fb8ff', maxW: w - 36 });
   choices.forEach((c, i) => {
     const cy = top + h - (choices.length - i) * CH - 8;
     if (i === m.sel) { ctx.fillStyle = 'rgba(242,193,78,0.15)'; ctx.fillRect(x + 12, cy - 20, w - 24, CH - 2); }
@@ -331,14 +352,14 @@ function drawBoonPick(ctx, game, m) {
     if (def.max) text(ctx, own ? `Lv${own.tier} → ${nt}` : 'Lv1', x + cw - 16, y + 28, { size: 13, align: 'right', color: own ? '#ffe14a' : C.muted });
     const curArt = def.active && !own ? p.boons.find((b) => BOONS[b.id].active) : null;
     if (curArt) text(ctx, `持ち替え：${BOONS[curArt.id].name} を外す`, x + 16, y + ch - 32, { size: 11, color: '#ff8ae0' });
-    wrap(ctx, own ? (forgeDiff(id, own.tier).diff || def.desc(nt)) : def.desc(nt), cw - 28, 15).forEach((l, j) => text(ctx, l, x + 14, y + 86 + j * 21, { size: 15, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0' }));
+    wrap(ctx, own ? (forgeDiff(id, own.tier).diff || def.desc(nt)) : def.desc(nt), cw - 28, 15).forEach((l, j) => text(ctx, l, x + 14, y + 86 + j * lh(21), { size: 15, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0' }));
     // 合成の素材なら、カードの下に「合成先・相手の素材・持っているか」を色つきの枠で見せる
     const fus = fusionsFor(id, p.boons);
     if (fus.length) text(ctx, '◆ 合成素材', x + cw - 16, y + 46, { size: 10, align: 'right', color: fus[0].color, bold: true });
     const hints = synergyHints(id, p.boons).filter((h) => !h.startsWith('合成：'));
     const boxH = fus.length * 34;
     let hy = y + 180;
-    for (const h of hints) { wrap(ctx, h, cw - 32, 11).forEach((l) => { if (hy < y + ch - boxH - 12) text(ctx, l, x + 16, hy, { size: 11, color: '#f2c14e' }); hy += 15; }); }
+    for (const h of hints) { wrap(ctx, h, cw - 32, 11).forEach((l) => { if (hy < y + ch - boxH - 12) text(ctx, l, x + 16, hy, { size: 11, color: '#f2c14e' }); hy += lh(15); }); }
     fus.forEach((f, j) => {
       const by = y + ch - boxH - 6 + j * 34;
       ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(x + 8, by, cw - 16, 30);
@@ -380,12 +401,14 @@ function drawBoonCardSmall(ctx, p, id, x, y, cw, ch, sel) {
   text(ctx, def.name, x + 12, y + 44, { size: 18, bold: true, font: SERIF });
   const fus = fusionsFor(id, p.boons);
   const lines = wrap(ctx, own ? (forgeDiff(id, own.tier).diff || def.desc(nt)) : def.desc(nt), cw - 24, 13);
-  const maxL = fus.length ? 3 : 4;
-  lines.slice(0, maxL).forEach((l, j) => text(ctx, j === maxL - 1 && lines.length > maxL ? l.slice(0, -1) + '…' : l, x + 12, y + 66 + j * 17, { size: 13, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0' }));
+  // 入りきる行の数（文字が大きいほど少ない）。入りきらない分は最後の行につなげて横に流す（説明が欠けないように）
+  const L = lh(17), maxL = Math.max(1, Math.floor((ch - 58 - (fus.length ? 26 : 6)) / L));
+  const shown = lines.length > maxL ? [...lines.slice(0, maxL - 1), lines.slice(maxL - 1).join('')] : lines;
+  shown.forEach((l, j) => text(ctx, l, x + 12, y + 66 + j * L, { size: 13, color: def.school === 'risk' ? '#ffb0a0' : '#e8e0d0', maxW: cw - 24 }));
   if (fus.length) {
     const f = fus[0], ready = f.otherLv >= 2;
     ctx.fillStyle = f.color; ctx.fillRect(x + 8, y + ch - 24, 3, 16);
-    text(ctx, `合成 ▶ ${BOONS[f.to].name}（＋${BOONS[f.other].name}${f.otherLv ? ` Lv${f.otherLv}${ready ? ' ✓' : ''}` : '・未所持'}）`, x + 16, y + ch - 11, { size: 11, color: f.color, bold: true });
+    text(ctx, `合成 ▶ ${BOONS[f.to].name}（＋${BOONS[f.other].name}${f.otherLv ? ` Lv${f.otherLv}${ready ? ' ✓' : ''}` : '・未所持'}）`, x + 16, y + ch - 11, { size: 11, color: f.color, bold: true, maxW: cw - 24 });
   }
 }
 
@@ -442,7 +465,7 @@ function drawArtifactPick(ctx, game, m) {
     ctx.fillStyle = col; ctx.fillRect(x, y, cw, 5);
     text(ctx, gold ? '黄金のアーティファクト' : 'アーティファクト', x + 16, y + 28, { size: 11, color: col });
     text(ctx, a.name, x + 16, y + 58, { size: 20 });
-    wrap(ctx, a.desc, cw - 28, 15).forEach((l, j) => text(ctx, l, x + 14, y + 90 + j * 21, { size: 15, color: '#e8e0d0' }));
+    wrap(ctx, a.desc, cw - 28, 15).forEach((l, j) => text(ctx, l, x + 14, y + 90 + j * lh(21), { size: 15, color: '#e8e0d0' }));
     ctx.globalAlpha = 1;
   });
   text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定', VIEW_W / 2, 412, { size: 12, align: 'center', color: C.muted });
@@ -500,14 +523,15 @@ export function drawJournal(ctx, game, m) {
     ctx.fillStyle = i === m.tab ? 'rgba(127,184,255,0.25)' : 'rgba(255,255,255,0.04)'; ctx.fillRect(tx, ty, 80, 24);
     text(ctx, t, tx + 40, ty + 17, { size: 13, align: 'center', color: i === m.tab ? '#fff' : '#aaa' });
   });
-  let yy = y + 116;
-  const maxY = y + h - 40;
+  // 中身の枠（入りきらなければ縦に流す）
+  const box = { x: x + 4, y: y + 96, w: w - 8, h: h - 130 };
+  const sk = 'journal' + m.tab;
+  let yy = y + 116 - vbegin(ctx, sk, box);
   const draw = (title, body, isNew, color = '#efe6d2') => {
-    if (yy > maxY) return;
     text(ctx, (isNew ? '● ' : '') + title, x + 28, yy, { size: 14, bold: true, color });
-    yy += 18;
-    for (const l of wrap(ctx, body, w - 70, 12)) { if (yy > maxY) return; text(ctx, l, x + 40, yy, { size: 12, color: '#cfc8bb' }); yy += 16; }
-    yy += 8;
+    yy += lh(18);
+    for (const l of wrap(ctx, body, w - 70, 12)) { text(ctx, l, x + 40, yy, { size: 12, color: '#cfc8bb' }); yy += lh(16); }
+    yy += lh(8);
   };
   if (m.tab < 3) {
     const cat = TABS[m.tab];
@@ -521,29 +545,31 @@ export function drawJournal(ctx, game, m) {
         k('lira_father') ? ['リラ', '師の娘。朝の汽車で遠くの療養所へ発つ。'] : k('lira_name') ? ['リラ', '市場の少女。師が名を呼んだ。'] : ['市場の少女', '朝を待ちながら、父の見送りを気にしている。'],
         ['グレン', '鍛冶屋。師の古い友で、塔の歯車を共に作った。' + (k('glen_time') || k('glen_saved') ? '夜の途中で時計人形に襲われる。' : '')],
       ];
-      for (const [nm, d] of cast) { if (yy > maxY) break; text(ctx, nm, x + 28, yy, { size: 13, color: C.gold }); for (const l of wrap(ctx, d, w - 150, 12)) { text(ctx, l, x + 120, yy, { size: 12, color: '#cfc8bb' }); yy += 16; } yy += 4; }
-      yy += 8;
+      const nameW = Math.round(92 * modeScale());
+      for (const [nm, d] of cast) { text(ctx, nm, x + 28, yy, { size: 13, color: C.gold, maxW: nameW - 6 }); for (const l of wrap(ctx, d, w - 58 - nameW, 12)) { text(ctx, l, x + 28 + nameW, yy, { size: 12, color: '#cfc8bb' }); yy += lh(16); } yy += lh(4); }
+      yy += lh(8);
     }
-    if (!entries.length) { text(ctx, 'まだ何も知らない。', x + 28, yy, { size: 13, color: C.muted }); yy += 24; }
+    if (!entries.length) { text(ctx, 'まだ何も知らない。', x + 28, yy, { size: 13, color: C.muted }); yy += lh(24); }
     for (const [k, v] of entries) draw(v.title, v.text(meta), meta.knowledge[k] === meta.loop && game.scene === 'play', cat === '敵' ? '#ffb0a0' : '#efe6d2');
     if (m.tab === 0) {
       // 楔の状態もここで確認できる
-      yy += 6;
-      text(ctx, `楔（${wedgeCount(meta)}）`, x + 28, yy, { size: 13, bold: true, color: C.gold }); yy += 18;
-      for (const wd of meta.wedges) { text(ctx, `◆ ${wedgeLabel(wd)}：${wd.target === 'boon' ? WEDGE_TARGETS.boon.effect : WEDGE_TARGETS[wd.target].effect}`, x + 40, yy, { size: 12, color: '#d8b968' }); yy += 16; }
+      yy += lh(6);
+      text(ctx, `楔（${wedgeCount(meta)}）`, x + 28, yy, { size: 13, bold: true, color: C.gold }); yy += lh(18);
+      for (const wd of meta.wedges) { text(ctx, `◆ ${wedgeLabel(wd)}：${wd.target === 'boon' ? WEDGE_TARGETS.boon.effect : WEDGE_TARGETS[wd.target].effect}`, x + 40, yy, { size: 12, color: '#d8b968', maxW: w - 70 }); yy += lh(16); }
     }
   } else {
     const pr = dawnProgress(meta);
-    text(ctx, `夜明けへの道　${pr.done} / ${pr.total}`, x + 28, yy, { size: 15, color: '#ffd38a' }); yy += 26;
+    text(ctx, `夜明けへの道　${pr.done} / ${pr.total}`, x + 28, yy, { size: 15, color: '#ffd38a' }); yy += lh(26);
     DAWN_STEPS.forEach((st, i) => {
       const ok = st.done(meta), isNext = pr.next === st;
-      text(ctx, `${ok ? '■' : '□'} ${i + 1}. ${st.title}`, x + 36, yy, { size: 14, color: ok ? '#9a8fa6' : isNext ? '#ffd38a' : '#efe6d2' });
-      if (isNext) { yy += 18; text(ctx, `→ ${st.hint}`, x + 60, yy, { size: 12, color: '#9fd0ff' }); }
-      yy += 22;
+      text(ctx, `${ok ? '■' : '□'} ${i + 1}. ${st.title}`, x + 36, yy, { size: 14, color: ok ? '#9a8fa6' : isNext ? '#ffd38a' : '#efe6d2', maxW: w - 60 });
+      if (isNext) { yy += lh(18); text(ctx, `→ ${st.hint}`, x + 60, yy, { size: 12, color: '#9fd0ff', maxW: w - 84 }); }
+      yy += lh(22);
     });
     const c = bossCounter(meta.lastLoop);
     if (c) draw('刻守の記憶', `前の夜の戦い方を覚えている：${COUNTERS[c].name}――${COUNTERS[c].desc}`, false, '#ff9a7a');
   }
+  vend(ctx, sk, yy, box);
   text(ctx, game.touch ? 'タブをタップ／枠の外をタップで閉じる' : '←→ タブ　Tab/Esc 閉じる', x + w - 20, y + h - 14, { size: 10, align: 'right', color: C.muted });
 }
 
@@ -598,17 +624,20 @@ export function drawRewind(ctx, game) {
     const x = x0 + i * (cw + gap), y = 100 + (1 - a) * 12;
     panel(ctx, x, y, cw, 250, c.color + '88', 'rgba(14,11,20,0.9)');
     text(ctx, c.title, x + 14, y + 26, { size: 15, bold: true, color: c.color, font: SERIF });
-    let yy = y + 52;
+    // 中身の枠（入りきらなければ縦に流す）
+    const box = { x: x + 2, y: y + 36, w: cw - 4, h: 210 }, sk = 'rewind' + i;
+    let yy = y + 52 - vbegin(ctx, sk, box);
     if (!c.items.length) text(ctx, '―', x + 14, yy, { size: 12, color: C.muted });
     c.items.forEach((it, j) => {
       const ia = clamp((t - c.at - 0.15 - j * 0.12) / 0.3, 0, 1);
-      if (ia <= 0 || yy > y + 236) return;
+      if (ia <= 0) return;
       ctx.globalAlpha = a * ia;
       const col = i === 1 ? '#9a9aa2' : it.tone === 'risk' ? '#ff9a7a' : it.tone === 'blue' ? '#7fb8ff' : it.tone === 'reset' ? '#9a9aa2' : i === 0 ? '#f3dca0' : '#d9c2ff';
-      for (const l of wrap(ctx, it.text, cw - 28, 12)) { text(ctx, l, x + 14, yy, { size: 12, color: col }); if (i === 1) { ctx.fillStyle = 'rgba(160,160,170,0.6)'; ctx.fillRect(x + 14, yy - 4, Math.min(cw - 28, ctx.measureText(l).width) * ia, 1); } yy += 16; }
-      if (it.sub) for (const l of wrap(ctx, it.sub, cw - 40, 10)) { text(ctx, l, x + 22, yy, { size: 10, color: C.muted }); yy += 14; }
-      yy += 6;
+      for (const l of wrap(ctx, it.text, cw - 28, 12)) { text(ctx, l, x + 14, yy, { size: 12, color: col }); if (i === 1) { ctx.fillStyle = 'rgba(160,160,170,0.6)'; ctx.fillRect(x + 14, yy - 4, Math.min(cw - 28, ctx.measureText(l).width) * ia, 1); } yy += lh(16); }
+      if (it.sub) for (const l of wrap(ctx, it.sub, cw - 40, 10)) { text(ctx, l, x + 22, yy, { size: 10, color: C.muted }); yy += lh(14); }
+      yy += lh(6);
     });
+    vend(ctx, sk, yy, box);
     ctx.globalAlpha = 1;
   });
   ctx.globalAlpha = 1;
@@ -713,8 +742,9 @@ function drawAnalysis(ctx, game, m) {
   const c = COUNTERS[m.counter];
   if (k >= 1) {
     text(ctx, `対策：${c.name}`, x + 24, dy + 44, { size: 20, color: '#ff4a2a' });
-    wrap(ctx, c.desc, w - 48, 14).forEach((l, i) => text(ctx, l, x + 24, dy + 70 + i * 20, { size: 14, color: '#efe6d2' }));
-    wrap(ctx, '崩し方：' + c.weak, w - 48, 14).forEach((l, i) => text(ctx, l, x + 24, dy + 116 + i * 20, { size: 14, color: '#9fd0ff' }));
+    const dl = wrap(ctx, c.desc, w - 48, 14);
+    dl.forEach((l, i) => text(ctx, l, x + 24, dy + 70 + i * lh(20), { size: 14, color: '#efe6d2' }));
+    wrap(ctx, '崩し方：' + c.weak, w - 48, 14).forEach((l, i) => text(ctx, l, x + 24, dy + 70 + Math.max(46, dl.length * lh(20) + 6) + i * lh(20), { size: 14, color: '#9fd0ff' }));
   }
   text(ctx, game.touch ? 'タップで続ける' : 'Z で続ける', x + w - 20, y + h - 14, { size: 11, align: 'right', color: C.muted });
 }

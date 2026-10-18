@@ -11,11 +11,11 @@ export const isPersonWedge = (w) => w.target !== 'boon';
 export const GLEN_DEADLINE = 80; // 鍛冶屋が襲われる時刻（夜の経過秒）
 
 export const WEDGE_TARGETS = {
-  lira: { name: 'リラ（師の娘）', kind: '人物', effect: '次の夜も、あなたを覚えている', cost: 'ほかの楔と枠を取り合う' },
-  glen: { name: 'グレン（鍛冶屋）', kind: '人物', effect: '生きたまま塔の入口に現れ、強化を鍛えてくれる', cost: '枠を1つ使う' },
+  lira: { name: 'リラ（師の娘）', kind: '人物', effect: '次の夜も、あなたを覚えている', cost: '人の楔の枠を 1 つ使う' },
+  glen: { name: 'グレン（鍛冶屋）', kind: '人物', effect: '生きたまま塔の入口に現れ、強化を鍛えてくれる', cost: '人の楔の枠を 1 つ使う' },
   knight: { name: '歯車騎士の残骸', kind: '敵', effect: '騎士は倒れたまま。昇降機で上層へ直行できる', cost: '飛ばした部屋の報酬は得られない' },
   brake: { name: '鐘楼の歯止め', kind: '仕掛け', effect: '刻守は「時止め」を使えない', cost: '刻守が怒り、第2段階が早く・速くなる' },
-  boon: { name: '強化', kind: '強化', effect: 'その強化を持ったまま夜が始まる', cost: '枠を1つ使う' },
+  boon: { name: '強化', kind: '強化', effect: 'その強化を持ったまま夜が始まる', cost: '技の楔の枠を 1 つ使う' },
 };
 
 export const KNOWLEDGE = {
