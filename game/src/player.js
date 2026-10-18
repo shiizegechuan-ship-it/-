@@ -98,7 +98,8 @@ export class Player {
     const dirX = this.rootT > 0 ? 0 : input.dirX ? input.dirX() : (input.down('right') ? 1 : 0) - (input.down('left') ? 1 : 0);
 
     // めちゃ簡単の飛び込みのあと、宙に浮いたまま攻撃が終わったら、近くの足場へくるくる回って降り立つ（奈落へ落ちないように）
-    if (this.autoLand && this.state === 'normal') {
+    // 攻撃を連打・長押ししていると「攻撃→攻撃（溜め）」とつながって normal に戻らないので、飛び込む先の敵がもういなければ（制圧した時など）攻撃の途中でも降り立つ
+    if (this.autoLand && (this.state === 'normal' || ((this.state === 'attack' || this.state === 'charge') && !this.onGround && !this.autoTarget(game)))) {
       this.autoLand = false;
       if (!this.onGround) { const f = this.nearestFooting(game.map); if (f) this.startTravel(f.x, f.y); }
     }

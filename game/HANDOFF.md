@@ -18,7 +18,7 @@
 - リポジトリ：`shiizegechuan-ship-it/-`、作業ブランチ：`feature/wedge-of-dawn`。ゲームは `game/` の下。
 - 起動（開発）：`cd game && python3 -m http.server 8080` → `http://localhost:8080/index.html`
   - ページの中の `window.__game`（ゲームの状態）、`window.__music`、`__setManual(true)` と `__step(n)`（1 コマずつ進める）がテストに便利。
-- テスト：`cd game && node --test tests/*.test.mjs`（今 **244 件すべて通る**）。
+- テスト：`cd game && node --test tests/*.test.mjs`（今 **245 件すべて通る**）。
 - 1 ファイル版（Artifact 用）：`node tools/build-single.mjs <出力先.html>`。外枠の HTML は `index.html` と別に `tools/build-single.mjs` の中にある（iPhone 向けの設定などは両方へ入れる）。
 - Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v53）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
 - コミットの末尾の署名：
@@ -60,7 +60,8 @@
 ## 4. 次のチャットで直す一覧（依頼者のメモ。直し済みのものは除いた／注記した）
 **1 つずつ順に。各項目の前に、仕様があいまいな所は依頼者に確認する。**
 
-### 4-1. めちゃ簡単：制圧した瞬間だけ、空中から近くの床へ移らない
+### 4-1. めちゃ簡単：制圧した瞬間だけ、空中から近くの床へ移らない【済み】
+- **直した**：原因は、攻撃を連打・長押ししていると「攻撃→攻撃（溜め）」と直接つながり `normal` に戻らないので、`autoLand` が処理されないこと（敵が残っている間は次の攻撃が飛び込みになるので起きず、最後の 1 体を倒した後だけ起きる）。飛び込む先の敵がもういなければ、攻撃・溜めの途中でも空中なら降り立つようにした（`player.js`）。テスト：`growth.test.mjs`「攻撃を連打・長押ししたまま奈落の上で部屋を制圧しても…」。
 - 現象：めちゃ簡単では、床の無い所で敵を倒すと近くの床へ移る（`player.js` の `autoLand` → `nearestFooting` → `startTravel`）が、**部屋を制圧した時**だけ効いていない気がする。
 - 手がかり：`autoLand` は飛び込み（`startAutoDash`）の後、`state === 'normal'` に戻った時にだけ処理される。制圧時は `clearRoom`・報酬・扉の処理や、`rewardTravelGoal`（跳ぶボタンで報酬へ移動）などで状態が変わり、空中のまま落ちる可能性。まず再現テストを書く（`tests/growth.test.mjs` の「奈落の上の空の敵へ飛び込んで斬ったあと…」が参考）。
 
