@@ -546,6 +546,7 @@ export class Game {
   addEnemy(e) {
     if (!e) return;
     e.bornT = this.room ? this.room.t : 0;
+    if (e.boss || e.elite) e.gapMul = (this.run.diff && this.run.diff.gap) || 1;
     // 夜の深さで強くなる（HP・攻撃・攻撃パターンの段階）＋脅威
     const sc = this.run.scale;
     e.maxHp = e.hp = Math.round(e.maxHp * sc.hp * (e.boss ? 1 + THREAT.bossHp * this.threatStep() : this.threatHp()));
@@ -2271,7 +2272,9 @@ export class Game {
     b.maxHp = Math.round(b.maxHp * 1.1); b.hp = b.maxHp;
     b.barrier = null; // HP が戻ったので、時の障壁も数え直す
     b.poiseDmg = 0; b.cool = 1.2; b.ownVx = 0; b.vx = 0;
-    b.dmgMul = (b.dmgMul || 1) * 1.35; // 白き刻守：一撃が重い（予兆は大きく長いが、当たれば痛い）
+    // 白き刻守：難しい・激ムズでは一撃が重く、休まず攻め続ける。めちゃ簡単〜普通は新しい技と予兆だけ（重さと速さは上げない）
+    b.fierce = ['hard', 'nightmare'].includes(this.difficulty().id);
+    if (b.fierce) b.dmgMul = (b.dmgMul || 1) * 1.35;
     b.setState('transform');
     this.room.projectiles = [];
     this.fx.screenFlash('#ffffff', 0.7); this.fx.shake(12, 0.8); this.sfx.play('bossBell'); this.sfx.play('guardBreak');

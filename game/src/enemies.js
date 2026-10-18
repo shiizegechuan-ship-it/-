@@ -26,7 +26,11 @@ export class Enemy {
     this.elite = false;
     this.boss = false;
     this.tier = 1; // 夜の深さで上がる（攻撃パターンが増える）
+    this.gapMul = 1; // 攻撃と攻撃の間の休みの倍率（中ボス・刻守だけ。難易度で決まる。game.addEnemy が設定）
   }
+  // 次の攻撃までの待ち時間。増やす時（攻撃を終えて休みに入る時）だけ、難易度の倍率を掛ける
+  get cool() { return this._cool || 0; }
+  set cool(v) { this._cool = v > (this._cool || 0) ? v * this.gapMul : v; }
   // 中ボス・刻守（白き刻守も）には、遅くする効果（遅延・時歪・鎖）を一切効かせない
   get timeScale() { return this.boss || this.elite ? 1 : this.snareT > 0 ? 0.15 : this.warp > 0 ? 0.35 : this.lag > 0 ? 0.6 : 1; }
   get slowed() { return !this.boss && !this.elite && (this.warp > 0 || this.lag > 0 || this.snareT > 0); }

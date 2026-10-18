@@ -181,3 +181,20 @@ test('刻守は何があってもノックバックしない（範囲攻撃の�
   b.update(g, dt);
   assert.ok(!b.hopped && Math.abs(b.vx) < 1);
 });
+
+test('難易度で、中ボス・刻守の攻撃と攻撃の間（休み）が変わる。白き刻守の重さと速さは難しい・激ムズだけ', async () => {
+  const { newGame } = await import('./helpers.mjs');
+  const { DIFFICULTY } = await import('../src/config.js');
+  const rest = {};
+  for (const id of ['veryeasy', 'easy', 'normal', 'hard', 'nightmare']) {
+    const g = newGame(14); g.meta.difficulty = id; g.startLoop(); g.modal = null;
+    g.enterRoom(2, g.run.plan.floors[2].findIndex((r) => r.type === 'boss')); g.modal = null;
+    const b = g.room.boss;
+    assert.equal(b.gapMul, DIFFICULTY[id].gap);
+    b.rng = { next: () => 0.5, pick: (a) => a[0] };
+    b.recover(1); const recT = b.recT; b.cool = 0; b.cool = b.nextCool(); rest[id] = recT + b.cool;
+    b.trueDuel = true; g.beginFinalForm(b); g.modal = null;
+    assert.equal(!!b.fierce, id === 'hard' || id === 'nightmare', `${id}: fierce`);
+  }
+  assert.ok(rest.veryeasy > rest.easy && rest.easy > rest.normal && rest.normal > rest.hard && rest.hard > rest.nightmare, JSON.stringify(rest));
+});

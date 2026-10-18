@@ -274,9 +274,9 @@ export class Tokimori extends Enemy {
   }
   nextCool() {
     const base = this.phase === 1 ? 0.75 : this.phase === 2 ? 0.55 : 0.4;
-    return (base * (this.enraged ? 0.7 : 1) + this.rng.next() * 0.3) * (this.finalForm ? 0.45 : 1); // 白き刻守は休まず攻め続ける
+    return (base * (this.enraged ? 0.7 : 1) + this.rng.next() * 0.3) * (this.finalForm ? (this.fierce ? 0.45 : 0.75) : 1); // 白き刻守は休みが短い（難しい・激ムズは休まず攻め続ける）
   }
-  recover(t) { this.setState('recover'); this.recT = t; }
+  recover(t) { this.setState('recover'); this.recT = t * this.gapMul; } // 技の後の隙も、難易度の休みの倍率で長くなる
   aimHands(p) {
     const px = cx(p), py = cy(p);
     this.targets = [{ x: px, y: py }, { x: px - 70, y: py - 20 }, { x: px + 70, y: py - 20 }];

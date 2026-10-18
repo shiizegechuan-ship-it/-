@@ -67,17 +67,17 @@ export const ATTACKS = {
   heavy: { startup: 6 * F, active: 5 * F, recovery: 20 * F, cancel: 18 * F, dmg: 40, w: 62, h: 40, ox: 4, oy: -6, knock: 380, stop: 7 * F, lunge: 150, cat: 'heavy', shake: 6, breaks: true },
 };
 
-// 難易度。普通がこれまでの調整。上がるほど敵の行動パターン（段階）・戦略（陣形・対策・回避）・数が増える
+// 難易度。普通がこれまでの調整。windup：予備動作の長さの倍率。gap：中ボス・刻守の攻撃と攻撃の間（休み）の倍率。上がるほど敵の行動パターン（段階）・戦略（陣形・対策・回避）・数が増える
 export const DIFFICULTY = {
-  easy: { id: 'easy', name: '簡単', hp: 0.8, dmg: 0.7, tierAdd: -1, windup: 1.3, speed: 0.92, extra: -1, strategy: false, guards: 1, guardWave: 0, goldMul: 2, color: '#8fe0a0' },
-  normal: { id: 'normal', name: '普通', hp: 1, dmg: 1, tierAdd: 0, windup: 1, speed: 1, extra: 0, strategy: true, guards: 2, guardWave: 1, goldMul: 1.25, color: '#efe6d2' },
-  hard: { id: 'hard', name: '難しい', hp: 1.15, dmg: 1.15, tierAdd: 1, windup: 0.9, speed: 1.06, extra: 1, strategy: 'always', guards: 3, guardWave: 2, goldMul: 1.25, color: '#ff8a6a' },
+  easy: { id: 'easy', name: '簡単', hp: 0.8, dmg: 0.7, tierAdd: -1, windup: 1.3, gap: 1.35, speed: 0.92, extra: -1, strategy: false, guards: 1, guardWave: 0, goldMul: 2, color: '#8fe0a0' },
+  normal: { id: 'normal', name: '普通', hp: 1, dmg: 1, tierAdd: 0, windup: 1, gap: 1.2, speed: 1, extra: 0, strategy: true, guards: 2, guardWave: 1, goldMul: 1.25, color: '#efe6d2' },
+  hard: { id: 'hard', name: '難しい', hp: 1.15, dmg: 1.15, tierAdd: 1, windup: 0.9, gap: 1, speed: 1.06, extra: 1, strategy: 'always', guards: 3, guardWave: 2, goldMul: 1.25, color: '#ff8a6a' },
 };
   // 激ムズ：攻撃までの間隔がさらに短く、雑魚は構えて主人公の攻撃をパリィして跳ね返す（重撃か背後なら通る）。
   // ときどき床全体が震える（赤く光ったら跳べば当たらない）
-DIFFICULTY.nightmare = { id: 'nightmare', name: '激ムズ', hp: 1.5, dmg: 1.55, tierAdd: 1, windup: 0.7, speed: 1.15, extra: 2, strategy: 'always', guards: 4, guardWave: 3, parry: true, quake: true, goldMul: 1.25, color: '#ff4a9a' };
+DIFFICULTY.nightmare = { id: 'nightmare', name: '激ムズ', hp: 1.5, dmg: 1.55, tierAdd: 1, windup: 0.7, gap: 0.9, speed: 1.15, extra: 2, strategy: 'always', guards: 4, guardWave: 3, parry: true, quake: true, goldMul: 1.25, color: '#ff4a9a' };
 // めちゃ簡単：敵はさらに弱く、通常攻撃を押すと主人公が回転しながら近くの敵へ飛び込んでから斬る（通常攻撃は必中）。斬撃波を最初から持つ
-DIFFICULTY.veryeasy = { id: 'veryeasy', name: 'めちゃ簡単', hp: 0.6, dmg: 0.5, tierAdd: -1, windup: 1.5, speed: 0.85, extra: -1, strategy: false, guards: 1, guardWave: 0, autoAim: true, startWave: true, carryAll: true, platforms: true, goldMul: 3, color: '#a8f0ff' };
+DIFFICULTY.veryeasy = { id: 'veryeasy', name: 'めちゃ簡単', hp: 0.6, dmg: 0.5, tierAdd: -1, windup: 1.5, gap: 1.5, speed: 0.85, extra: -1, strategy: false, guards: 1, guardWave: 0, autoAim: true, startWave: true, carryAll: true, platforms: true, goldMul: 3, color: '#a8f0ff' };
 DIFFICULTY.easy.startWave = true; // 簡単も斬撃波を最初から持つ
 export const DIFF_ORDER = ['veryeasy', 'easy', 'normal', 'hard', 'nightmare'];
 
