@@ -1,6 +1,6 @@
 // 紹介動画（トレーラー）を作る。使い方: node tools/dev/trailer.mjs [出力.mp4]
 //   game/ で python3 -m http.server 8080 を動かしておく。BGM は render-bgm.mjs の出力（BGM_DIR、既定 /tmp/wedge-dev/bgm）を使う
-//   STILLS=1 なら動画を作らず、場面ごとの代表の 1 枚だけ撮る（確認用）
+//   STILLS=1 なら動画を作らず、場面ごとの代表の 1 枚だけ撮る（確認用）。ONLY=11 などで場面を絞ると、その場面を 5 枚撮る
 // 流れ：物語のあらすじ → 操作の手ざわり（斬る・かわす・時を止める・強化）→ 難易度 → 最後に待ち受けるもの → 題字
 // 文字（テロップ）は 1 文字ずつ出し、1 文字ごとに同じ高さの電子音を鳴らす。
 // 映像はゲームを 1 tick ずつ手で進めて 1 枚ずつ撮る（かくつかない）。戦いは「見せる」ボット（trailer-bot.mjs）が操作し、
@@ -17,16 +17,15 @@ const FPS = 30, W = 1920, H = 1080;
 
 // ───────── 場面の台本 ─────────
 const BOONS = "[{id:'edge',tier:2},{id:'orbit',tier:2},{id:'crit',tier:2},{id:'satellites',tier:1}]";
-const ARTS = "[{id:'gearwaltz',tier:3},{id:'starblade',tier:3},{id:'thundergod',tier:3},{id:'inferno',tier:3},{id:'galaxy',tier:3},{id:'celestial',tier:3},{id:'clockhand',tier:3},{id:'icejail',tier:3},{id:'earthpulse',tier:3},{id:'swordsaint',tier:3},{id:'prismbeam',tier:3},{id:'chronarch',tier:1},{id:'stareater',tier:1}]";
 // 敵が減ったら、ゲームの増援のしくみで呼び足す（術で一掃し続ける絵にする）
-const HORDE = "B.each = (g) => { const r = g.room; if (r && r.enemies.filter((e) => e.alive).length + (r.incoming || []).length < 9 && B.tick % 6 === 0) g.queueReinforcement(); };";
+const HORDE = "B.each = (g) => { const r = g.room; if (r && r.enemies.filter((e) => e.alive).length + (r.incoming || []).length < 16 && B.tick % 3 === 0) g.queueReinforcement(); };";
 const BUILD = "[{id:'edge',tier:2},{id:'orbit',tier:2},{id:'crit',tier:2},{id:'satellites',tier:2},{id:'starfall',tier:2}]";
 // 見栄えの点数（区間の中の効果音の数から）
 const sc = {
   fight: (c) => c.kill * 5 + c.hit * 1 + c.heavyHit * 2 + c.perfect * 4 - c.hurt * 25,
   dodge: (c, first) => c.perfect * 12 + c.hit + c.kill * 3 - c.hurt * 30 + (first >= 40 && first <= 110 ? 40 : -40),
   art: (c, first) => c.kill * 6 + c.hit - c.hurt * 30 + (first >= 15 && first <= 75 ? 60 : -100),
-  mega: (c) => c.kill * 5 + c.hit * 0.3 + c.skill * 6 - c.hurt * 20,
+  mega: (c, first) => c.kill * 3 + c.hit * 0.2 + c.art * 60 - c.hurt * 20 + (first >= 0 && first <= 40 ? 150 : 0),
   easy: (c) => c.kill * 5 + c.hit - c.hurt * 40,
   boss: (c) => c.perfect * 10 + c.hit * 2 + c.heavyHit * 3 + c.tellBig * 3 - c.hurt * 25,
   white: (c) => c.perfect * 8 + c.tellBig * 6 + c.bossBell * 8 + c.heavySwing * 4 + c.hit - c.hurt * 10,
@@ -48,7 +47,7 @@ foot(3.6, `__prep({ level: 9, boons: ${BOONS} }); __room('elite'); g.reflex = tr
 foot(3.6, "__prep({ level: 9, boons: [{id:'edge',tier:2},{id:'crit',tier:2},{id:'orbit',tier:1}] }); __roomN('combat'); g.player.gauge = 100; B.opts = { artMin: 3 }; B.on = true; g.reflex = true;", { pick: 'art', zoom: 1.3, seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], telop: { text: '時を、止める。', style: 'big', at: 0.15, cps: 20 } });
 foot(1.3, `__prep({ level: 6, boons: ${BOONS} }); __room('combat', 2); g.openBoonPick(1, null); g.modal.t = 0;`, { bars: false, telop: { text: '100 種類を超える強化。', at: 0.1, cps: 22 } });
 foot(3.4, `__prep({ level: 11, boons: ${BUILD} }); __roomN('combat'); g.reflex = true; B.on = true;`, { pick: 'fight', zoom: 1.35, seeds: [11, 12, 13, 14, 15, 16], telop: { text: '100 種類を超える強化。\n組み合わせで、戦い方は無限に。', at: 0, cps: 22, pre: [...'100 種類を超える強化。'].length } });
-foot(5.0, `__prep({ level: 15, boons: ${ARTS}, upg: { atk: 12, hp: 12 } }); __roomN('combat'); g.reflex = true; B.on = true; ${HORDE}`, { pick: 'mega', zoom: 1.12, seeds: [21, 22, 23, 24, 25, 26], simSec: 20, telop: { text: '重ねた術が、夜を埋めつくす。', at: 0.6, cps: 14 } });
+foot(5.0, `__prep({ level: 20, boons: __allArts(), upg: { atk: 12, hp: 12 } }); __roomN('combat'); g.player.gauge = 100; g.reflex = true; B.on = true; ${HORDE}`, { pick: 'mega', zoom: 1, seeds: [21, 22, 23, 24, 25, 26], simSec: 20, telop: { text: '重ねた術が、夜を埋めつくす。', at: 0.6, cps: 14 } });
 // 第 3 幕：難易度
 foot(3.2, `__prep({ level: 4, diff: 'veryeasy', boons: [{id:'edge',tier:1}] }); __roomN('combat'); B.on = true;`, { pick: 'easy', zoom: 1.4, seeds: [1, 2, 3, 4, 5, 6], telop: { text: 'はじめての人も――', at: 0.3 }, act: 'difficulty' });
 foot(3.6, `__prep({ level: 12, diff: 'nightmare', boons: ${BOONS}, upg: { atk: 12, hp: 12 } }); __room('boss'); g.reflex = true; B.on = true;`, { pick: 'boss', zoom: 1.3, seeds: [1, 2, 3, 4, 5, 6], simSec: 24, telop: { text: '腕に覚えのある人も。', at: 0.3 } });
@@ -68,7 +67,13 @@ const PAGE = `(async () => {
   const { showInputs, installReflex } = await import('/tools/dev/trailer-bot.mjs');
   const { DIFFICULTY } = await import('/src/config.js');
   const { addWedge, learn } = await import('/src/meta.js');
-  const { readyFusions } = await import('/src/boons.js');
+  const { readyFusions, BOONS } = await import('/src/boons.js');
+  // 術の系統と伝説をすべて最大の Lv で（取得の上限なし）、斬撃波も。術（ボタンで撃つもの）は画面じゅうに雷が落ちる「雷霆」を使う
+  window.__allArts = () => {
+    const ids = Object.keys(BOONS).filter((id) => BOONS[id].school === 'arts' || BOONS[id].school === 'legend' || id === 'wave');
+    ids.sort((a, b) => (b === 'thunderstorm') - (a === 'thunderstorm'));
+    return ids.map((id) => ({ id, tier: BOONS[id].max || 1 }));
+  };
   const g = window.__game, input = window.__input, step = input.step.bind(input);
   window.__setManual(true);
   const B = window.B = { on: false, st: {}, opts: {}, each: null, tick: 0, log: [] };
@@ -86,6 +91,8 @@ const PAGE = `(async () => {
   // 鳴った効果音を記録する（見栄えの点数と、あとで合成する音に使う）
   const play = g.sfx.play.bind(g.sfx);
   g.sfx.play = (name) => { B.log.push([B.tick, name]); return play(name); };
+  const em = g.emit.bind(g);
+  g.emit = (type, data) => { if (type === 'art') B.log.push([B.tick, 'artX']); return em(type, data); };
   const dp = g.damagePlayer.bind(g);
   g.damagePlayer = (dmg, o = {}) => { if (g.player.state !== 'dead') B.log.push([B.tick, 'hurtX']); return dp(dmg, o); };
   window.__prep = (o = {}) => {
@@ -194,7 +201,7 @@ await page.goto('http://localhost:8080/index.html'); await page.waitForTimeout(1
 console.log('難易度:', await page.evaluate(PAGE));
 
 // 区間の中の効果音を数える
-const count = (log, a, z) => { const c = { kill: 0, hit: 0, heavyHit: 0, perfect: 0, hurt: 0, tellBig: 0, bossBell: 0, heavySwing: 0, timeStop: 0, skill: 0 }; let first = { perfect: -1, skill: -1 }; for (const [t, n] of log) if (t >= a && t < z) { const k = n === 'hurtX' ? 'hurt' : n; if (k in c) c[k]++; if (k in first && first[k] < 0) first[k] = t - a; } return [c, first]; };
+const count = (log, a, z) => { const c = { kill: 0, hit: 0, heavyHit: 0, perfect: 0, hurt: 0, tellBig: 0, bossBell: 0, heavySwing: 0, timeStop: 0, skill: 0, art: 0 }; let first = { perfect: -1, skill: -1, art: -1 }; for (const [t, n] of log) if (t >= a && t < z) { const k = n === 'hurtX' ? 'hurt' : n === 'artX' ? 'art' : n; if (k in c) c[k]++; if (k in first && first[k] < 0) first[k] = t - a; } return [c, first]; };
 // いちばん見栄えのよい（種, 始まり）を選ぶ
 async function choose(s) {
   const len = Math.round(s.dur * FPS * s.tpf), simN = Math.round(s.simSec * 60);
@@ -206,7 +213,7 @@ async function choose(s) {
     for (let a = 30; a + len <= simN; a += 6) {
       const [c, first] = count(log, a, a + len);
       const fn = sc[s.pick];
-      const score = s.pick === 'dodge' ? fn(c, first.perfect) : s.pick === 'art' ? fn(c, first.skill) : fn(c);
+      const score = s.pick === 'dodge' ? fn(c, first.perfect) : s.pick === 'mega' ? fn(c, first.art) : s.pick === 'art' ? fn(c, first.skill) : fn(c);
       cands.push({ seed, start: a, score, c });
     }
     if (s.pick === 'white') {
@@ -232,6 +239,7 @@ const isQuiet = (ch) => /[\s、。「」―？！…,.・]/.test(ch);
 const smooth = (x) => Math.max(0, Math.min(1, x));
 for (const [si, s] of S.entries()) {
   const nFrames = Math.round(s.dur * FPS);
+  if (STILLS && process.env.ONLY && !process.env.ONLY.split(',').includes(String(si))) { t0 += nFrames / FPS; continue; }
   if (s.act) acts[s.act] = t0;
   // 映像の用意
   let chosen = null;
@@ -269,12 +277,13 @@ for (const [si, s] of S.entries()) {
     if (s.flashIn) ov.flash = (s.flashIn * smooth(1 - t / 0.22)).toFixed(3);
     if (s.kind === 'foot') await page.evaluate(([ov, tpf, z, snap]) => { window.__step(tpf); window.__game.fx.banner = null; window.__zoom(z, snap); window.__ov(ov); }, [ov, s.tpf, s.zoom, i === 0]);
     else await page.evaluate((ov) => { window.__zoom(1); window.__ov(ov); }, ov);
-    if (!STILLS || i === Math.floor(nFrames * 0.6)) await page.screenshot({ path: STILLS ? `${TMP}still-${String(si).padStart(2, '0')}.jpg` : `${TMP}f/${String(frame).padStart(5, '0')}.jpg`, type: 'jpeg', quality: 90 });
+    const many = process.env.ONLY ? [0.1, 0.3, 0.5, 0.7, 0.9].map((r) => Math.floor(nFrames * r)) : [Math.floor(nFrames * 0.6)];
+    if (!STILLS || many.includes(i)) await page.screenshot({ path: STILLS ? `${TMP}still-${String(si).padStart(2, '0')}${process.env.ONLY ? '-' + i : ''}.jpg` : `${TMP}f/${String(frame).padStart(5, '0')}.jpg`, type: 'jpeg', quality: 90 });
     frame++;
   }
   if (s.kind === 'foot') {
     const log = await page.evaluate(() => window.B.log);
-    for (const [tk, name] of log) if (name !== 'hurtX') audio.push({ t: t0 + tk / (s.tpf * FPS), name });
+    for (const [tk, name] of log) if (name !== 'hurtX' && name !== 'artX') audio.push({ t: t0 + tk / (s.tpf * FPS), name });
   }
   t0 += nFrames / FPS;
 }
