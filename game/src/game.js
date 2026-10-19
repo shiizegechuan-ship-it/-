@@ -2550,9 +2550,9 @@ export class Game {
     if (this.titleSettings && this.titleSettings.lang) return LANGS.map((l) => ({ id: 'lang:' + l.id, label: l.name, right: l.id === LANG ? '◆' : '' }));
     return [
       { id: 'text', label: tr`文字の大きさ：${{ normal: tr('標準'), large: tr('大'), xlarge: tr('特大') }[this.settings.textSize || 'normal']}`, right: tr('決定で切り替え') },
-      { id: 'shake', label: tr`画面揺れ：${this.settings.shake ? tr('あり') : tr('なし')}`, right: tr('決定で切り替え') },
-      { id: 'flash', label: tr`光の点滅を抑える：${this.settings.calmFlash ? tr('あり') : tr('なし')}`, right: tr('決定で切り替え') },
-      { id: 'lang', label: `言語 / Language：${langName()}`, right: '' },
+      { id: 'shake', label: this.settings.shake ? tr('画面揺れ：あり') : tr('画面揺れ：なし'), right: tr('決定で切り替え') },
+      { id: 'flash', label: this.settings.calmFlash ? tr('光の点滅を抑える：あり') : tr('光の点滅を抑える：なし'), right: tr('決定で切り替え') },
+      { id: 'lang', label: /* i18n-skip */ `言語 / Language：${langName()}`, right: '' },
       { id: 'about', label: tr('ゲームについて'), right: '' },
     ];
   }
@@ -2953,8 +2953,8 @@ export class Game {
       { id: 'journal', label: tr('記録帳') },
       { id: 'companion', label: tr`お供：${COMPANIONS[this.meta.companion] ? COMPANIONS[this.meta.companion].name : tr('なし')}（替える）` },
       { id: 'diff', label: tr`難易度：${this.difficulty().name}（次の夜から）` },
-      { id: 'shake', label: tr`画面揺れ：${this.settings.shake ? tr('あり') : tr('なし')}` },
-      { id: 'flash', label: tr`光の点滅を抑える：${this.settings.calmFlash ? tr('あり') : tr('なし')}` },
+      { id: 'shake', label: this.settings.shake ? tr('画面揺れ：あり') : tr('画面揺れ：なし') },
+      { id: 'flash', label: this.settings.calmFlash ? tr('光の点滅を抑える：あり') : tr('光の点滅を抑える：なし') },
       { id: 'vol', label: tr`音量：${Math.round(this.settings.volume * 10)}` },
       { id: 'bgm', label: tr`音楽：${this.settings.bgm > 0 ? Math.round(this.settings.bgm * 10) : tr('なし')}` },
       { id: 'text', label: tr`文字の大きさ：${{ normal: tr('標準'), large: tr('大'), xlarge: tr('特大') }[this.settings.textSize || 'normal']}` },
@@ -2973,6 +2973,8 @@ export const BOON_COLORS = { haste: '#5fd18b', stasis: '#5aa9e6', echo: '#b67cf0
 // 大きな数字を読みやすく（1,234 / 12.3万）
 export function fmtNum(n) {
   n = Math.round(n);
+  // 大きな数：日本語・中国語・韓国語は「万」の単位、ほかの言語は K / M
+  if (n >= 100000 && !['ja', 'zh-Hans', 'zh-Hant', 'ko'].includes(LANG)) return n >= 1000000 ? (n / 1000000).toFixed(n >= 10000000 ? 0 : 1) + 'M' : Math.round(n / 1000) + 'K';
   if (n >= 100000) return (n / 10000).toFixed(n >= 1000000 ? 0 : 1) + tr('万');
   return n.toLocaleString('en-US');
 }

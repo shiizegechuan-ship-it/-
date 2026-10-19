@@ -261,7 +261,7 @@
    "boons.js:6",
    "boons.js:27",
    "meta.js:60",
-   "ui.js:822"
+   "ui.js:832"
   ],
   "code": "echo: { name: tr('残響'), color: '#b67cf0' },"
  },
@@ -284,7 +284,7 @@
   "where": [
    "boons.js:9",
    "meta.js:59",
-   "ui.js:822"
+   "ui.js:832"
   ],
   "code": "arts: { name: tr('術'), color: '#ff6ad5' },"
  },
@@ -2500,7 +2500,7 @@
   "key": "アーティファクト",
   "where": [
    "game.js:30",
-   "ui.js:475"
+   "ui.js:485"
   ],
   "code": "const REWARD_LABEL = { boon: tr('強化'), boon2: tr('強化×2'), heal: tr('回復'), hourglass: tr('砂時計：強化を鍛える'), gold: tr('金貨'), artifact: tr('アーティファクト') };"
  },
@@ -2552,7 +2552,7 @@
   "key": "夜明けへの道 {0}/{1}　次：{2}",
   "where": [
    "game.js:243",
-   "ui.js:855"
+   "ui.js:865"
   ],
   "code": "else this.fx.setBanner(tr`第 ${meta.loop} 夜`, pr.next ? tr`夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}` : tr`${endlessName(meta)}　深さLv${this.run.scale.level}`, '#f2c14e', 2.6);"
  },
@@ -2637,7 +2637,7 @@
   "key": "夜 {0}",
   "where": [
    "game.js:279",
-   "ui.js:194"
+   "ui.js:204"
   ],
   "code": "this.fx.setBanner(FLOOR_NAMES[fi], tr`夜 ${fmtClock(run.clock)}`, '#efe6d2', 1.8);"
  },
@@ -2944,7 +2944,7 @@
   "key": "与ダメージ +{0}%",
   "where": [
    "game.js:1049",
-   "ui.js:257"
+   "ui.js:267"
   ],
   "code": "if (c.n % 25 === 0) { this.fx.setBanner(`${c.n} HIT`, tr`与ダメージ +${Math.round(c.n * this.player.stats.comboPer * 100)}%`, '#ff9a3c', 0.9); this.sfx.play('charged'); }"
  },
@@ -4204,8 +4204,8 @@
   "key": "夜明け",
   "where": [
    "game.js:2317",
-   "ui.js:523",
-   "ui.js:603"
+   "ui.js:533",
+   "ui.js:613"
   ],
   "code": "this.fx.setBanner(tr('夜明け'), '', '#ffd38a', 3);"
  },
@@ -4397,9 +4397,9 @@
   "key": "なし",
   "where": [
    "game.js:2429",
-   "game.js:2553",
-   "game.js:2554",
-   "game.js:2954"
+   "game.js:2954",
+   "game.js:2959",
+   "ui.js:816"
   ],
   "code": "opts.push({ id: 'companion', label: tr`お供を替える（${COMPANIONS[m.companion] ? COMPANIONS[m.companion].name : tr('なし')}）` });"
  },
@@ -4409,7 +4409,7 @@
    "game.js:2430",
    "game.js:2953",
    "touch.js:128",
-   "ui.js:528"
+   "ui.js:538"
   ],
   "code": "opts.push({ id: 'journal', label: tr('記録帳') });"
  },
@@ -4514,36 +4514,42 @@
   "code": "{ id: 'text', label: tr`文字の大きさ：${{ normal: tr('標準'), large: tr('大'), xlarge: tr('特大') }[this.settings.textSize || 'normal']}`, right: tr('決定で切り替え') },"
  },
  {
-  "key": "画面揺れ：{0}",
+  "key": "画面揺れ：あり",
   "where": [
    "game.js:2553",
    "game.js:2956"
   ],
-  "code": "{ id: 'shake', label: tr`画面揺れ：${this.settings.shake ? tr('あり') : tr('なし')}`, right: tr('決定で切り替え') },"
+  "code": "{ id: 'shake', label: this.settings.shake ? tr('画面揺れ：あり') : tr('画面揺れ：なし'), right: tr('決定で切り替え') },"
  },
  {
-  "key": "あり",
+  "key": "画面揺れ：なし",
   "where": [
    "game.js:2553",
-   "game.js:2554",
-   "game.js:2956",
-   "game.js:2957"
+   "game.js:2956"
   ],
-  "code": "{ id: 'shake', label: tr`画面揺れ：${this.settings.shake ? tr('あり') : tr('なし')}`, right: tr('決定で切り替え') },"
+  "code": "{ id: 'shake', label: this.settings.shake ? tr('画面揺れ：あり') : tr('画面揺れ：なし'), right: tr('決定で切り替え') },"
  },
  {
-  "key": "光の点滅を抑える：{0}",
+  "key": "光の点滅を抑える：あり",
   "where": [
    "game.js:2554",
    "game.js:2957"
   ],
-  "code": "{ id: 'flash', label: tr`光の点滅を抑える：${this.settings.calmFlash ? tr('あり') : tr('なし')}`, right: tr('決定で切り替え') },"
+  "code": "{ id: 'flash', label: this.settings.calmFlash ? tr('光の点滅を抑える：あり') : tr('光の点滅を抑える：なし'), right: tr('決定で切り替え') },"
+ },
+ {
+  "key": "光の点滅を抑える：なし",
+  "where": [
+   "game.js:2554",
+   "game.js:2957"
+  ],
+  "code": "{ id: 'flash', label: this.settings.calmFlash ? tr('光の点滅を抑える：あり') : tr('光の点滅を抑える：なし'), right: tr('決定で切り替え') },"
  },
  {
   "key": "ゲームについて",
   "where": [
    "game.js:2556",
-   "ui.js:665"
+   "ui.js:675"
   ],
   "code": "{ id: 'about', label: tr('ゲームについて'), right: '' },"
  },
@@ -4627,306 +4633,306 @@
  {
   "key": "万",
   "where": [
-   "game.js:2976"
+   "game.js:2978"
   ],
   "code": "if (n >= 100000) return (n / 10000).toFixed(n >= 1000000 ? 0 : 1) + tr('万');"
  },
  {
   "key": "夜明けの楔",
   "where": [
-   "game.js:2982",
+   "game.js:2984",
    "main.js:25",
    "songs.js:90",
-   "ui.js:591"
+   "ui.js:601"
   ],
   "code": "true: { name: tr('夜明けの楔'), tone: 1, pages: ["
  },
  {
   "key": "刻守――師は、剣を下ろした。",
   "where": [
-   "game.js:2983"
+   "game.js:2985"
   ],
   "code": "[tr('刻守――師は、剣を下ろした。'), tr('鐘楼の窓の外が、白みはじめている。')],"
  },
  {
   "key": "鐘楼の窓の外が、白みはじめている。",
   "where": [
-   "game.js:2983"
+   "game.js:2985"
   ],
   "code": "[tr('刻守――師は、剣を下ろした。'), tr('鐘楼の窓の外が、白みはじめている。')],"
  },
  {
   "key": "師の髪は、すっかり白くなっていた。",
   "where": [
-   "game.js:2984"
+   "game.js:2986"
   ],
   "code": "[tr('師の髪は、すっかり白くなっていた。'), tr('それでも胸の時計は、まだ静かに動いている。')],"
  },
  {
   "key": "それでも胸の時計は、まだ静かに動いている。",
   "where": [
-   "game.js:2984"
+   "game.js:2986"
   ],
   "code": "[tr('師の髪は、すっかり白くなっていた。'), tr('それでも胸の時計は、まだ静かに動いている。')],"
  },
  {
   "key": "「リラは覚えている、か」",
   "where": [
-   "game.js:2985"
+   "game.js:2987"
   ],
   "code": "[tr('「リラは覚えている、か」'), tr('「怖かったのは朝ではない。あの子を見送ることだったのだな」')],"
  },
  {
   "key": "「怖かったのは朝ではない。あの子を見送ることだったのだな」",
   "where": [
-   "game.js:2985"
+   "game.js:2987"
   ],
   "code": "[tr('「リラは覚えている、か」'), tr('「怖かったのは朝ではない。あの子を見送ることだったのだな」')],"
  },
  {
   "key": "鐘は鳴らなかった。",
   "where": [
-   "game.js:2986",
-   "game.js:2993"
+   "game.js:2988",
+   "game.js:2995"
   ],
   "code": "[tr('鐘は鳴らなかった。'), tr('夜は戻らず、塔に、はじめての朝が来た。')],"
  },
  {
   "key": "夜は戻らず、塔に、はじめての朝が来た。",
   "where": [
-   "game.js:2986"
+   "game.js:2988"
   ],
   "code": "[tr('鐘は鳴らなかった。'), tr('夜は戻らず、塔に、はじめての朝が来た。')],"
  },
  {
   "key": "駅のホームで、少女が手を振っている。見送るのは、父だ。",
   "where": [
-   "game.js:2987"
+   "game.js:2989"
   ],
   "code": "[tr('駅のホームで、少女が手を振っている。見送るのは、父だ。'), tr('――いってきます、お父さん。')],"
  },
  {
   "key": "――いってきます、お父さん。",
   "where": [
-   "game.js:2987"
+   "game.js:2989"
   ],
   "code": "[tr('駅のホームで、少女が手を振っている。見送るのは、父だ。'), tr('――いってきます、お父さん。')],"
  },
  {
   "key": "結末「夜明けの楔」",
   "where": [
-   "game.js:2988"
+   "game.js:2990"
   ],
   "code": "[tr('結末「夜明けの楔」'), tr('遊んでくれてありがとう。')],"
  },
  {
   "key": "遊んでくれてありがとう。",
   "where": [
-   "game.js:2988"
+   "game.js:2990"
   ],
   "code": "[tr('結末「夜明けの楔」'), tr('遊んでくれてありがとう。')],"
  },
  {
   "key": "師の眠り",
   "where": [
-   "game.js:2990"
+   "game.js:2992"
   ],
   "code": "sleep: { name: tr('師の眠り'), tone: 0.6, pages: ["
  },
  {
   "key": "刻守――師は、膝をついた。",
   "where": [
-   "game.js:2991"
+   "game.js:2993"
   ],
   "code": "[tr('刻守――師は、膝をついた。'), tr('鐘を鳴らす力は、もう残っていなかった。')],"
  },
  {
   "key": "鐘を鳴らす力は、もう残っていなかった。",
   "where": [
-   "game.js:2991"
+   "game.js:2993"
   ],
   "code": "[tr('刻守――師は、膝をついた。'), tr('鐘を鳴らす力は、もう残っていなかった。')],"
  },
  {
   "key": "「わかっていたのだ。夜を買っても、あの子は朝を待っている」",
   "where": [
-   "game.js:2992"
+   "game.js:2994"
   ],
   "code": "[tr('「わかっていたのだ。夜を買っても、あの子は朝を待っている」'), tr('師はそう言って、静かに目を閉じた。')],"
  },
  {
   "key": "師はそう言って、静かに目を閉じた。",
   "where": [
-   "game.js:2992"
+   "game.js:2994"
   ],
   "code": "[tr('「わかっていたのだ。夜を買っても、あの子は朝を待っている」'), tr('師はそう言って、静かに目を閉じた。')],"
  },
  {
   "key": "塔に朝が来た。師は、深い眠りについたまま。",
   "where": [
-   "game.js:2993"
+   "game.js:2995"
   ],
   "code": "[tr('鐘は鳴らなかった。'), tr('塔に朝が来た。師は、深い眠りについたまま。')],"
  },
  {
   "key": "駅のホームで、少女がひとり、塔を見上げている。",
   "where": [
-   "game.js:2994"
+   "game.js:2996"
   ],
   "code": "[tr('駅のホームで、少女がひとり、塔を見上げている。'), tr('――いってきます。お父さん、起きたら手紙を書くね。')],"
  },
  {
   "key": "――いってきます。お父さん、起きたら手紙を書くね。",
   "where": [
-   "game.js:2994"
+   "game.js:2996"
   ],
   "code": "[tr('駅のホームで、少女がひとり、塔を見上げている。'), tr('――いってきます。お父さん、起きたら手紙を書くね。')],"
  },
  {
   "key": "結末「師の眠り」",
   "where": [
-   "game.js:2995"
+   "game.js:2997"
   ],
   "code": "[tr('結末「師の眠り」'), tr('リラの言葉を師に届けていたら、別の朝があったかもしれない。')],"
  },
  {
   "key": "リラの言葉を師に届けていたら、別の朝があったかもしれない。",
   "where": [
-   "game.js:2995"
+   "game.js:2997"
   ],
   "code": "[tr('結末「師の眠り」'), tr('リラの言葉を師に届けていたら、別の朝があったかもしれない。')],"
  },
  {
   "key": "明けない夜",
   "where": [
-   "game.js:2997"
+   "game.js:2999"
   ],
   "code": "night: { name: tr('明けない夜'), tone: 0.15, pages: ["
  },
  {
   "key": "刻守――師は、崩れ落ちた。",
   "where": [
-   "game.js:2998",
-   "game.js:3004"
+   "game.js:3000",
+   "game.js:3006"
   ],
   "code": "[tr('刻守――師は、崩れ落ちた。'), tr('掠れた鐘は、もう鳴らなかった。')],"
  },
  {
   "key": "掠れた鐘は、もう鳴らなかった。",
   "where": [
-   "game.js:2998"
+   "game.js:3000"
   ],
   "code": "[tr('刻守――師は、崩れ落ちた。'), tr('掠れた鐘は、もう鳴らなかった。')],"
  },
  {
   "key": "けれど、窓の外は暗いままだった。",
   "where": [
-   "game.js:2999"
+   "game.js:3001"
   ],
   "code": "[tr('けれど、窓の外は暗いままだった。'), tr('歯止めは軋みながら回りつづけ、止まった夜を手放さない。')],"
  },
  {
   "key": "歯止めは軋みながら回りつづけ、止まった夜を手放さない。",
   "where": [
-   "game.js:2999"
+   "game.js:3001"
   ],
   "code": "[tr('けれど、窓の外は暗いままだった。'), tr('歯止めは軋みながら回りつづけ、止まった夜を手放さない。')],"
  },
  {
   "key": "師は何も言わず、塔の闇に消えた。",
   "where": [
-   "game.js:3000"
+   "game.js:3002"
   ],
   "code": "[tr('師は何も言わず、塔の闇に消えた。'), tr('町の灯りが、またひとつ暗くなる。')],"
  },
  {
   "key": "町の灯りが、またひとつ暗くなる。",
   "where": [
-   "game.js:3000"
+   "game.js:3002"
   ],
   "code": "[tr('師は何も言わず、塔の闇に消えた。'), tr('町の灯りが、またひとつ暗くなる。')],"
  },
  {
   "key": "結末「明けない夜」",
   "where": [
-   "game.js:3001"
+   "game.js:3003"
   ],
   "code": "[tr('結末「明けない夜」'), tr('夜は、まだ続いている。')],"
  },
  {
   "key": "夜は、まだ続いている。",
   "where": [
-   "game.js:3001"
+   "game.js:3003"
   ],
   "code": "[tr('結末「明けない夜」'), tr('夜は、まだ続いている。')],"
  },
  {
   "key": "鐘の沈黙",
   "where": [
-   "game.js:3003"
+   "game.js:3005"
   ],
   "code": "silence: { name: tr('鐘の沈黙'), tone: 0.35, pages: ["
  },
  {
   "key": "鐘楼の鐘に、ひびが走る。",
   "where": [
-   "game.js:3004"
+   "game.js:3006"
   ],
   "code": "[tr('刻守――師は、崩れ落ちた。'), tr('鐘楼の鐘に、ひびが走る。')],"
  },
  {
   "key": "あなたは鐘を打ち砕いた。",
   "where": [
-   "game.js:3005"
+   "game.js:3007"
   ],
   "code": "[tr('あなたは鐘を打ち砕いた。'), tr('師がなぜ夜を戻していたのか、分からないまま。')],"
  },
  {
   "key": "師がなぜ夜を戻していたのか、分からないまま。",
   "where": [
-   "game.js:3005"
+   "game.js:3007"
   ],
   "code": "[tr('あなたは鐘を打ち砕いた。'), tr('師がなぜ夜を戻していたのか、分からないまま。')],"
  },
  {
   "key": "夜は戻らなかった。",
   "where": [
-   "game.js:3006"
+   "game.js:3008"
   ],
   "code": "[tr('夜は戻らなかった。'), tr('塔に朝が来た。けれど、師は二度と目を覚まさなかった。')],"
  },
  {
   "key": "塔に朝が来た。けれど、師は二度と目を覚まさなかった。",
   "where": [
-   "game.js:3006"
+   "game.js:3008"
   ],
   "code": "[tr('夜は戻らなかった。'), tr('塔に朝が来た。けれど、師は二度と目を覚まさなかった。')],"
  },
  {
   "key": "朝の汽車が出ていく。",
   "where": [
-   "game.js:3007"
+   "game.js:3009"
   ],
   "code": "[tr('朝の汽車が出ていく。'), tr('窓辺の少女は、誰かを探すように塔を見ていた。')],"
  },
  {
   "key": "窓辺の少女は、誰かを探すように塔を見ていた。",
   "where": [
-   "game.js:3007"
+   "game.js:3009"
   ],
   "code": "[tr('朝の汽車が出ていく。'), tr('窓辺の少女は、誰かを探すように塔を見ていた。')],"
  },
  {
   "key": "結末「鐘の沈黙」",
   "where": [
-   "game.js:3008"
+   "game.js:3010"
   ],
   "code": "[tr('結末「鐘の沈黙」'), tr('師の日誌や、市場の少女のことを調べると、違う朝があるかもしれない。')],"
  },
  {
   "key": "師の日誌や、市場の少女のことを調べると、違う朝があるかもしれない。",
   "where": [
-   "game.js:3008"
+   "game.js:3010"
   ],
   "code": "[tr('結末「鐘の沈黙」'), tr('師の日誌や、市場の少女のことを調べると、違う朝があるかもしれない。')],"
  },
@@ -5442,8 +5448,8 @@
   "where": [
    "meta.js:52",
    "songs.js:73",
-   "ui.js:270",
-   "ui.js:553"
+   "ui.js:280",
+   "ui.js:563"
   ],
   "code": "tell_boss: { cat: tr('敵'), title: tr('刻守'), text: () => tr('懐中時計を掲げたら時が止まる。時が戻る瞬間の刃に合わせて回避すれば、刹那が取れる。') },"
  },
@@ -5465,7 +5471,7 @@
   "key": "連撃",
   "where": [
    "meta.js:56",
-   "ui.js:822"
+   "ui.js:832"
   ],
   "code": "combo: { name: tr('歯車の外殻'), habit: tr('連撃'), resist: { combo: 0.3 }, desc: tr('歯車の外殻をまとい、連撃のダメージを 70% 弾く。3発続けて受けると跳び退いて斬り返す'), weak: tr('重撃か術で外殻を割れ（割れると大きくよろめき、しばらく外殻が消える）') },"
  },
@@ -5494,7 +5500,7 @@
   "key": "重撃",
   "where": [
    "meta.js:57",
-   "ui.js:822"
+   "ui.js:832"
   ],
   "code": "heavy: { name: tr('受け流しの構え'), habit: tr('重撃'), resist: { heavy: 0.4 }, desc: tr('重撃のダメージを 60% 軽減。溜めを見ると青い構えで受け流し、斬り返す'), weak: tr('青い構えに通常攻撃を当てると構えが崩れ、長くよろめく') },"
  },
@@ -6045,7 +6051,7 @@
   "key": "崩し方：{0}",
   "where": [
    "meta.js:322",
-   "ui.js:273"
+   "ui.js:283"
   ],
   "code": "report.changed.push({ text: tr`刻守の対策：${c.name}（あなたの${c.habit} ${share}）`, tone: 'risk', sub: tr`崩し方：${c.weak}` });"
  },
@@ -6540,13 +6546,6 @@
   "code": "name: tr('静けさの間'), bpm: 96, style: 'arp', echo: 4,"
  },
  {
-  "key": "\n#touch { position: fixed; inset: 0; pointer-events: none; z-index: 5; }\n#touch > * { pointer-events: auto; }\n#touch .t-hint { pointer-events: none; }\n#touch { --t-bg: rgba(20,16,28,0.55); --t-line: rgba(242,193,78,0.55); --t-ink: #efe6d2; --t-on: rgba(242,193,78,0.45);\n  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; font-family: 'DotGothic16', 'Hiragino Sans', sans-serif; }\n#touch .t-pad { position: absolute; width: 132px; height: 132px; border-radius: 50%; background: var(--t-bg); border: 1.5px solid var(--t-line); touch-action: none; }\n#touch .t-radar { position: absolute; left: -12px; top: -12px; width: 156px; height: 156px; pointer-events: none; background: transparent !important; }\n#touch .t-knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(239,230,210,0.35); pointer-events: none; }\n#touch .t-btn { position: absolute; border-radius: 50%; background: var(--t-bg); border: 2px solid var(--t-line); color: var(--t-ink);\n  display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; touch-action: none; }\n#touch .t-btn.on, #touch .t-pad.on { background: var(--t-on); }\n#touch .t-btn.cd { filter: brightness(0.5) saturate(0.4); } /* 回避がまだ使えない間は暗く */\n#touch .t-btn small { display: block; font-size: 9px; font-weight: 400; opacity: 0.75; }\n#touch .t-btn span { text-align: center; line-height: 1.1; }\n#touch .t-top { position: absolute; border-radius: 10px; width: 56px; height: 32px; font-size: 11px; }\n#touch .t-hint { position: absolute; left: 0; right: 0; text-align: center; font-size: 11px; color: rgba(239,230,210,0.6); pointer-events: none; }\n",
-  "where": [
-   "touch.js:4"
-  ],
-  "code": "const CSS = tr`\n#touch { position: fixed; inset: 0; pointer-events: none; z-index: 5; }\n#touch > * { pointer-events: auto; }\n#touch .t-hint { pointer-events: none; }\n#touch { --t-bg: rgba(20,16,28,0.55); --t-line: rgba(242,193,78,0.55); --t-ink: #efe6d2; --t-on: rgba(242,193,78,0.45);\n  user-select:"
- },
- {
   "key": "攻撃",
   "where": [
    "touch.js:24"
@@ -6585,7 +6584,7 @@
   "key": "時歪",
   "where": [
    "touch.js:27",
-   "ui.js:171"
+   "ui.js:181"
   ],
   "code": "{ act: 'skill', label: tr('時歪'), size: 50, right: 30, bottom: 116 },"
  },
@@ -6593,7 +6592,7 @@
   "key": "中断",
   "where": [
    "touch.js:127",
-   "ui.js:514"
+   "ui.js:524"
   ],
   "code": "const pauseBtn = addBtn({ act: 'pause', label: tr('中断') }, 't-btn t-top');"
  },
@@ -6607,1364 +6606,1364 @@
  {
   "key": "選べるものがない",
   "where": [
-   "ui.js:130"
+   "ui.js:140"
   ],
   "code": "if (!n) text(ctx, tr('選べるものがない'), x + 40, LB.top, { size: 18, color: C.muted });"
  },
  {
   "key": "　",
   "where": [
-   "ui.js:142",
-   "ui.js:195",
-   "ui.js:342",
-   "ui.js:374"
+   "ui.js:152",
+   "ui.js:205",
+   "ui.js:352",
+   "ui.js:384"
   ],
   "code": "text(ctx, (on ? '▶ ' : tr('　')) + it.label, x + 34, yy, { size: 19, color: it.rainbow ? `hsl(${((game.time || 0) * 120) % 360},100%,78%)` : on ? '#ffffff' : (it.color || '#d8d0c4') });"
  },
  {
   "key": "項目をタップで選択、もう一度タップで決定／枠の外で戻る",
   "where": [
-   "ui.js:152"
+   "ui.js:162"
   ],
   "code": "text(ctx, hint || (game.touch ? tr('項目をタップで選択、もう一度タップで決定／枠の外で戻る') : tr('↑↓ 選ぶ　Z 決定　C 戻る')), x + w / 2, y + h - 12, { size: 13, align: 'center', color: C.muted });"
  },
  {
   "key": "↑↓ 選ぶ　Z 決定　C 戻る",
   "where": [
-   "ui.js:152"
+   "ui.js:162"
   ],
   "code": "text(ctx, hint || (game.touch ? tr('項目をタップで選択、もう一度タップで決定／枠の外で戻る') : tr('↑↓ 選ぶ　Z 決定　C 戻る')), x + w / 2, y + h - 12, { size: 13, align: 'center', color: C.muted });"
  },
  {
   "key": "仲間技 V！",
   "where": [
-   "ui.js:177"
+   "ui.js:187"
   ],
   "code": "text(ctx, full ? tr('仲間技 V！') : tr('仲間技（満タンで）'), 22 + hpW + 74, 47, { size: 10, bold: full, color: full ? '#ffe6a0' : C.muted });"
  },
  {
   "key": "仲間技（満タンで）",
   "where": [
-   "ui.js:177"
+   "ui.js:187"
   ],
   "code": "text(ctx, full ? tr('仲間技 V！') : tr('仲間技（満タンで）'), 22 + hpW + 74, 47, { size: 10, bold: full, color: full ? '#ffe6a0' : C.muted });"
  },
  {
   "key": "稀少まで あと{0}",
   "where": [
-   "ui.js:189"
+   "ui.js:199"
   ],
   "code": "text(ctx, tr`稀少まで あと${toRare}`, 22 + hpW + 4, 69, { size: 10, color: '#ffd84a' });"
  },
  {
   "key": "{0}第{1}夜　{2}　深さLv{3}",
   "where": [
-   "ui.js:195"
+   "ui.js:205"
   ],
   "code": "text(ctx, tr`${run.diff ? run.diff.name + tr('　') : ''}第${meta.loop}夜　${FLOOR_NAMES[fi]}　深さLv${run.scale ? run.scale.level : 0}` + (threat ? tr`　脅威${threat}` : ''), VIEW_W / 2, 42, { size: 11, align: 'center', color: threat ? '#ff9a7a' : C.muted });"
  },
  {
   "key": "　脅威{0}",
   "where": [
-   "ui.js:195"
+   "ui.js:205"
   ],
   "code": "text(ctx, tr`${run.diff ? run.diff.name + tr('　') : ''}第${meta.loop}夜　${FLOOR_NAMES[fi]}　深さLv${run.scale ? run.scale.level : 0}` + (threat ? tr`　脅威${threat}` : ''), VIEW_W / 2, 42, { size: 11, align: 'center', color: threat ? '#ff9a7a' : C.muted });"
  },
  {
   "key": "人",
   "where": [
-   "ui.js:217"
+   "ui.js:227"
   ],
   "code": "wedgeRow(tr('人'), meta.wedges.filter((w) => w.target !== 'boon').length, meta.personSlots || 2, 10, '#ffb070');"
  },
  {
   "key": "技",
   "where": [
-   "ui.js:218"
+   "ui.js:228"
   ],
   "code": "wedgeRow(tr('技'), meta.wedges.filter((w) => w.target === 'boon').length, meta.slots, 28, C.gold);"
  },
  {
   "key": "共鳴：{0}",
   "where": [
-   "ui.js:231"
+   "ui.js:241"
   ],
   "code": "if (res.length) text(ctx, tr`共鳴：${res.join(tr('・'))}`, 18, VIEW_H - 22 - (Math.ceil(p.boons.length / 8)) * 20, { size: 10, color: '#f2c14e' });"
  },
  {
   "key": "◆ 欠片 {0}",
   "where": [
-   "ui.js:237"
+   "ui.js:247"
   ],
   "code": "text(ctx, tr`◆ 欠片 ${meta.shards + (run.shards || 0)}`, 22, 98, { size: 12, color: '#9fd0ff' });"
  },
  {
   "key": "血の秒針 +{0}%",
   "where": [
-   "ui.js:238"
+   "ui.js:248"
   ],
   "code": "if (run.killStacks > 0) text(ctx, tr`血の秒針 +${Math.round(run.killStacks * 100)}%`, 120, 98, { size: 11, color: '#ff9a3c' });"
  },
  {
   "key": "● 金貨 {0}",
   "where": [
-   "ui.js:241",
-   "ui.js:423"
+   "ui.js:251",
+   "ui.js:433"
   ],
   "code": "text(ctx, tr`● 金貨 ${run.gold || 0}` + (run.keys ? tr`　黄金の鍵 ×${run.keys}` : ''), 22, 116, { size: 12 + Math.round(gp * 4), color: gp > 0 ? '#fff6c0' : '#ffd84a' });"
  },
  {
   "key": "　黄金の鍵 ×{0}",
   "where": [
-   "ui.js:241"
+   "ui.js:251"
   ],
   "code": "text(ctx, tr`● 金貨 ${run.gold || 0}` + (run.keys ? tr`　黄金の鍵 ×${run.keys}` : ''), 22, 116, { size: 12 + Math.round(gp * 4), color: gp > 0 ? '#fff6c0' : '#ffd84a' });"
  },
  {
   "key": "✦ {0}　{1}{2}",
   "where": [
-   "ui.js:244"
+   "ui.js:254"
   ],
   "code": "comps.forEach((comp, i) => { const d = COMPANIONS[comp.id]; text(ctx, tr`✦ ${d.forms[comp.stage - 1]}　${'★'.repeat(comp.stage)}${'☆'.repeat(3 - comp.stage)}` + (comp.stage < 3 ? tr`（Lv${[0, 5, 10][comp.stage]}で進化）` : ''), 22, 134 + i * 15, { size: 11, color: d.color }); });"
  },
  {
   "key": "（Lv{0}で進化）",
   "where": [
-   "ui.js:244"
+   "ui.js:254"
   ],
   "code": "comps.forEach((comp, i) => { const d = COMPANIONS[comp.id]; text(ctx, tr`✦ ${d.forms[comp.stage - 1]}　${'★'.repeat(comp.stage)}${'☆'.repeat(3 - comp.stage)}` + (comp.stage < 3 ? tr`（Lv${[0, 5, 10][comp.stage]}で進化）` : ''), 22, 134 + i * 15, { size: 11, color: d.color }); });"
  },
  {
   "key": "◆ アーティファクト {0} 個",
   "where": [
-   "ui.js:247"
+   "ui.js:257"
   ],
   "code": "if (arts.length > 4) text(ctx, tr`◆ アーティファクト ${arts.length} 個`, 22, ay, { size: 11, color: ARTIFACT_COLOR.normal });"
  },
  {
   "key": "グレンを守れ ― 近づいて錆兵を引きつけろ",
   "where": [
-   "ui.js:264"
+   "ui.js:274"
   ],
   "code": "text(ctx, tr('グレンを守れ ― 近づいて錆兵を引きつけろ'), VIEW_W / 2, 78, { size: 13, align: 'center', color: '#ff8a6a', bold: true });"
  },
  {
   "key": "白き刻守 ― 第 2 形態",
   "where": [
-   "ui.js:270"
+   "ui.js:280"
   ],
   "code": "text(ctx, b.finalForm ? tr('白き刻守 ― 第 2 形態') : b.trueDuel ? tr('刻守 ― 夜明けの決闘') : tr('刻守'), x, y - 6, { size: 13, bold: true, color: b.trueDuel ? '#ffd38a' : '#efe6d2', font: SERIF });"
  },
  {
   "key": "刻守 ― 夜明けの決闘",
   "where": [
-   "ui.js:270"
+   "ui.js:280"
   ],
   "code": "text(ctx, b.finalForm ? tr('白き刻守 ― 第 2 形態') : b.trueDuel ? tr('刻守 ― 夜明けの決闘') : tr('刻守'), x, y - 6, { size: 13, bold: true, color: b.trueDuel ? '#ffd38a' : '#efe6d2', font: SERIF });"
  },
  {
   "key": "対策：{0}",
   "where": [
-   "ui.js:272",
-   "ui.js:841"
+   "ui.js:282",
+   "ui.js:851"
   ],
   "code": "text(ctx, tr`対策：${COUNTERS[b.counter].name}`, x + w, y - 6, { size: 11, align: 'right', color: '#ff9a7a' });"
  },
  {
   "key": "外殻",
   "where": [
-   "ui.js:278"
+   "ui.js:288"
   ],
   "code": "text(ctx, b.shell > 0 ? tr('外殻') : tr`外殻なし ${Math.ceil(b.shellDown)}秒`, sx - 6, y - 23, { size: 10, align: 'right', color: '#c9a052' });"
  },
  {
   "key": "外殻なし {0}秒",
   "where": [
-   "ui.js:278"
+   "ui.js:288"
   ],
   "code": "text(ctx, b.shell > 0 ? tr('外殻') : tr`外殻なし ${Math.ceil(b.shellDown)}秒`, sx - 6, y - 23, { size: 10, align: 'right', color: '#c9a052' });"
  },
  {
   "key": "時止め封印",
   "where": [
-   "ui.js:281"
+   "ui.js:291"
   ],
   "code": "if (b.brake) text(ctx, b.trueDuel ? '' : tr('時止め封印'), x + w - (b.counter ? 150 : 0), y - 6, { size: 10, align: 'right', color: C.gold });"
  },
  {
   "key": "楔を打っている……（回避・ジャンプで中断）",
   "where": [
-   "ui.js:287"
+   "ui.js:297"
   ],
   "code": "if (p.state === 'channel') text(ctx, tr('楔を打っている……（回避・ジャンプで中断）'), VIEW_W / 2, VIEW_H - 70, { size: 12, align: 'center', color: C.gold });"
  },
  {
   "key": "タップで閉じる",
   "where": [
-   "ui.js:344",
-   "ui.js:769"
+   "ui.js:354",
+   "ui.js:779"
   ],
   "code": "if (!choices.length) text(ctx, game.touch ? (last ? tr('タップで閉じる') : tr('タップで次へ')) : (last ? tr('Z：閉じる') : tr('Z：次へ')), x + w - 14, top + h - 10, { size: 10, align: 'right', color: C.muted });"
  },
  {
   "key": "タップで次へ",
   "where": [
-   "ui.js:344"
+   "ui.js:354"
   ],
   "code": "if (!choices.length) text(ctx, game.touch ? (last ? tr('タップで閉じる') : tr('タップで次へ')) : (last ? tr('Z：閉じる') : tr('Z：次へ')), x + w - 14, top + h - 10, { size: 10, align: 'right', color: C.muted });"
  },
  {
   "key": "Z：閉じる",
   "where": [
-   "ui.js:344"
+   "ui.js:354"
   ],
   "code": "if (!choices.length) text(ctx, game.touch ? (last ? tr('タップで閉じる') : tr('タップで次へ')) : (last ? tr('Z：閉じる') : tr('Z：次へ')), x + w - 14, top + h - 10, { size: 10, align: 'right', color: C.muted });"
  },
  {
   "key": "Z：次へ",
   "where": [
-   "ui.js:344"
+   "ui.js:354"
   ],
   "code": "if (!choices.length) text(ctx, game.touch ? (last ? tr('タップで閉じる') : tr('タップで次へ')) : (last ? tr('Z：閉じる') : tr('Z：次へ')), x + w - 14, top + h - 10, { size: 10, align: 'right', color: C.muted });"
  },
  {
   "key": "レベル {0} ― 稀少の強化を選ぶ",
   "where": [
-   "ui.js:349"
+   "ui.js:359"
   ],
   "code": "text(ctx, m.rare ? tr`レベル ${game.run.level} ― 稀少の強化を選ぶ` : m.school ? tr('書庫の祭壇 ―「停滞」の強化') : tr('強化を選ぶ'), VIEW_W / 2, 92, { size: 22, align: 'center', bold: true, font: SERIF, color: C.gold });"
  },
  {
   "key": "書庫の祭壇 ―「停滞」の強化",
   "where": [
-   "ui.js:349"
+   "ui.js:359"
   ],
   "code": "text(ctx, m.rare ? tr`レベル ${game.run.level} ― 稀少の強化を選ぶ` : m.school ? tr('書庫の祭壇 ―「停滞」の強化') : tr('強化を選ぶ'), VIEW_W / 2, 92, { size: 22, align: 'center', bold: true, font: SERIF, color: C.gold });"
  },
  {
   "key": "強化を選ぶ",
   "where": [
-   "ui.js:349"
+   "ui.js:359"
   ],
   "code": "text(ctx, m.rare ? tr`レベル ${game.run.level} ― 稀少の強化を選ぶ` : m.school ? tr('書庫の祭壇 ―「停滞」の強化') : tr('強化を選ぶ'), VIEW_W / 2, 92, { size: 22, align: 'center', bold: true, font: SERIF, color: C.gold });"
  },
  {
   "key": "あと {0} つ",
   "where": [
-   "ui.js:350"
+   "ui.js:360"
   ],
   "code": "if (m.count > 1) text(ctx, tr`あと ${m.count} つ`, VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });"
  },
  {
   "key": "持ち替え：{0} を外す",
   "where": [
-   "ui.js:370"
+   "ui.js:380"
   ],
   "code": "if (curArt) text(ctx, tr`持ち替え：${BOONS[curArt.id].name} を外す`, x + 16, y + ch - 32, { size: 11, color: '#ff8ae0' });"
  },
  {
   "key": "◆ 合成素材",
   "where": [
-   "ui.js:375",
-   "ui.js:377"
+   "ui.js:385",
+   "ui.js:387"
   ],
   "code": "ctx.font = `${fontSize(10)}px ${FONT}`; const fx1 = fx0 + ctx.measureText(tr('◆ 合成素材')).width;"
  },
  {
   "key": "合成 ▶ {0}",
   "where": [
-   "ui.js:396"
+   "ui.js:406"
   ],
   "code": "text(ctx, tr`合成 ▶ ${BOONS[f.to].name}`, x + 18, by + lh(13), { size: 12, bold: true, color: f.color, maxW: cw - 32 });"
  },
  {
   "key": "＋ {0}",
   "where": [
-   "ui.js:398"
+   "ui.js:408"
   ],
   "code": "text(ctx, tr`＋ ${BOONS[f.other].name}`, x + 18, by + lh(27), { size: 11, color: '#e8e0d0' });"
  },
  {
   "key": "手持ち Lv{0} ✓",
   "where": [
-   "ui.js:399"
+   "ui.js:409"
   ],
   "code": "text(ctx, ready ? tr`手持ち Lv${f.otherLv} ✓` : have ? tr`手持ち Lv${f.otherLv}（Lv2 で）` : tr('未所持'), x + cw - 14, by + lh(27), { size: 10, align: 'right', color: ready ? '#7dff9a' : have ? '#ffe14a' : C.muted });"
  },
  {
   "key": "手持ち Lv{0}（Lv2 で）",
   "where": [
-   "ui.js:399"
+   "ui.js:409"
   ],
   "code": "text(ctx, ready ? tr`手持ち Lv${f.otherLv} ✓` : have ? tr`手持ち Lv${f.otherLv}（Lv2 で）` : tr('未所持'), x + cw - 14, by + lh(27), { size: 10, align: 'right', color: ready ? '#7dff9a' : have ? '#ffe14a' : C.muted });"
  },
  {
   "key": "未所持",
   "where": [
-   "ui.js:399"
+   "ui.js:409"
   ],
   "code": "text(ctx, ready ? tr`手持ち Lv${f.otherLv} ✓` : have ? tr`手持ち Lv${f.otherLv}（Lv2 で）` : tr('未所持'), x + cw - 14, by + lh(27), { size: 10, align: 'right', color: ready ? '#7dff9a' : have ? '#ffe14a' : C.muted });"
  },
  {
   "key": "同じ系統をもう1つで共鳴：{0}",
   "where": [
-   "ui.js:401"
+   "ui.js:411"
   ],
   "code": "if (!fus.length && !hints.length && RESONANCE[def.school] && !schoolCounts(p.boons)[def.school]) text(ctx, tr`同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted, maxW: cw - 28 });"
  },
  {
   "key": "カードをタップで選択、もう一度タップで決定",
   "where": [
-   "ui.js:404",
-   "ui.js:480"
+   "ui.js:414",
+   "ui.js:490"
   ],
   "code": "text(ctx, game.touch ? tr('カードをタップで選択、もう一度タップで決定') : tr('← → 選ぶ　Z 決定'), VIEW_W / 2, 428, { size: 12, align: 'center', color: C.muted });"
  },
  {
   "key": "← → 選ぶ　Z 決定",
   "where": [
-   "ui.js:404",
-   "ui.js:480"
+   "ui.js:414",
+   "ui.js:490"
   ],
   "code": "text(ctx, game.touch ? tr('カードをタップで選択、もう一度タップで決定') : tr('← → 選ぶ　Z 決定'), VIEW_W / 2, 428, { size: 12, align: 'center', color: C.muted });"
  },
  {
   "key": "手持ち：",
   "where": [
-   "ui.js:410"
+   "ui.js:420"
   ],
   "code": "const label = tr('手持ち：'), sep = tr('・');"
  },
  {
   "key": "売り切れ",
   "where": [
-   "ui.js:422"
+   "ui.js:432"
   ],
   "code": "const items = m.stock.map((s) => { const l = game.shopLabel(s); const can = !s.sold && game.run.gold >= s.price; return { label: l.name, color: s.sold ? '#5a5260' : s.tier === 'legend' ? '#ff7ae0' : s.tier === 'rare' ? '#ffd84a' : s.kind === 'key' ? '#ffd84a' : s.kind === 'artifact' ? '#7fe0d0' : s."
  },
  {
   "key": "行商人の店",
   "where": [
-   "ui.js:423"
+   "ui.js:433"
   ],
   "code": "drawLightbox(ctx, game, { title: tr('行商人の店'), right: tr`● 金貨 ${game.run.gold}`, items, sel: m.sel, color: '#ffd84a', st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: game.touch ? tr('タップで選択、もう一度タップで買う／枠の外で閉じる') : tr('↑↓ 選ぶ　Z 買う　C 閉じる') });"
  },
  {
   "key": "タップで選択、もう一度タップで買う／枠の外で閉じる",
   "where": [
-   "ui.js:423"
+   "ui.js:433"
   ],
   "code": "drawLightbox(ctx, game, { title: tr('行商人の店'), right: tr`● 金貨 ${game.run.gold}`, items, sel: m.sel, color: '#ffd84a', st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: game.touch ? tr('タップで選択、もう一度タップで買う／枠の外で閉じる') : tr('↑↓ 選ぶ　Z 買う　C 閉じる') });"
  },
  {
   "key": "↑↓ 選ぶ　Z 買う　C 閉じる",
   "where": [
-   "ui.js:423"
+   "ui.js:433"
   ],
   "code": "drawLightbox(ctx, game, { title: tr('行商人の店'), right: tr`● 金貨 ${game.run.gold}`, items, sel: m.sel, color: '#ffd84a', st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: game.touch ? tr('タップで選択、もう一度タップで買う／枠の外で閉じる') : tr('↑↓ 選ぶ　Z 買う　C 閉じる') });"
  },
  {
   "key": "合成できる！",
   "where": [
-   "ui.js:431"
+   "ui.js:441"
   ],
   "code": "text(ctx, tr('合成できる！'), VIEW_W / 2, 74, { size: 26, align: 'center', color: '#ffd84a' });"
  },
  {
   "key": "素材の 2 つは消え、上位の強化を Lv1 で得る（Lv1 でも素材より強い。さらに Lv5 まで伸びる）",
   "where": [
-   "ui.js:432"
+   "ui.js:442"
   ],
   "code": "text(ctx, tr('素材の 2 つは消え、上位の強化を Lv1 で得る（Lv1 でも素材より強い。さらに Lv5 まで伸びる）'), VIEW_W / 2, 100, { size: 13, align: 'center', color: C.muted });"
  },
  {
   "key": "合成する",
   "where": [
-   "ui.js:448"
+   "ui.js:458"
   ],
   "code": "const opts = [tr('合成する'), tr('今はしない')];"
  },
  {
   "key": "今はしない",
   "where": [
-   "ui.js:448"
+   "ui.js:458"
   ],
   "code": "const opts = [tr('合成する'), tr('今はしない')];"
  },
  {
   "key": "ボタンをタップで選択、もう一度タップで決定",
   "where": [
-   "ui.js:454"
+   "ui.js:464"
   ],
   "code": "text(ctx, game.touch ? tr('ボタンをタップで選択、もう一度タップで決定') : tr('← → 選ぶ　Z 決定　C 今はしない'), VIEW_W / 2, 470, { size: 12, align: 'center', color: C.muted });"
  },
  {
   "key": "← → 選ぶ　Z 決定　C 今はしない",
   "where": [
-   "ui.js:454"
+   "ui.js:464"
   ],
   "code": "text(ctx, game.touch ? tr('ボタンをタップで選択、もう一度タップで決定') : tr('← → 選ぶ　Z 決定　C 今はしない'), VIEW_W / 2, 470, { size: 12, align: 'center', color: C.muted });"
  },
  {
   "key": "黄金の宝箱 ― 1 つ選ぶ",
   "where": [
-   "ui.js:461"
+   "ui.js:471"
   ],
   "code": "text(ctx, hasLegend ? tr('黄金の宝箱 ― 1 つ選ぶ') : gold ? tr('黄金の宝箱 ― アーティファクトを 1 つ選ぶ') : tr('アーティファクトを 1 つ選ぶ'), VIEW_W / 2, 92, { size: 22, align: 'center', color: gold ? '#ffd84a' : '#7fe0d0' });"
  },
  {
   "key": "黄金の宝箱 ― アーティファクトを 1 つ選ぶ",
   "where": [
-   "ui.js:461"
+   "ui.js:471"
   ],
   "code": "text(ctx, hasLegend ? tr('黄金の宝箱 ― 1 つ選ぶ') : gold ? tr('黄金の宝箱 ― アーティファクトを 1 つ選ぶ') : tr('アーティファクトを 1 つ選ぶ'), VIEW_W / 2, 92, { size: 22, align: 'center', color: gold ? '#ffd84a' : '#7fe0d0' });"
  },
  {
   "key": "アーティファクトを 1 つ選ぶ",
   "where": [
-   "ui.js:461"
+   "ui.js:471"
   ],
   "code": "text(ctx, hasLegend ? tr('黄金の宝箱 ― 1 つ選ぶ') : gold ? tr('黄金の宝箱 ― アーティファクトを 1 つ選ぶ') : tr('アーティファクトを 1 つ選ぶ'), VIEW_W / 2, 92, { size: 22, align: 'center', color: gold ? '#ffd84a' : '#7fe0d0' });"
  },
  {
   "key": "アーティファクトは夜が戻っても残る。伝説の強化は楔か継承で持ち越す",
   "where": [
-   "ui.js:462"
+   "ui.js:472"
   ],
   "code": "text(ctx, hasLegend ? tr('アーティファクトは夜が戻っても残る。伝説の強化は楔か継承で持ち越す') : tr('アーティファクトは夜が戻っても失われない'), VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });"
  },
  {
   "key": "アーティファクトは夜が戻っても失われない",
   "where": [
-   "ui.js:462"
+   "ui.js:472"
   ],
   "code": "text(ctx, hasLegend ? tr('アーティファクトは夜が戻っても残る。伝説の強化は楔か継承で持ち越す') : tr('アーティファクトは夜が戻っても失われない'), VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });"
  },
  {
   "key": "★伝説の強化",
   "where": [
-   "ui.js:475"
+   "ui.js:485"
   ],
   "code": "text(ctx, boon ? tr('★伝説の強化') : gold ? tr('黄金のアーティファクト') : tr('アーティファクト'), x + 16, y + 28, { size: 11, color: col });"
  },
  {
   "key": "黄金のアーティファクト",
   "where": [
-   "ui.js:475"
+   "ui.js:485"
   ],
   "code": "text(ctx, boon ? tr('★伝説の強化') : gold ? tr('黄金のアーティファクト') : tr('アーティファクト'), x + 16, y + 28, { size: 11, color: col });"
  },
  {
   "key": "{0}（{1}）",
   "where": [
-   "ui.js:484"
+   "ui.js:494"
   ],
   "code": "const items = m.list.map((id) => { const d = COMPANIONS[id]; return { label: tr`${d.name}（${d.forms.join(' → ')}）`, right: id === game.meta.companion ? tr('連れている') : '', rightColor: d.color, color: d.color, desc: d.desc + tr(' 技：') + d.skills.map((s) => s.names.filter(Boolean).join('→')).join(tr('／'"
  },
  {
   "key": "連れている",
   "where": [
-   "ui.js:484"
+   "ui.js:494"
   ],
   "code": "const items = m.list.map((id) => { const d = COMPANIONS[id]; return { label: tr`${d.name}（${d.forms.join(' → ')}）`, right: id === game.meta.companion ? tr('連れている') : '', rightColor: d.color, color: d.color, desc: d.desc + tr(' 技：') + d.skills.map((s) => s.names.filter(Boolean).join('→')).join(tr('／'"
  },
  {
   "key": " 技：",
   "where": [
-   "ui.js:484"
+   "ui.js:494"
   ],
   "code": "const items = m.list.map((id) => { const d = COMPANIONS[id]; return { label: tr`${d.name}（${d.forms.join(' → ')}）`, right: id === game.meta.companion ? tr('連れている') : '', rightColor: d.color, color: d.color, desc: d.desc + tr(' 技：') + d.skills.map((s) => s.names.filter(Boolean).join('→')).join(tr('／'"
  },
  {
   "key": "／",
   "where": [
-   "ui.js:484"
+   "ui.js:494"
   ],
   "code": "const items = m.list.map((id) => { const d = COMPANIONS[id]; return { label: tr`${d.name}（${d.forms.join(' → ')}）`, right: id === game.meta.companion ? tr('連れている') : '', rightColor: d.color, color: d.color, desc: d.desc + tr(' 技：') + d.skills.map((s) => s.names.filter(Boolean).join('→')).join(tr('／'"
  },
  {
   "key": "。手助け：",
   "where": [
-   "ui.js:484"
+   "ui.js:494"
   ],
   "code": "const items = m.list.map((id) => { const d = COMPANIONS[id]; return { label: tr`${d.name}（${d.forms.join(' → ')}）`, right: id === game.meta.companion ? tr('連れている') : '', rightColor: d.color, color: d.color, desc: d.desc + tr(' 技：') + d.skills.map((s) => s.names.filter(Boolean).join('→')).join(tr('／'"
  },
  {
   "key": "お供を選ぶ ― Lv5・Lv10 で進化する",
   "where": [
-   "ui.js:485"
+   "ui.js:495"
   ],
   "code": "drawLightbox(ctx, game, { title: tr('お供を選ぶ ― Lv5・Lv10 で進化する'), items, sel: m.sel, color: '#7fe0b0', st: m, desc: items[m.sel] ? items[m.sel].desc : '' });"
  },
  {
   "key": "鍛えると：",
   "where": [
-   "ui.js:490"
+   "ui.js:500"
   ],
   "code": "const items = m.list.map((b) => { const d = BOONS[b.id], nt = (b.tier || 1) + 1, f = forgeDiff(b.id, b.tier || 1); return { label: d.name, right: d.max ? `Lv${b.tier} → ${nt}` : '→ II', rightColor: '#ffe14a', desc: f.diff ? tr('鍛えると：') + f.diff : tr`今：${f.now}／鍛えると：${f.next}` }; });"
  },
  {
   "key": "今：{0}／鍛えると：{1}",
   "where": [
-   "ui.js:490"
+   "ui.js:500"
   ],
   "code": "const items = m.list.map((b) => { const d = BOONS[b.id], nt = (b.tier || 1) + 1, f = forgeDiff(b.id, b.tier || 1); return { label: d.name, right: d.max ? `Lv${b.tier} → ${nt}` : '→ II', rightColor: '#ffe14a', desc: f.diff ? tr('鍛えると：') + f.diff : tr`今：${f.now}／鍛えると：${f.next}` }; });"
  },
  {
   "key": "砂時計 ― 時を進めて、どれを鍛える？",
   "where": [
-   "ui.js:491"
+   "ui.js:501"
   ],
   "code": "drawLightbox(ctx, game, { title: m.hourglass ? tr('砂時計 ― 時を進めて、どれを鍛える？') : m.shop ? tr('砥石 ― どれを鍛える？（やめれば代金を返す）') : tr('グレンの鍛冶 ― どれを鍛える？'), items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: m.hourglass ? (game.touch ? tr('項目をタップで選択、もう一度タップで鍛える') : tr('↑↓ 選ぶ　"
  },
  {
   "key": "砥石 ― どれを鍛える？（やめれば代金を返す）",
   "where": [
-   "ui.js:491"
+   "ui.js:501"
   ],
   "code": "drawLightbox(ctx, game, { title: m.hourglass ? tr('砂時計 ― 時を進めて、どれを鍛える？') : m.shop ? tr('砥石 ― どれを鍛える？（やめれば代金を返す）') : tr('グレンの鍛冶 ― どれを鍛える？'), items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: m.hourglass ? (game.touch ? tr('項目をタップで選択、もう一度タップで鍛える') : tr('↑↓ 選ぶ　"
  },
  {
   "key": "グレンの鍛冶 ― どれを鍛える？",
   "where": [
-   "ui.js:491"
+   "ui.js:501"
   ],
   "code": "drawLightbox(ctx, game, { title: m.hourglass ? tr('砂時計 ― 時を進めて、どれを鍛える？') : m.shop ? tr('砥石 ― どれを鍛える？（やめれば代金を返す）') : tr('グレンの鍛冶 ― どれを鍛える？'), items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: m.hourglass ? (game.touch ? tr('項目をタップで選択、もう一度タップで鍛える') : tr('↑↓ 選ぶ　"
  },
  {
   "key": "項目をタップで選択、もう一度タップで鍛える",
   "where": [
-   "ui.js:491"
+   "ui.js:501"
   ],
   "code": "drawLightbox(ctx, game, { title: m.hourglass ? tr('砂時計 ― 時を進めて、どれを鍛える？') : m.shop ? tr('砥石 ― どれを鍛える？（やめれば代金を返す）') : tr('グレンの鍛冶 ― どれを鍛える？'), items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: m.hourglass ? (game.touch ? tr('項目をタップで選択、もう一度タップで鍛える') : tr('↑↓ 選ぶ　"
  },
  {
   "key": "↑↓ 選ぶ　Z 鍛える",
   "where": [
-   "ui.js:491"
+   "ui.js:501"
   ],
   "code": "drawLightbox(ctx, game, { title: m.hourglass ? tr('砂時計 ― 時を進めて、どれを鍛える？') : m.shop ? tr('砥石 ― どれを鍛える？（やめれば代金を返す）') : tr('グレンの鍛冶 ― どれを鍛える？'), items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: m.hourglass ? (game.touch ? tr('項目をタップで選択、もう一度タップで鍛える') : tr('↑↓ 選ぶ　"
  },
  {
   "key": "書庫の扉",
   "where": [
-   "ui.js:497"
+   "ui.js:507"
   ],
   "code": "text(ctx, tr('書庫の扉'), VIEW_W / 2, y + 34, { size: 18, align: 'center', bold: true, color: C.gold, font: SERIF });"
  },
  {
   "key": "記録帳：「書庫の扉 {0}」",
   "where": [
-   "ui.js:506"
+   "ui.js:516"
   ],
   "code": "text(ctx, known ? tr`記録帳：「書庫の扉 ${game.meta.code.join('-')}」` : tr('番号の手がかりはまだない'), VIEW_W / 2, y + 180, { size: 12, align: 'center', color: known ? '#7fb8ff' : C.muted });"
  },
  {
   "key": "番号の手がかりはまだない",
   "where": [
-   "ui.js:506"
+   "ui.js:516"
   ],
   "code": "text(ctx, known ? tr`記録帳：「書庫の扉 ${game.meta.code.join('-')}」` : tr('番号の手がかりはまだない'), VIEW_W / 2, y + 180, { size: 12, align: 'center', color: known ? '#7fb8ff' : C.muted });"
  },
  {
   "key": "数字の上半分で＋・下半分で−／この帯をタップで決定",
   "where": [
-   "ui.js:507"
+   "ui.js:517"
   ],
   "code": "text(ctx, game.touch ? tr('数字の上半分で＋・下半分で−／この帯をタップで決定') : tr('←→ 桁　↑↓ 数字　Z 決定　C 戻る'), VIEW_W / 2, y + 204, { size: 10, align: 'center', color: C.muted });"
  },
  {
   "key": "←→ 桁　↑↓ 数字　Z 決定　C 戻る",
   "where": [
-   "ui.js:507"
+   "ui.js:517"
   ],
   "code": "text(ctx, game.touch ? tr('数字の上半分で＋・下半分で−／この帯をタップで決定') : tr('←→ 桁　↑↓ 数字　Z 決定　C 戻る'), VIEW_W / 2, y + 204, { size: 10, align: 'center', color: C.muted });"
  },
  {
   "key": "移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃・↑↓＋Xで上下）　回避 C　術 V（ゲージ消費／術がなければ時歪）　調べる Z/↑/E（調べられる物の前）",
   "where": [
-   "ui.js:520"
+   "ui.js:530"
   ],
   "code": "if (!game.touch) text(ctx, tr('移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃・↑↓＋Xで上下）　回避 C　術 V（ゲージ消費／術がなければ時歪）　調べる Z/↑/E（調べられる物の前）'), VIEW_W / 2, VIEW_H - 30, { size: 11, align: 'center', color: C.muted });"
  },
  {
   "key": "周回をまたいで残る。知っていることが、次の夜の攻略になる。",
   "where": [
-   "ui.js:529"
+   "ui.js:539"
   ],
   "code": "text(ctx, tr('周回をまたいで残る。知っていることが、次の夜の攻略になる。'), x + 120, y + 34, { size: 11, color: C.muted });"
  },
  {
   "key": "あなた",
   "where": [
-   "ui.js:552"
+   "ui.js:562"
   ],
   "code": "[tr('あなた'), tr('刻守の弟子。師に習った「時の楔」で、夜をまたいで覚えていられる唯一の人。')],"
  },
  {
   "key": "刻守の弟子。師に習った「時の楔」で、夜をまたいで覚えていられる唯一の人。",
   "where": [
-   "ui.js:552"
+   "ui.js:562"
   ],
   "code": "[tr('あなた'), tr('刻守の弟子。師に習った「時の楔」で、夜をまたいで覚えていられる唯一の人。')],"
  },
  {
   "key": "時計塔の主で、あなたの師。禁忌の鐘で夜を戻し続け、そのたびに自分の命を削っている。",
   "where": [
-   "ui.js:553"
+   "ui.js:563"
   ],
   "code": "[tr('刻守'), tr('時計塔の主で、あなたの師。禁忌の鐘で夜を戻し続け、そのたびに自分の命を削っている。') + (k('master_reason') ? tr('娘を見送る朝を恐れている。') : '')],"
  },
  {
   "key": "娘を見送る朝を恐れている。",
   "where": [
-   "ui.js:553"
+   "ui.js:563"
   ],
   "code": "[tr('刻守'), tr('時計塔の主で、あなたの師。禁忌の鐘で夜を戻し続け、そのたびに自分の命を削っている。') + (k('master_reason') ? tr('娘を見送る朝を恐れている。') : '')],"
  },
  {
   "key": "師の娘。朝の汽車で遠くの療養所へ発つ。",
   "where": [
-   "ui.js:554"
+   "ui.js:564"
   ],
   "code": "k('lira_father') ? [tr('リラ'), tr('師の娘。朝の汽車で遠くの療養所へ発つ。')] : k('lira_name') ? [tr('リラ'), tr('市場の少女。師が名を呼んだ。')] : [tr('市場の少女'), tr('朝を待ちながら、父の見送りを気にしている。')],"
  },
  {
   "key": "市場の少女。師が名を呼んだ。",
   "where": [
-   "ui.js:554"
+   "ui.js:564"
   ],
   "code": "k('lira_father') ? [tr('リラ'), tr('師の娘。朝の汽車で遠くの療養所へ発つ。')] : k('lira_name') ? [tr('リラ'), tr('市場の少女。師が名を呼んだ。')] : [tr('市場の少女'), tr('朝を待ちながら、父の見送りを気にしている。')],"
  },
  {
   "key": "朝を待ちながら、父の見送りを気にしている。",
   "where": [
-   "ui.js:554"
+   "ui.js:564"
   ],
   "code": "k('lira_father') ? [tr('リラ'), tr('師の娘。朝の汽車で遠くの療養所へ発つ。')] : k('lira_name') ? [tr('リラ'), tr('市場の少女。師が名を呼んだ。')] : [tr('市場の少女'), tr('朝を待ちながら、父の見送りを気にしている。')],"
  },
  {
   "key": "鍛冶屋。師の古い友で、塔の歯車を共に作った。",
   "where": [
-   "ui.js:555"
+   "ui.js:565"
   ],
   "code": "[tr('グレン'), tr('鍛冶屋。師の古い友で、塔の歯車を共に作った。') + (k('glen_time') || k('glen_saved') ? tr('夜の途中で時計人形に襲われる。') : '')],"
  },
  {
   "key": "夜の途中で時計人形に襲われる。",
   "where": [
-   "ui.js:555"
+   "ui.js:565"
   ],
   "code": "[tr('グレン'), tr('鍛冶屋。師の古い友で、塔の歯車を共に作った。') + (k('glen_time') || k('glen_saved') ? tr('夜の途中で時計人形に襲われる。') : '')],"
  },
  {
   "key": "まだ何も知らない。",
   "where": [
-   "ui.js:561"
+   "ui.js:571"
   ],
   "code": "if (!entries.length) { text(ctx, tr('まだ何も知らない。'), x + 28, yy, { size: 13, color: C.muted }); yy += lh(24); }"
  },
  {
   "key": "楔（{0}）",
   "where": [
-   "ui.js:566"
+   "ui.js:576"
   ],
   "code": "text(ctx, tr`楔（${wedgeCount(meta)}）`, x + 28, yy, { size: 13, bold: true, color: C.gold }); yy += lh(18);"
  },
  {
   "key": "◆ {0}：{1}",
   "where": [
-   "ui.js:567"
+   "ui.js:577"
   ],
   "code": "for (const wd of meta.wedges) { text(ctx, tr`◆ ${wedgeLabel(wd)}：${wd.target === 'boon' ? WEDGE_TARGETS.boon.effect : WEDGE_TARGETS[wd.target].effect}`, x + 40, yy, { size: 12, color: '#d8b968', maxW: w - 70 }); yy += lh(16); }"
  },
  {
   "key": "夜明けへの道　{0} / {1}",
   "where": [
-   "ui.js:571"
+   "ui.js:581"
   ],
   "code": "text(ctx, tr`夜明けへの道　${pr.done} / ${pr.total}`, x + 28, yy, { size: 15, color: '#ffd38a' }); yy += lh(26);"
  },
  {
   "key": "刻守の記憶",
   "where": [
-   "ui.js:579"
+   "ui.js:589"
   ],
   "code": "if (c) draw(tr('刻守の記憶'), tr`前の夜の戦い方を覚えている：${COUNTERS[c].name}――${COUNTERS[c].desc}`, false, '#ff9a7a');"
  },
  {
   "key": "前の夜の戦い方を覚えている：{0}――{1}",
   "where": [
-   "ui.js:579"
+   "ui.js:589"
   ],
   "code": "if (c) draw(tr('刻守の記憶'), tr`前の夜の戦い方を覚えている：${COUNTERS[c].name}――${COUNTERS[c].desc}`, false, '#ff9a7a');"
  },
  {
   "key": "タブをタップ／枠の外をタップで閉じる",
   "where": [
-   "ui.js:582"
+   "ui.js:592"
   ],
   "code": "text(ctx, game.touch ? tr('タブをタップ／枠の外をタップで閉じる') : tr('←→ タブ　Tab/Esc 閉じる'), x + w - 20, y + h - 14, { size: 10, align: 'right', color: C.muted });"
  },
  {
   "key": "←→ タブ　Tab/Esc 閉じる",
   "where": [
-   "ui.js:582"
+   "ui.js:592"
   ],
   "code": "text(ctx, game.touch ? tr('タブをタップ／枠の外をタップで閉じる') : tr('←→ タブ　Tab/Esc 閉じる'), x + w - 20, y + h - 14, { size: 10, align: 'right', color: C.muted });"
  },
  {
   "key": "記録をすべて消して、はじめから遊びますか？",
   "where": [
-   "ui.js:596"
+   "ui.js:606"
   ],
   "code": "text(ctx, tr('記録をすべて消して、はじめから遊びますか？'), VIEW_W / 2, 422, { size: 14, align: 'center' });"
  },
  {
   "key": "Z：消してはじめる　C：やめる",
   "where": [
-   "ui.js:597"
+   "ui.js:607"
   ],
   "code": "text(ctx, tr('Z：消してはじめる　C：やめる'), VIEW_W / 2, 450, { size: 12, align: 'center', color: C.muted });"
  },
  {
   "key": "タップで選ぶ",
   "where": [
-   "ui.js:602"
+   "ui.js:612"
   ],
   "code": "text(ctx, game.touch ? tr('タップで選ぶ') : tr('↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　術 V　調べる ↑'), VIEW_W / 2, VIEW_H - 14, { size: 11, align: 'center', color: C.muted });"
  },
  {
   "key": "↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　術 V　調べる ↑",
   "where": [
-   "ui.js:602"
+   "ui.js:612"
   ],
   "code": "text(ctx, game.touch ? tr('タップで選ぶ') : tr('↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　術 V　調べる ↑'), VIEW_W / 2, VIEW_H - 14, { size: 11, align: 'center', color: C.muted });"
  },
  {
   "key": "★ クリア済み ― 結末 {0}/{1}（{2}）",
   "where": [
-   "ui.js:603"
+   "ui.js:613"
   ],
   "code": "if (game.meta && game.meta.flags.ending) { const en = game.meta.flags.endings || {}; text(ctx, tr`★ クリア済み ― 結末 ${ENDING_IDS.filter((k) => en[k]).length}/${ENDING_IDS.length}（${ENDING_IDS.filter((k) => en[k]).map((k) => ENDINGS[k].name).join(tr('・')) || tr('夜明け')}）`, VIEW_W / 2, 510, { size: 12, alig"
  },
  {
   "key": "設定",
   "where": [
-   "ui.js:618",
-   "ui.js:656"
+   "ui.js:628",
+   "ui.js:666"
   ],
   "code": "text(ctx, tr('設定'), x + 44, y + h / 2 + 6, { size: 16, color: col, maxW: w - 50 });"
  },
  {
   "key": "夜明けの楔　WEDGE OF DAWN",
   "where": [
-   "ui.js:629"
+   "ui.js:639"
   ],
   "code": "{ h: tr('夜明けの楔　WEDGE OF DAWN') },"
  },
  {
   "key": "同じ夜をくり返す時計塔で、「時の楔」を手に夜明けを目指す、2D アクション・ローグライトです。",
   "where": [
-   "ui.js:630"
+   "ui.js:640"
   ],
   "code": "{ t: tr('同じ夜をくり返す時計塔で、「時の楔」を手に夜明けを目指す、2D アクション・ローグライトです。') },"
  },
  {
   "key": "版：",
   "where": [
-   "ui.js:631"
+   "ui.js:641"
   ],
   "code": "{ t: tr('版：') + RELEASE.version },"
  },
  {
   "key": "つくった人たち",
   "where": [
-   "ui.js:632"
+   "ui.js:642"
   ],
   "code": "{ h: tr('つくった人たち') },"
  },
  {
   "key": "原案・監修：当開発元",
   "where": [
-   "ui.js:633"
+   "ui.js:643"
   ],
   "code": "{ t: tr('原案・監修：当開発元') + (RELEASE.publisher ? tr`（${RELEASE.publisher}）` : '') },"
  },
  {
   "key": "（{0}）",
   "where": [
-   "ui.js:633"
+   "ui.js:643"
   ],
   "code": "{ t: tr('原案・監修：当開発元') + (RELEASE.publisher ? tr`（${RELEASE.publisher}）` : '') },"
  },
  {
   "key": "シナリオの推敲：ChatGPT（OpenAI の AI）",
   "where": [
-   "ui.js:634"
+   "ui.js:644"
   ],
   "code": "{ t: tr('シナリオの推敲：ChatGPT（OpenAI の AI）') },"
  },
  {
   "key": "制作（プログラム・ドット絵・音楽・効果音・テキストの実装）：Claude（Anthropic の AI）",
   "where": [
-   "ui.js:635"
+   "ui.js:645"
   ],
   "code": "{ t: tr('制作（プログラム・ドット絵・音楽・効果音・テキストの実装）：Claude（Anthropic の AI）') },"
  },
  {
   "key": "生成 AI の利用について",
   "where": [
-   "ui.js:636"
+   "ui.js:646"
   ],
   "code": "{ h: tr('生成 AI の利用について') },"
  },
  {
   "key": "この作品のプログラム・絵・音楽・効果音・文章は、生成 AI を使ってつくられています。企画と方針、遊びごこちの確認と取捨選択は人が行いました。",
   "where": [
-   "ui.js:637"
+   "ui.js:647"
   ],
   "code": "{ t: tr('この作品のプログラム・絵・音楽・効果音・文章は、生成 AI を使ってつくられています。企画と方針、遊びごこちの確認と取捨選択は人が行いました。') },"
  },
  {
   "key": "おことわり",
   "where": [
-   "ui.js:638"
+   "ui.js:648"
   ],
   "code": "{ h: tr('おことわり') },"
  },
  {
   "key": "この作品はフィクションです。登場する人物・団体・場所・出来事はすべて架空のものであり、実在の人物・団体、ほかのゲームや創作物とは一切関係ありません。",
   "where": [
-   "ui.js:639"
+   "ui.js:649"
   ],
   "code": "{ t: tr('この作品はフィクションです。登場する人物・団体・場所・出来事はすべて架空のものであり、実在の人物・団体、ほかのゲームや創作物とは一切関係ありません。') },"
  },
  {
   "key": "権利と素材",
   "where": [
-   "ui.js:640"
+   "ui.js:650"
   ],
   "code": "{ h: tr('権利と素材') },"
  },
  {
   "key": "絵・音楽・効果音はすべてプログラムで生成しており、外部の画像や音源は使っていません。",
   "where": [
-   "ui.js:641"
+   "ui.js:651"
   ],
   "code": "{ t: tr('絵・音楽・効果音はすべてプログラムで生成しており、外部の画像や音源は使っていません。') },"
  },
  {
   "key": "文字：DotGothic16（Copyright 2020 The DotGothic16 Project Authors）。SIL Open Font License 1.1 にもとづいて同梱しています（許諾書は assets/fonts/OFL-DotGothic16.txt）。",
   "where": [
-   "ui.js:642"
+   "ui.js:652"
   ],
   "code": "{ t: tr('文字：DotGothic16（Copyright 2020 The DotGothic16 Project Authors）。SIL Open Font License 1.1 にもとづいて同梱しています（許諾書は assets/fonts/OFL-DotGothic16.txt）。') },"
  },
  {
   "key": "健康のための注意",
   "where": [
-   "ui.js:643"
+   "ui.js:653"
   ],
   "code": "{ h: tr('健康のための注意') },"
  },
  {
   "key": "ごくまれに、強い光の刺激や点滅を見て、一時的に筋肉のけいれんや意識の喪失などを起こす人がいます。こうした経験のある方は、遊ぶ前に医師に相談してください。遊んでいて異常を感じたら、すぐにやめて医師の診察を受けてください。",
   "where": [
-   "ui.js:644"
+   "ui.js:654"
   ],
   "code": "{ t: tr('ごくまれに、強い光の刺激や点滅を見て、一時的に筋肉のけいれんや意識の喪失などを起こす人がいます。こうした経験のある方は、遊ぶ前に医師に相談してください。遊んでいて異常を感じたら、すぐにやめて医師の診察を受けてください。') },"
  },
  {
   "key": "画面全体が光る演出は「光の点滅を抑える」で、画面の揺れは「画面揺れ」で弱められます（この設定画面）。明るい部屋で画面から離れて遊び、長く遊ぶときは適度に休憩をとってください。",
   "where": [
-   "ui.js:645"
+   "ui.js:655"
   ],
   "code": "{ t: tr('画面全体が光る演出は「光の点滅を抑える」で、画面の揺れは「画面揺れ」で弱められます（この設定画面）。明るい部屋で画面から離れて遊び、長く遊ぶときは適度に休憩をとってください。') },"
  },
  {
   "key": "記録と個人情報",
   "where": [
-   "ui.js:646"
+   "ui.js:656"
   ],
   "code": "{ h: tr('記録と個人情報') },"
  },
  {
   "key": "記録（セーブ）と設定は、この端末の中にだけ保存されます。ブラウザや端末のデータを消すと記録も消えます。",
   "where": [
-   "ui.js:647"
+   "ui.js:657"
   ],
   "code": "{ t: tr('記録（セーブ）と設定は、この端末の中にだけ保存されます。ブラウザや端末のデータを消すと記録も消えます。') },"
  },
  {
   "key": "個人の情報は集めません。通信・広告・課金はありません。",
   "where": [
-   "ui.js:648"
+   "ui.js:658"
   ],
   "code": "{ t: tr('個人の情報は集めません。通信・広告・課金はありません。') },"
  },
  {
   "key": "ご利用にあたって",
   "where": [
-   "ui.js:649"
+   "ui.js:659"
   ],
   "code": "{ h: tr('ご利用にあたって') },"
  },
  {
   "key": "動作は端末やブラウザによって異なる場合があります。この作品を遊んだことで生じた損害について、制作者は責任を負いかねます。",
   "where": [
-   "ui.js:650"
+   "ui.js:660"
   ],
   "code": "{ t: tr('動作は端末やブラウザによって異なる場合があります。この作品を遊んだことで生じた損害について、制作者は責任を負いかねます。') },"
  },
  {
   "key": "お問い合わせ",
   "where": [
-   "ui.js:651"
+   "ui.js:661"
   ],
   "code": "...(RELEASE.contact ? [{ h: tr('お問い合わせ') }, { t: RELEASE.contact }] : []),"
  },
  {
   "key": "選ぶと、その言語で読み込み直します",
   "where": [
-   "ui.js:656"
+   "ui.js:666"
   ],
-  "code": "drawLightbox(ctx, game, { title: ts.lang ? '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()[ts.sel] || {})."
+  "code": "drawLightbox(ctx, game, { title: ts.lang ? /* i18n-skip */ '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()"
  },
  {
   "key": "表示する言語を選びます",
   "where": [
-   "ui.js:656"
+   "ui.js:666"
   ],
-  "code": "drawLightbox(ctx, game, { title: ts.lang ? '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()[ts.sel] || {})."
+  "code": "drawLightbox(ctx, game, { title: ts.lang ? /* i18n-skip */ '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()"
  },
  {
   "key": "原案・制作・おことわり・権利表記など",
   "where": [
-   "ui.js:656"
+   "ui.js:666"
   ],
-  "code": "drawLightbox(ctx, game, { title: ts.lang ? '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()[ts.sel] || {})."
+  "code": "drawLightbox(ctx, game, { title: ts.lang ? /* i18n-skip */ '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()"
  },
  {
   "key": "画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）",
   "where": [
-   "ui.js:656"
+   "ui.js:666"
   ],
-  "code": "drawLightbox(ctx, game, { title: ts.lang ? '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()[ts.sel] || {})."
+  "code": "drawLightbox(ctx, game, { title: ts.lang ? /* i18n-skip */ '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()"
  },
  {
   "key": "タップで選択、もう一度タップで決定／×で閉じる",
   "where": [
-   "ui.js:656"
+   "ui.js:666"
   ],
-  "code": "drawLightbox(ctx, game, { title: ts.lang ? '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()[ts.sel] || {})."
+  "code": "drawLightbox(ctx, game, { title: ts.lang ? /* i18n-skip */ '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()"
  },
  {
   "key": "↑↓ 選ぶ　Z 決定　C 閉じる",
   "where": [
-   "ui.js:656"
+   "ui.js:666"
   ],
-  "code": "drawLightbox(ctx, game, { title: ts.lang ? '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()[ts.sel] || {})."
+  "code": "drawLightbox(ctx, game, { title: ts.lang ? /* i18n-skip */ '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()"
  },
  {
   "key": "どこかをタップで閉じる",
   "where": [
-   "ui.js:676"
+   "ui.js:686"
   ],
   "code": "text(ctx, game.touch ? tr('どこかをタップで閉じる') : tr('Z / C で閉じる'), VIEW_W / 2, y + h - 14, { size: 11, align: 'center', color: C.muted });"
  },
  {
   "key": "Z / C で閉じる",
   "where": [
-   "ui.js:676"
+   "ui.js:686"
   ],
   "code": "text(ctx, game.touch ? tr('どこかをタップで閉じる') : tr('Z / C で閉じる'), VIEW_W / 2, y + h - 14, { size: 11, align: 'center', color: C.muted });"
  },
  {
   "key": "決着がついた。塔に朝が来た。",
   "where": [
-   "ui.js:693"
+   "ui.js:703"
   ],
   "code": "const causeText = rep.cause === 'ending' ? tr('決着がついた。塔に朝が来た。') : rep.cause === 'bell' ? tr('鐘が鳴った。夜が戻る。') : rep.cause === 'badend' ? tr('刻守を倒した。けれど、夜は明けない。') : tr('あなたは倒れた。同じ夜のはじめに戻る。');"
  },
  {
   "key": "鐘が鳴った。夜が戻る。",
   "where": [
-   "ui.js:693"
+   "ui.js:703"
   ],
   "code": "const causeText = rep.cause === 'ending' ? tr('決着がついた。塔に朝が来た。') : rep.cause === 'bell' ? tr('鐘が鳴った。夜が戻る。') : rep.cause === 'badend' ? tr('刻守を倒した。けれど、夜は明けない。') : tr('あなたは倒れた。同じ夜のはじめに戻る。');"
  },
  {
   "key": "刻守を倒した。けれど、夜は明けない。",
   "where": [
-   "ui.js:693"
+   "ui.js:703"
   ],
   "code": "const causeText = rep.cause === 'ending' ? tr('決着がついた。塔に朝が来た。') : rep.cause === 'bell' ? tr('鐘が鳴った。夜が戻る。') : rep.cause === 'badend' ? tr('刻守を倒した。けれど、夜は明けない。') : tr('あなたは倒れた。同じ夜のはじめに戻る。');"
  },
  {
   "key": "あなたは倒れた。同じ夜のはじめに戻る。",
   "where": [
-   "ui.js:693"
+   "ui.js:703"
   ],
   "code": "const causeText = rep.cause === 'ending' ? tr('決着がついた。塔に朝が来た。') : rep.cause === 'bell' ? tr('鐘が鳴った。夜が戻る。') : rep.cause === 'badend' ? tr('刻守を倒した。けれど、夜は明けない。') : tr('あなたは倒れた。同じ夜のはじめに戻る。');"
  },
  {
   "key": "　（第 {0} 夜をもう一度）",
   "where": [
-   "ui.js:694"
+   "ui.js:704"
   ],
   "code": "text(ctx, causeText + (rep.retry ? tr`　（第 ${rep.loop} 夜をもう一度）` : rep.cause === 'ending' ? tr`　（次は${endlessName(meta)}・第 ${meta.loop} 夜）` : tr`　（第 ${rep.loop} 夜 → 第 ${meta.loop} 夜）`), VIEW_W / 2, 50, { size: 19, align: 'center', font: SERIF, color: rep.cause === 'bell' || rep.cause === 'ending' ? C.g"
  },
  {
   "key": "　（次は{0}・第 {1} 夜）",
   "where": [
-   "ui.js:694"
+   "ui.js:704"
   ],
   "code": "text(ctx, causeText + (rep.retry ? tr`　（第 ${rep.loop} 夜をもう一度）` : rep.cause === 'ending' ? tr`　（次は${endlessName(meta)}・第 ${meta.loop} 夜）` : tr`　（第 ${rep.loop} 夜 → 第 ${meta.loop} 夜）`), VIEW_W / 2, 50, { size: 19, align: 'center', font: SERIF, color: rep.cause === 'bell' || rep.cause === 'ending' ? C.g"
  },
  {
   "key": "　（第 {0} 夜 → 第 {1} 夜）",
   "where": [
-   "ui.js:694"
+   "ui.js:704"
   ],
   "code": "text(ctx, causeText + (rep.retry ? tr`　（第 ${rep.loop} 夜をもう一度）` : rep.cause === 'ending' ? tr`　（次は${endlessName(meta)}・第 ${meta.loop} 夜）` : tr`　（第 ${rep.loop} 夜 → 第 ${meta.loop} 夜）`), VIEW_W / 2, 50, { size: 19, align: 'center', font: SERIF, color: rep.cause === 'bell' || rep.cause === 'ending' ? C.g"
  },
  {
   "key": "残ったもの",
   "where": [
-   "ui.js:700"
+   "ui.js:710"
   ],
   "code": "{ title: tr('残ったもの'), color: C.gold, items: rep.kept, at: 0.5 },"
  },
  {
   "key": "戻ったもの",
   "where": [
-   "ui.js:701"
+   "ui.js:711"
   ],
   "code": "{ title: tr('戻ったもの'), color: C.reset, items: rep.reset, at: 1.1 },"
  },
  {
   "key": "変わったこと",
   "where": [
-   "ui.js:702"
+   "ui.js:712"
   ],
   "code": "{ title: tr('変わったこと'), color: C.change, items: rep.changed, at: 1.7 },"
  },
  {
   "key": "タップでとばす",
   "where": [
-   "ui.js:729"
+   "ui.js:739"
   ],
   "code": "if (t < 3.2) { text(ctx, game.touch ? tr('タップでとばす') : tr('Z：とばす'), VIEW_W - 20, VIEW_H - 16, { size: 10, align: 'right', color: C.muted }); return; }"
  },
  {
   "key": "Z：とばす",
   "where": [
-   "ui.js:729"
+   "ui.js:739"
   ],
   "code": "if (t < 3.2) { text(ctx, game.touch ? tr('タップでとばす') : tr('Z：とばす'), VIEW_W - 20, VIEW_H - 16, { size: 10, align: 'right', color: C.muted }); return; }"
  },
  {
   "key": "楔 {0}",
   "where": [
-   "ui.js:740",
-   "ui.js:753"
+   "ui.js:750",
+   "ui.js:763"
   ],
   "code": "text(ctx, tr`楔 ${wedgeCount(meta)}`, VIEW_W - 24, VIEW_H - 12, { size: 12, align: 'right', color: C.gold });"
  },
  {
   "key": "楔（自動・外せない）",
   "where": [
-   "ui.js:748"
+   "ui.js:758"
   ],
   "code": "? game.wedgeableBoons().map((b) => { const d = BOONS[b.id]; return { label: '▼ ' + d.name + (d.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: C.gold, right: tr('楔（自動・外せない）'), rightColor: C.gold, desc: d.desc(b.tier || 1) }; })"
  },
  {
   "key": "楔を抜く ― 抜いた対象は次の夜、元に戻る",
   "where": [
-   "ui.js:752"
+   "ui.js:762"
   ],
   "code": "title: pull ? tr('楔を抜く ― 抜いた対象は次の夜、元に戻る') : autoW ? tr('強化の楔 ― めちゃ簡単：すべて自動で打たれている') : tr('強化に楔を打つ ― 次の夜も持ったまま始まる'),"
  },
  {
   "key": "強化の楔 ― めちゃ簡単：すべて自動で打たれている",
   "where": [
-   "ui.js:752"
+   "ui.js:762"
   ],
   "code": "title: pull ? tr('楔を抜く ― 抜いた対象は次の夜、元に戻る') : autoW ? tr('強化の楔 ― めちゃ簡単：すべて自動で打たれている') : tr('強化に楔を打つ ― 次の夜も持ったまま始まる'),"
  },
  {
   "key": "強化に楔を打つ ― 次の夜も持ったまま始まる",
   "where": [
-   "ui.js:752"
+   "ui.js:762"
   ],
   "code": "title: pull ? tr('楔を抜く ― 抜いた対象は次の夜、元に戻る') : autoW ? tr('強化の楔 ― めちゃ簡単：すべて自動で打たれている') : tr('強化に楔を打つ ― 次の夜も持ったまま始まる'),"
  },
  {
   "key": "自動 {0}",
   "where": [
-   "ui.js:753"
+   "ui.js:763"
   ],
   "code": "right: autoW ? tr`自動 ${items.length}` : tr`楔 ${wedgeCount(meta)}`,"
  },
  {
   "key": "めちゃ簡単では、すべての強化に自動で楔が打たれています（外せません。楔の枠は使いません）",
   "where": [
-   "ui.js:754"
+   "ui.js:764"
   ],
   "code": "items, sel: r.sub, color: C.gold, desc: autoW && r.lockedT > 0 ? tr('めちゃ簡単では、すべての強化に自動で楔が打たれています（外せません。楔の枠は使いません）') : items[r.sub] ? items[r.sub].desc : '', st: r,"
  },
  {
   "key": "枠の外で戻る",
   "where": [
-   "ui.js:755",
-   "ui.js:816"
+   "ui.js:765",
+   "ui.js:826"
   ],
   "code": "hint: autoW ? (game.touch ? tr('枠の外で戻る') : tr('↑↓ 見る　C 戻る')) : undefined,"
  },
  {
   "key": "↑↓ 見る　C 戻る",
   "where": [
-   "ui.js:755",
-   "ui.js:816"
+   "ui.js:765",
+   "ui.js:826"
   ],
   "code": "hint: autoW ? (game.touch ? tr('枠の外で戻る') : tr('↑↓ 見る　C 戻る')) : undefined,"
  },
  {
   "key": "シナリオは終わっても、夜は続く",
   "where": [
-   "ui.js:761"
+   "ui.js:771"
   ],
   "code": "title: tr('シナリオは終わっても、夜は続く'), color: C.gold, sel: -1, st: r,"
  },
  {
   "key": "◆ シナリオが終了しても、「{0}」としてエンドレスで遊べます",
   "where": [
-   "ui.js:763"
+   "ui.js:773"
   ],
   "code": "{ label: tr`◆ シナリオが終了しても、「${endlessName(meta)}」としてエンドレスで遊べます`, color: '#efe6d2' },"
  },
  {
   "key": "◆ 次の{0}のための強化は、この画面で行ってください",
   "where": [
-   "ui.js:764"
+   "ui.js:774"
   ],
   "code": "{ label: tr`◆ 次の${endlessName(meta)}のための強化は、この画面で行ってください`, color: '#efe6d2' },"
  },
  {
   "key": "　（刻印を刻む・継承する強化を選ぶ・楔を打つ など）",
   "where": [
-   "ui.js:765"
+   "ui.js:775"
   ],
   "code": "{ label: tr('　（刻印を刻む・継承する強化を選ぶ・楔を打つ など）'), color: C.muted },"
  },
  {
   "key": "◆ 記憶の固執：Lv と金貨も次の夜へ持ち越し、継承の刻印に上限が無い",
   "where": [
-   "ui.js:766"
+   "ui.js:776"
   ],
   "code": "hasPersistence(meta) ? { label: tr('◆ 記憶の固執：Lv と金貨も次の夜へ持ち越し、継承の刻印に上限が無い'), color: '#ff9ad8' } : { label: tr('◆ 真の結末「夜明けの楔」を見ると、Lv と金貨も持ち越す「記憶の固執の夜」になる'), color: C.muted },"
  },
  {
   "key": "◆ 真の結末「夜明けの楔」を見ると、Lv と金貨も持ち越す「記憶の固執の夜」になる",
   "where": [
-   "ui.js:766"
+   "ui.js:776"
   ],
   "code": "hasPersistence(meta) ? { label: tr('◆ 記憶の固執：Lv と金貨も次の夜へ持ち越し、継承の刻印に上限が無い'), color: '#ff9ad8' } : { label: tr('◆ 真の結末「夜明けの楔」を見ると、Lv と金貨も持ち越す「記憶の固執の夜」になる'), color: C.muted },"
  },
  {
   "key": "もう一度「タイトル画面に戻る」を押すと、強化せずにタイトルへ戻ります。",
   "where": [
-   "ui.js:768"
+   "ui.js:778"
   ],
   "code": "desc: tr('もう一度「タイトル画面に戻る」を押すと、強化せずにタイトルへ戻ります。'),"
  },
  {
   "key": "Z 閉じる",
   "where": [
-   "ui.js:769"
+   "ui.js:779"
   ],
   "code": "hint: game.touch ? tr('タップで閉じる') : tr('Z 閉じる'),"
  },
  {
   "key": "人 {0}/{1}・技 {2}/{3}",
   "where": [
-   "ui.js:777"
+   "ui.js:787"
   ],
   "code": "const wedgeCount = (meta) => tr`人 ${meta.wedges.filter((w) => w.target !== 'boon').length}/${meta.personSlots || 2}・技 ${meta.wedges.filter((w) => w.target === 'boon').length}/${meta.slots}`;"
  },
  {
   "key": "{0} 夜／倒れた回数 {1}／偽りの勝利 {2}",
   "where": [
-   "ui.js:791"
+   "ui.js:801"
   ],
   "code": "text(ctx, tr`${m.loop} 夜／倒れた回数 ${m.stats.deaths}／偽りの勝利 ${m.stats.falseWins}`, VIEW_W / 2, VIEW_H / 2 + 90, { size: 12, align: 'center', color: '#fff6e0' });"
  },
  {
   "key": "{0}　∞",
   "where": [
-   "ui.js:804"
+   "ui.js:814"
   ],
   "code": "if (k === 'inherit' && game.carryAll()) return { label: tr`${u.name}　∞`, right: tr('無限'), rightColor: C.gold, desc: tr('めちゃ簡単：前の夜の強化と術を、すべて Lv ごと持ち越す（刻む必要はない）') };"
  },
  {
   "key": "無限",
   "where": [
-   "ui.js:804"
+   "ui.js:814"
   ],
   "code": "if (k === 'inherit' && game.carryAll()) return { label: tr`${u.name}　∞`, right: tr('無限'), rightColor: C.gold, desc: tr('めちゃ簡単：前の夜の強化と術を、すべて Lv ごと持ち越す（刻む必要はない）') };"
  },
  {
   "key": "めちゃ簡単：前の夜の強化と術を、すべて Lv ごと持ち越す（刻む必要はない）",
   "where": [
-   "ui.js:804"
+   "ui.js:814"
   ],
   "code": "if (k === 'inherit' && game.carryAll()) return { label: tr`${u.name}　∞`, right: tr('無限'), rightColor: C.gold, desc: tr('めちゃ簡単：前の夜の強化と術を、すべて Lv ごと持ち越す（刻む必要はない）') };"
  },
  {
   "key": "{0}　Lv{1}/{2}",
   "where": [
-   "ui.js:806"
+   "ui.js:816"
   ],
   "code": "return { label: tr`${u.name}　Lv${lv}/${Number.isFinite(mx) ? mx : '∞'}`, right: maxed ? tr('最大') : tr`欠片 ${c}`, rightColor: maxed ? C.muted : m.shards >= c ? '#9fd0ff' : '#8a6a7a', desc: maxed ? u.desc(lv) : tr`いま：${lv ? u.desc(lv) : tr('なし')}　→　次：${u.desc(lv + 1)}` };"
  },
  {
   "key": "最大",
   "where": [
-   "ui.js:806"
+   "ui.js:816"
   ],
   "code": "return { label: tr`${u.name}　Lv${lv}/${Number.isFinite(mx) ? mx : '∞'}`, right: maxed ? tr('最大') : tr`欠片 ${c}`, rightColor: maxed ? C.muted : m.shards >= c ? '#9fd0ff' : '#8a6a7a', desc: maxed ? u.desc(lv) : tr`いま：${lv ? u.desc(lv) : tr('なし')}　→　次：${u.desc(lv + 1)}` };"
  },
  {
   "key": "欠片 {0}",
   "where": [
-   "ui.js:806"
+   "ui.js:816"
   ],
   "code": "return { label: tr`${u.name}　Lv${lv}/${Number.isFinite(mx) ? mx : '∞'}`, right: maxed ? tr('最大') : tr`欠片 ${c}`, rightColor: maxed ? C.muted : m.shards >= c ? '#9fd0ff' : '#8a6a7a', desc: maxed ? u.desc(lv) : tr`いま：${lv ? u.desc(lv) : tr('なし')}　→　次：${u.desc(lv + 1)}` };"
  },
  {
   "key": "いま：{0}　→　次：{1}",
   "where": [
-   "ui.js:806"
+   "ui.js:816"
   ],
   "code": "return { label: tr`${u.name}　Lv${lv}/${Number.isFinite(mx) ? mx : '∞'}`, right: maxed ? tr('最大') : tr`欠片 ${c}`, rightColor: maxed ? C.muted : m.shards >= c ? '#9fd0ff' : '#8a6a7a', desc: maxed ? u.desc(lv) : tr`いま：${lv ? u.desc(lv) : tr('なし')}　→　次：${u.desc(lv + 1)}` };"
  },
  {
   "key": "刻印 ― 夜を越えて残る力",
   "where": [
-   "ui.js:808"
+   "ui.js:818"
   ],
   "code": "drawLightbox(ctx, game, { title: tr('刻印 ― 夜を越えて残る力'), right: tr`時の欠片 ${m.shards}`, items, sel: r.sub, color: '#9fd0ff', desc: items[r.sub] ? items[r.sub].desc : '', st: r });"
  },
  {
   "key": "時の欠片 {0}",
   "where": [
-   "ui.js:808"
+   "ui.js:818"
   ],
   "code": "drawLightbox(ctx, game, { title: tr('刻印 ― 夜を越えて残る力'), right: tr`時の欠片 ${m.shards}`, items, sel: r.sub, color: '#9fd0ff', desc: items[r.sub] ? items[r.sub].desc : '', st: r });"
  },
  {
   "key": "自動で持ち越す",
   "where": [
-   "ui.js:813"
+   "ui.js:823"
   ],
   "code": "if (auto) return { label: '◆ ' + def.name + (def.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: C.gold, right: tr('自動で持ち越す'), rightColor: C.gold, desc: def.desc(b.tier || 1) };"
  },
  {
   "key": "持ち越す",
   "where": [
-   "ui.js:814"
+   "ui.js:824"
   ],
   "code": "return { label: (on ? '◆ ' : '◇ ') + def.name + (def.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: on ? C.gold : '#bbb', right: on ? tr('持ち越す') : SCHOOLS[def.school].name, rightColor: on ? C.gold : SCHOOLS[def.school].color, desc: def.desc(b.tier || 1) };"
  },
  {
   "key": "継承 ― めちゃ簡単：すべて自動で持ち越す",
   "where": [
-   "ui.js:816"
+   "ui.js:826"
   ],
   "code": "if (auto) { drawLightbox(ctx, game, { title: tr('継承 ― めちゃ簡単：すべて自動で持ち越す'), right: `${list.length} / ∞`, items, sel: r.sub, color: C.gold, st: r, desc: r.lockedT > 0 ? tr('めちゃ簡単では、すべての強化を自動で持ち越します（外せません）') : items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? tr('枠の外で戻る') : tr('↑↓ 見る　C 戻る') }); "
  },
  {
   "key": "めちゃ簡単では、すべての強化を自動で持ち越します（外せません）",
   "where": [
-   "ui.js:816"
+   "ui.js:826"
   ],
   "code": "if (auto) { drawLightbox(ctx, game, { title: tr('継承 ― めちゃ簡単：すべて自動で持ち越す'), right: `${list.length} / ∞`, items, sel: r.sub, color: C.gold, st: r, desc: r.lockedT > 0 ? tr('めちゃ簡単では、すべての強化を自動で持ち越します（外せません）') : items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? tr('枠の外で戻る') : tr('↑↓ 見る　C 戻る') }); "
  },
  {
   "key": "継承 ― 次の夜に持ち越す強化",
   "where": [
-   "ui.js:817"
+   "ui.js:827"
   ],
   "code": "drawLightbox(ctx, game, { title: tr`継承 ― 次の夜に持ち越す強化`, right: `${m.inherit.length} / ${inheritLabel(m)}`, items, sel: r.sub, color: C.gold, st: r, desc: items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? tr('タップで選択、もう一度タップで ◆持ち越す／◇外す　枠の外で戻る') : tr('↑↓ 選ぶ　Z ◆持ち越す／◇外す　C 戻る') });"
  },
  {
   "key": "タップで選択、もう一度タップで ◆持ち越す／◇外す　枠の外で戻る",
   "where": [
-   "ui.js:817"
+   "ui.js:827"
   ],
   "code": "drawLightbox(ctx, game, { title: tr`継承 ― 次の夜に持ち越す強化`, right: `${m.inherit.length} / ${inheritLabel(m)}`, items, sel: r.sub, color: C.gold, st: r, desc: items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? tr('タップで選択、もう一度タップで ◆持ち越す／◇外す　枠の外で戻る') : tr('↑↓ 選ぶ　Z ◆持ち越す／◇外す　C 戻る') });"
  },
  {
   "key": "↑↓ 選ぶ　Z ◆持ち越す／◇外す　C 戻る",
   "where": [
-   "ui.js:817"
+   "ui.js:827"
   ],
   "code": "drawLightbox(ctx, game, { title: tr`継承 ― 次の夜に持ち越す強化`, right: `${m.inherit.length} / ${inheritLabel(m)}`, items, sel: r.sub, color: C.gold, st: r, desc: items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? tr('タップで選択、もう一度タップで ◆持ち越す／◇外す　枠の外で戻る') : tr('↑↓ 選ぶ　Z ◆持ち越す／◇外す　C 戻る') });"
  },
  {
   "key": "空中",
   "where": [
-   "ui.js:822"
+   "ui.js:832"
   ],
   "code": "const HABIT_LABEL = { combo: tr('連撃'), heavy: tr('重撃'), air: tr('空中'), skill: tr('術'), echo: tr('残響') };"
  },
  {
   "key": "刻守はあなたを見ていた",
   "where": [
-   "ui.js:827"
+   "ui.js:837"
   ],
   "code": "text(ctx, tr('刻守はあなたを見ていた'), x + 24, y + 38, { size: 22, color: '#ff9a7a' });"
  },
  {
   "key": "前の夜の戦い方",
   "where": [
-   "ui.js:828"
+   "ui.js:838"
   ],
   "code": "text(ctx, tr('前の夜の戦い方'), x + 24, y + 70, { size: 13, color: C.muted });"
  },
  {
   "key": "回避  毎分 {0} 回",
   "where": [
-   "ui.js:838"
+   "ui.js:848"
   ],
   "code": "text(ctx, tr`回避  毎分 ${a ? Math.round(a.dodgeRate) : 0} 回`, x + 24, dy, { size: 14, color: m.counter === 'dodge' ? '#ffffff' : '#bbb' });"
  },
  {
   "key": "崩し方：",
   "where": [
-   "ui.js:844"
+   "ui.js:854"
   ],
   "code": "wrap(ctx, tr('崩し方：') + c.weak, w - 48, 14).forEach((l, i) => text(ctx, l, x + 24, dy + 70 + Math.max(46, dl.length * lh(20) + 6) + i * lh(20), { size: 14, color: '#9fd0ff' }));"
  },
  {
   "key": "タップで続ける",
   "where": [
-   "ui.js:846"
+   "ui.js:856"
   ],
   "code": "text(ctx, game.touch ? tr('タップで続ける') : tr('Z で続ける'), x + w - 20, y + h - 14, { size: 11, align: 'right', color: C.muted });"
  },
  {
   "key": "Z で続ける",
   "where": [
-   "ui.js:846"
+   "ui.js:856"
   ],
   "code": "text(ctx, game.touch ? tr('タップで続ける') : tr('Z で続ける'), x + w - 20, y + h - 14, { size: 11, align: 'right', color: C.muted });"
  },
  {
   "key": "夜明けを迎えた（クリア済み）",
   "where": [
-   "ui.js:854"
+   "ui.js:864"
   ],
   "code": "if (!pr.next) { text(ctx, tr('夜明けを迎えた（クリア済み）'), x, y, { size: 13, align, color: '#ffd38a' }); return; }"
  },

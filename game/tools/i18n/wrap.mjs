@@ -14,13 +14,14 @@ for (const f of readdirSync(dir).filter((x) => x.endsWith('.js') && !SKIP.has(x)
     if (r && r !== 'compare' && !r.startsWith('method:')) continue;
     const p = s.parent;
     if (p && p.type === 'CallExpression' && p.callee.type === 'Identifier' && p.callee.name === 'tr') continue; // 包み済み
+    if (/\/\* i18n-skip \*\/\s*$/.test(src.slice(Math.max(0, s.node.start - 20), s.node.start))) continue; // 訳さない印（CSS など）
     if (s.kind === 'lit') edits.push([s.node.start, 'tr('], [s.node.end, ')']);
     else edits.push([s.node.start, 'tr']);
   }
   if (!edits.length) continue;
   edits.sort((a, b) => b[0] - a[0]);
   for (const [pos, ins] of edits) src = src.slice(0, pos) + ins + src.slice(pos);
-  if (!/import \{ tr \} from '\.\/i18n\.js';/.test(src)) {
+  if (!/import \{[^}]*\btr\b[^}]*\} from '\.\/i18n\.js';/.test(src)) {
     // 最初の import の前（無ければ先頭のコメントの後）に足す
     const m = src.match(/^import /m);
     const at = m ? m.index : src.search(/^(?!\/\/)/m);

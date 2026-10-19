@@ -98,11 +98,21 @@ function wrap(ctx, str, maxW, size, font = FONT) {
   ctx.font = `${TEXT.mode === 'normal' ? fontSize(size) : size}px ${font}`;
   const lines = [];
   const tag = (s) => Object.assign(new String(s), { maxW });
+  // 英語などは単語の途中で折らない（空白で区切った語をひとかたまりに。漢字・かな・ハングルは 1 文字ずつ）
+  const tokens = (para) => para.match(/[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]|\s+|[^\s\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]+/g) || [];
   for (const para of String(str).split('\n')) {
     let cur = '';
-    for (const ch of para) {
-      if (ctx.measureText(cur + ch).width > maxW && cur) { lines.push(tag(cur)); cur = ch; }
-      else cur += ch;
+    for (const tok of tokens(para)) {
+      const fits = (t) => ctx.measureText(cur + t).width <= maxW;
+      if (/^\s+$/.test(tok)) { if (!cur) continue; if (fits(tok)) cur += tok; else { lines.push(tag(cur)); cur = ''; } continue; } // 折り目の空白は捨てる
+      if (fits(tok)) { cur += tok; continue; }
+      if (cur.trim()) { lines.push(tag(cur.replace(/\s+$/, ''))); cur = ''; }
+      if (fits(tok)) { cur = tok; continue; }
+      // 1 語が幅より長いときだけ、文字で折る
+      for (const ch of tok) {
+        if (ctx.measureText(cur + ch).width > maxW && cur) { lines.push(tag(cur)); cur = ch; }
+        else cur += ch;
+      }
     }
     lines.push(tag(cur));
   }
@@ -208,8 +218,9 @@ export function drawHud(ctx, game) {
   const bx = VIEW_W - 18;
   const wedgeRow = (label, used, slots, y, col) => {
     text(ctx, label, bx, y + 12, { size: 10, align: 'right', color: col, bold: true });
+    const lw = Math.max(10, ctx.measureText(label).width); // 言語によって札の文字が長いので、その分だけ左へ
     for (let i = 0; i < slots; i++) {
-      const x = bx - 22 - i * 13;
+      const x = bx - 12 - lw - i * 13;
       ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y); ctx.lineTo(x + 1, y + 4); ctx.lineTo(x, y + 14); ctx.lineTo(x - 1, y + 4); ctx.closePath();
       if (i < used) { ctx.fillStyle = col; ctx.fill(); } else { ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke(); }
     }
@@ -653,7 +664,7 @@ export const ABOUT_LINES = [
 function drawTitleSettings(ctx, game, ts) {
   if (!ts.about) {
     const items = game.settingsOptions().map((o) => ({ label: o.label, right: o.right, rightColor: C.muted }));
-    drawLightbox(ctx, game, { title: ts.lang ? '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()[ts.sel] || {}).id] || '', hint: game.touch ? tr('タップで選択、もう一度タップで決定／×で閉じる') : tr('↑↓ 選ぶ　Z 決定　C 閉じる') });
+    drawLightbox(ctx, game, { title: ts.lang ? /* i18n-skip */ '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()[ts.sel] || {}).id] || '', hint: game.touch ? tr('タップで選択、もう一度タップで決定／×で閉じる') : tr('↑↓ 選ぶ　Z 決定　C 閉じる') });
     drawCloseButton(ctx, C.gold);
     return;
   }

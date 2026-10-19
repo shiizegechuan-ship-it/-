@@ -1,7 +1,7 @@
 import { tr } from './i18n.js';
 import { AXIS } from './input.js';
 // スマホ用のタッチ操作。左に仮想スティック、右に行動ボタン。入力は 'touch' 入力源としてキーボードと合流する。
-const CSS = tr`
+const CSS = /* i18n-skip */ `
 #touch { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #touch > * { pointer-events: auto; }
 #touch .t-hint { pointer-events: none; }

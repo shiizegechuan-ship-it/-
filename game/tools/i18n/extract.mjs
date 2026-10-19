@@ -28,6 +28,7 @@ for (const f of readdirSync(dir).filter((x) => x.endsWith('.js') && x !== 'i18n.
   });
   walk(ast, (n) => {
     if (seen.has(n)) return;
+    if (/\/\* i18n-skip \*\/\s*$/.test(src.slice(Math.max(0, n.start - 20), n.start))) return;
     if (n.type === 'Literal' && typeof n.value === 'string' && JP.test(n.value)) leftovers.push(`${f}:${n.loc.start.line} ${n.raw.slice(0, 60)}`);
     if (n.type === 'TemplateLiteral' && n.quasis.some((q) => JP.test(q.value.cooked))) leftovers.push(`${f}:${n.loc.start.line} \`${n.quasis[0].value.cooked.slice(0, 50)}`);
   });
