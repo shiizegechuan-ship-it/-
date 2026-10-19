@@ -49,8 +49,8 @@ const SCENES = [
 const b = await chromium.launch();
 const errs = [];
 async function page(opts = {}) {
-  const ctx = await b.newContext({ viewport: { width: W, height: H }, ...opts });
-  const p = await ctx.newPage();
+  const ctx = await b.newContext({ locale: 'ja-JP', viewport: { width: W, height: H }, ...opts });
+  const p = await ctx.newPage({ locale: 'ja-JP' });
   p.on('pageerror', (e) => errs.push(e.message));
   await p.goto('http://localhost:8080/index.html'); await p.waitForTimeout(900);
   await p.evaluate(SETUP);

@@ -2,7 +2,7 @@
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { writeFileSync } from 'node:fs';
 const SP = process.argv[2];
-const b = await chromium.launch(); const p = await b.newPage();
+const b = await chromium.launch(); const p = await b.newPage({ locale: 'ja-JP' });
 const errs = []; p.on('pageerror', (e) => errs.push(e.message)); p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
 await p.goto('http://localhost:8080/index.html'); await p.waitForTimeout(800);
 for (const id of ['market', 'gears', 'belfry', 'bellfight', 'boss', 'final', 'calm', 'title']) {

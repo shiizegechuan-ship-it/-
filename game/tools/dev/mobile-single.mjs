@@ -2,8 +2,8 @@ import { chromium, devices } from '/opt/node22/lib/node_modules/playwright/index
 const SP = process.argv[2];
 const b = await chromium.launch();
 for (const [name, vp] of [['portrait', { width: 390, height: 844 }], ['landscape', { width: 844, height: 390 }]]) {
-  const ctx = await b.newContext({ ...devices['iPhone 13'], viewport: vp });
-  const p = await ctx.newPage();
+  const ctx = await b.newContext({ ...devices['iPhone 13'], locale: 'ja-JP', viewport: vp });
+  const p = await ctx.newPage({ locale: 'ja-JP' });
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.goto('file://' + SP + '/build/wedge-of-dawn.html'); await p.waitForTimeout(800); await p.touchscreen.tap(vp.width/2, vp.height/2); await p.waitForTimeout(200);
   const info = await p.evaluate(() => ({ touch: document.body.className, canvas: document.getElementById('game').getBoundingClientRect().toJSON(), btns: document.querySelectorAll('#touch .t-btn').length, scrollW: document.documentElement.scrollWidth }));

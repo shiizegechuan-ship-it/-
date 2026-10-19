@@ -1,6 +1,6 @@
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 const [name, setup] = process.argv.slice(2);
-const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 960, height: 540 } });
+const b = await chromium.launch(); const p = await b.newPage({ locale: 'ja-JP', viewport: { width: 960, height: 540 } });
 await p.goto('http://localhost:8080/index.html'); await p.waitForTimeout(700);
 const out = await p.evaluate((setup) => {
   const g = window.__game; g.newGame(9); g.modal = null; window.__setManual(true);

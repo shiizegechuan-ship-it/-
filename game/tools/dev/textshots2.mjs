@@ -1,7 +1,7 @@
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 const SP = process.argv[2];
 const b = await chromium.launch();
-const p = await b.newPage({ viewport: { width: 960, height: 540 } });
+const p = await b.newPage({ locale: 'ja-JP', viewport: { width: 960, height: 540 } });
 const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 await p.goto('http://localhost:8080/index.html'); await p.waitForTimeout(700);
 const scenes = {

@@ -195,7 +195,7 @@ const PAGE = `(async () => {
 
 // ───────── 準備 ─────────
 const b = await chromium.launch();
-const page = await b.newPage({ viewport: { width: W, height: H } });
+const page = await b.newPage({ locale: 'ja-JP', viewport: { width: W, height: H } });
 const errs = []; page.on('pageerror', (e) => errs.push(e.message));
 await page.goto('http://localhost:8080/index.html'); await page.waitForTimeout(1200);
 console.log('難易度:', await page.evaluate(PAGE));
@@ -303,11 +303,22 @@ music.push({ file: 'final', start: white, dur: 2.4, vol: 0.95, fadeIn: 0.02, fad
 music.push({ file: 'title', start: acts.title, dur: total - acts.title, vol: 0.6, fadeIn: 0.8, fadeOut: 1.6 });
 const args = ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', TMP + 'f/%05d.jpg', '-i', TMP + 'sfx.wav'];
 const parts = [], labels = ['[1:a]'];
+// 曲の WAV は 1 周＋余韻（約 1.5 秒）で書き出してあるので、そのまま繰り返すと頭の小節が 2 度鳴る。
+// ちょうど 1 周の長さで切り、はみ出した余韻を頭に重ねた「つなぎ目のない 1 周」を作ってから繰り返す
+const { buildSong } = await import('../../src/songs.js');
+const loopWav = (id) => {
+  const out = `${TMP}loop-${id}.wav`;
+  if (existsSync(out)) return out;
+  const song = buildSong(id), L = (song.steps * 60 / song.bpm / 4).toFixed(4);
+  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', `${BGM}/${id}.wav`, '-i', `${BGM}/${id}.wav`, '-filter_complex', `[0:a]atrim=end=${L},asetpts=PTS-STARTPTS[m];[1:a]atrim=start=${L},asetpts=PTS-STARTPTS[t];[m][t]amix=inputs=2:normalize=0:duration=first`, out]);
+  return out;
+};
 music.forEach((m, i) => {
   if (!existsSync(`${BGM}/${m.file}.wav`)) return;
-  args.push('-stream_loop', '-1', '-i', `${BGM}/${m.file}.wav`);
+  args.push('-stream_loop', '-1', '-i', loopWav(m.file));
   const k = i + 2, ms = Math.round(m.start * 1000);
-  parts.push(`[${k}:a]atrim=${m.offset || 0}:${(m.offset || 0) + m.dur},asetpts=PTS-STARTPTS,volume=${m.vol},afade=t=in:d=${m.fadeIn},afade=t=out:st=${Math.max(0, m.dur - m.fadeOut)}:d=${m.fadeOut},adelay=${ms}:all=1[m${i}]`);
+  // ゲームと同じく、BGM の後に全体のハイカット（7000Hz。曲そのものは 4200Hz で書き出し済み）
+  parts.push(`[${k}:a]atrim=${m.offset || 0}:${(m.offset || 0) + m.dur},asetpts=PTS-STARTPTS,lowpass=f=7000:width_type=q:w=0.5,volume=${m.vol},afade=t=in:d=${m.fadeIn},afade=t=out:st=${Math.max(0, m.dur - m.fadeOut)}:d=${m.fadeOut},adelay=${ms}:all=1[m${i}]`);
   labels.push(`[m${i}]`);
 });
 args.push('-filter_complex', parts.join(';') + (parts.length ? ';' : '') + `${labels.join('')}amix=inputs=${labels.length}:normalize=0:duration=first,loudnorm=I=-15:TP=-1.5:LRA=14,aresample=44100[aout]`);
