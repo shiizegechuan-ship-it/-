@@ -58,11 +58,12 @@ export function tr(s, ...vals) {
   return t == null ? s : t;
 }
 
-// 文字の書体：中国語・韓国語は、ドット文字（日本の字形）を英数字だけに使い、漢字・ハングルは端末の書体で出す
+// 文字の書体：中国語・韓国語・ロシア語は、ドット文字を英数字だけに使い、漢字・ハングル・キリル文字は端末の書体で出す
 const CJK_FALLBACK = {
   'zh-Hans': `'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Noto Sans SC', 'Source Han Sans SC'`,
   'zh-Hant': `'PingFang TC', 'Microsoft JhengHei', 'Noto Sans CJK TC', 'Noto Sans TC', 'Source Han Sans TC'`,
   ko: `'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans CJK KR', 'Noto Sans KR', 'Source Han Sans KR'`,
+  ru: `'Segoe UI', 'Roboto', 'Helvetica Neue', 'Noto Sans', 'DejaVu Sans', 'Arial'`, // DotGothic16 のキリル文字は全角の字幅で間が空きすぎる
 };
 export const FONT_STACK = CJK_FALLBACK[LANG]
   ? `'DotGothic16 Latin', ${CJK_FALLBACK[LANG]}, sans-serif`

@@ -225,7 +225,7 @@ node tools/build-single.mjs          # dist/wedge-of-dawn.html を作る（esbui
 - `tools/dev/`：確認用のスクリプト（ボットでのバランス計測・スクリーンショット・曲の書き出し・スモークテストなど。使い方は HANDOFF.md）。
 - `docs/RELEASE_GUIDE.md`：販売・配布の手順書（売り場の候補・生成 AI の申告・売り場が決まってからやること）。
 - `store/`：ストアページの素材（画面写真・紹介動画・紹介文の日英）。
-- `assets/fonts/`：同梱のフォント（DotGothic16、SIL Open Font License 1.1）と許諾書。`DotGothic16-Latin.ttf` は中国語・韓国語の英数字用に同じ書体から英数字だけを抜き出したもの。
+- `assets/fonts/`：同梱のフォント（DotGothic16、SIL Open Font License 1.1）と許諾書。`DotGothic16-Latin.ttf` は中国語・韓国語・ロシア語の英数字用に同じ書体から英数字だけを抜き出したもの。
 - `src/i18n.js`・`src/lang/`：言語の切り替え（日本語ほか 9 言語）。`tools/i18n/`：訳の作り方と用語集（HANDOFF.md の 4-追加6）。
 
 ## テスト
