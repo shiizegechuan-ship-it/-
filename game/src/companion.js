@@ -2,6 +2,7 @@
 // 主人公のレベルで 3 段階に進化する（Lv1〜 / Lv5〜 / Lv10〜）。進化すると見た目が変わり、技が増えて強くなる。
 // 技は 3 つ：1 つ目は最初から（段階ごとに強くなる）、2 つ目は第 2 段階から、3 つ目（大技）は第 3 段階から。
 // それぞれ主人公への手助け（お供からのバフ）を 1 つ持つ。
+import { tr } from './i18n.js';
 import { cx, cy, sign, clamp } from './util.js';
 
 export const STAGE_LV = [1, 5, 10];
@@ -11,34 +12,34 @@ export const COMP_DMG = 0.22; // お供の火力の全体の倍率（主役は�
 
 export const COMPANIONS = {
   hotaru: {
-    name: 'ホタル', forms: ['灯り蛍', '篝火蛍', '星灯の蛍'], color: '#ffe14a',
-    desc: '遠くの敵を光の弾で撃つ。進化すると光の帯と星火の雨。',
+    name: tr('ホタル'), forms: [tr('灯り蛍'), tr('篝火蛍'), tr('星灯の蛍')], color: '#ffe14a',
+    desc: tr('遠くの敵を光の弾で撃つ。進化すると光の帯と星火の雨。'),
     skills: [
-      { names: ['灯弾', '双灯弾', '三連灯弾'], desc: (s) => `${s} 発の追う光の弾（各 8）` },
-      { names: [null, '光の帯', '極光の帯'], desc: (s) => `敵へ光の帯を当て続ける（${s === 3 ? '貫通・' : ''}4／0.1秒）` },
-      { names: [null, null, '星火の雨'], desc: () => '敵の上へ星火が 8 つ降る（各 14）' },
+      { names: [tr('灯弾'), tr('双灯弾'), tr('三連灯弾')], desc: (s) => tr`${s} 発の追う光の弾（各 8）` },
+      { names: [null, tr('光の帯'), tr('極光の帯')], desc: (s) => tr`敵へ光の帯を当て続ける（${s === 3 ? tr('貫通・') : ''}4／0.1秒）` },
+      { names: [null, null, tr('星火の雨')], desc: () => tr('敵の上へ星火が 8 つ降る（各 14）') },
     ],
-    buff: { name: '癒しの灯', desc: (s) => (s >= 3 ? '8 秒ごとに主人公の HP を 2% 癒やす' : s >= 2 ? '10 秒ごとに主人公の HP を 1.5% 癒やす' : '（第 2 段階から）主人公の HP を少しずつ癒やす') },
+    buff: { name: tr('癒しの灯'), desc: (s) => (s >= 3 ? tr('8 秒ごとに主人公の HP を 2% 癒やす') : s >= 2 ? tr('10 秒ごとに主人公の HP を 1.5% 癒やす') : tr('（第 2 段階から）主人公の HP を少しずつ癒やす')) },
   },
   neji: {
-    name: 'ネジ', forms: ['歯車の雛', '真鍮の小鳥', '雷翼の鳥'], color: '#9fd0ff',
-    desc: '敵へ飛び込んで啄む。進化すると回る歯車と雷の羽。',
+    name: tr('ネジ'), forms: [tr('歯車の雛'), tr('真鍮の小鳥'), tr('雷翼の鳥')], color: '#9fd0ff',
+    desc: tr('敵へ飛び込んで啄む。進化すると回る歯車と雷の羽。'),
     skills: [
-      { names: ['啄み', '二度啄み', '雷啄み'], desc: (s) => `敵へ飛び込んで啄む（${s >= 2 ? '2 回・' : ''}各 10）` },
-      { names: [null, '回る歯車', '双つ歯車'], desc: (s) => `貫く歯車を${s === 3 ? ' 2 つ' : ''}投げる（各 12）` },
-      { names: [null, null, '雷の羽'], desc: () => '近くの敵 4 体へ雷を落とす（各 22）' },
+      { names: [tr('啄み'), tr('二度啄み'), tr('雷啄み')], desc: (s) => tr`敵へ飛び込んで啄む（${s >= 2 ? tr('2 回・') : ''}各 10）` },
+      { names: [null, tr('回る歯車'), tr('双つ歯車')], desc: (s) => tr`貫く歯車を${s === 3 ? tr(' 2 つ') : ''}投げる（各 12）` },
+      { names: [null, null, tr('雷の羽')], desc: () => tr('近くの敵 4 体へ雷を落とす（各 22）') },
     ],
-    buff: { name: '追い風', desc: (s) => (s >= 3 ? '主人公の移動 +15%、回避のクールタイム -15%' : s >= 2 ? '主人公の移動 +8%' : '（第 2 段階から）主人公の足が速くなる') },
+    buff: { name: tr('追い風'), desc: (s) => (s >= 3 ? tr('主人公の移動 +15%、回避のクールタイム -15%') : s >= 2 ? tr('主人公の移動 +8%') : tr('（第 2 段階から）主人公の足が速くなる')) },
   },
   chiku: {
-    name: 'チク', forms: ['時計の子猫', '鈴の猫', '九影の猫'], color: '#d8c8ff',
-    desc: '近くの敵へ跳びかかって爪で裂く。進化すると時止めの鈴と九つの影。',
+    name: tr('チク'), forms: [tr('時計の子猫'), tr('鈴の猫'), tr('九影の猫')], color: '#d8c8ff',
+    desc: tr('近くの敵へ跳びかかって爪で裂く。進化すると時止めの鈴と九つの影。'),
     skills: [
-      { names: ['爪', '十字爪', '三爪'], desc: (s) => `跳びかかって${s} 本の爪で裂く（各 11）` },
-      { names: [null, '時止めの鈴', '大時止めの鈴'], desc: (s) => `鈴を鳴らし、周りの雑魚を ${s === 3 ? '2.2' : '1.5'} 秒遅くする（10）` },
-      { names: [null, null, '九つの影'], desc: () => '影が 9 回、部屋の敵を次々に裂く（各 12）' },
+      { names: [tr('爪'), tr('十字爪'), tr('三爪')], desc: (s) => tr`跳びかかって${s} 本の爪で裂く（各 11）` },
+      { names: [null, tr('時止めの鈴'), tr('大時止めの鈴')], desc: (s) => tr`鈴を鳴らし、周りの雑魚を ${s === 3 ? '2.2' : '1.5'} 秒遅くする（10）` },
+      { names: [null, null, tr('九つの影')], desc: () => tr('影が 9 回、部屋の敵を次々に裂く（各 12）') },
     ],
-    buff: { name: '猫の目', desc: (s) => (s >= 3 ? '主人公の会心率 +10%' : s >= 2 ? '主人公の会心率 +5%' : '（第 2 段階から）主人公の会心率が上がる') },
+    buff: { name: tr('猫の目'), desc: (s) => (s >= 3 ? tr('主人公の会心率 +10%') : s >= 2 ? tr('主人公の会心率 +5%') : tr('（第 2 段階から）主人公の会心率が上がる')) },
   },
 };
 export const COMPANION_IDS = Object.keys(COMPANIONS);
@@ -78,7 +79,7 @@ function hit(game, c, e, base, extra = {}) {
 function onCompKill(game, c, e) {
   const p = game.player, st = p.stats;
   if (st.compHealKill) { const amt = Math.round(st.compHealKill * (st.healMul || 1)); p.hp = Math.min(p.maxHp, p.hp + amt); game.fx.text(cx(p), p.y - 16, `+${amt}`, '#5fd18b', 11); }
-  if (st.compRally) { p.rallyT = 5; p.rallyMul = st.compRally; game.fx.text(cx(p), p.y - 26, '鼓舞', '#ffb04a', 11); }
+  if (st.compRally) { p.rallyT = 5; p.rallyMul = st.compRally; game.fx.text(cx(p), p.y - 26, tr('鼓舞'), '#ffb04a', 11); }
 }
 
 // いま連れているお供すべて（主のお供＋稀少の強化で呼んだ仲間）
@@ -139,7 +140,7 @@ export function updateCompanion(game, dt, c = game.comp, slot = 0) {
     if (c.healT >= per) { c.healT = 0; const amt = Math.max(1, Math.round(p.maxHp * (c.stage >= 3 ? 0.02 : 0.015) * (st.healMul || 1))); if (p.hp < p.maxHp) { p.hp = Math.min(p.maxHp, p.hp + amt); game.fx.text(cx(p), p.y - 16, `+${amt}`, '#5fd18b', 11); game.fx.ring(cx(p), cy(p), '#ffe14a', 26, 0.3); } }
   }
   if (st.compShield && slot === 0) {
-    if (!p.compShield) { c.shieldT += dt; if (c.shieldT >= st.compShield) { c.shieldT = 0; p.compShield = true; game.fx.ring(cx(p), cy(p), '#9fe3ff', 22, 0.35); game.fx.text(cx(p), p.y - 22, '守りの羽', '#9fe3ff', 10); } }
+    if (!p.compShield) { c.shieldT += dt; if (c.shieldT >= st.compShield) { c.shieldT = 0; p.compShield = true; game.fx.ring(cx(p), cy(p), '#9fe3ff', 22, 0.35); game.fx.text(cx(p), p.y - 22, tr('守りの羽'), '#9fe3ff', 10); } }
   }
 
   // 技の待ち時間
@@ -208,7 +209,7 @@ const SKILLS = {
         f.tick = () => { if (f.o.alive) { f.x = cx(f.o); f.y = cy(f.o); } if (!f.done && f.t >= f.at) { f.done = true; if (f.o.alive) hit(game, c, f.o, 14, { knock: 80 }); game.fx.burst(f.x, f.y, '#ffe14a', 8); } };
         c.fx.push(f);
       }
-      game.fx.text(c.x, c.y - 14, '星火の雨', '#ffe14a', 11);
+      game.fx.text(c.x, c.y - 14, tr('星火の雨'), '#ffe14a', 11);
     }
   },
   neji(game, c, e, use) {
@@ -226,7 +227,7 @@ const SKILLS = {
     if (c.stage >= 3 && use(2, 7)) {
       const list = foes(game).sort((a, b) => Math.hypot(cx(a) - c.x, cy(a) - c.y) - Math.hypot(cx(b) - c.x, cy(b) - c.y)).slice(0, 4);
       list.forEach((o, i) => c.fx.push({ kind: 'bolt', t: -i * 0.08, life: 0.3, x: cx(o), y: o.y + o.h, top: game.cam.y - 10, o, done: false, tick() { if (!this.done && this.t >= 0) { this.done = true; if (this.o.alive) hit(game, c, this.o, 22, { knock: 60 }); game.fx.sparks(this.x, this.y - 6, '#cfe8ff', 6, 220); } } }));
-      game.sfx.play('heavyHit'); game.fx.text(c.x, c.y - 14, '雷の羽', '#9fd0ff', 11);
+      game.sfx.play('heavyHit'); game.fx.text(c.x, c.y - 14, tr('雷の羽'), '#9fd0ff', 11);
     }
   },
   chiku(game, c, e, use) {
@@ -243,7 +244,7 @@ const SKILLS = {
     }
     if (c.stage >= 3 && use(2, 9)) {
       for (let i = 0; i < 9; i++) c.fx.push({ kind: 'shadow', t: -i * 0.06, life: 0.2, done: false, x: 0, y: 0, tick() { if (this.done || this.t < 0) return; this.done = true; const list = foes(game); if (!list.length) return; const o = list[Math.floor(Math.random() * list.length)]; this.x = cx(o); this.y = cy(o); this.a = Math.random() * Math.PI; hit(game, c, o, 12, { knock: 30 }); } });
-      game.fx.text(c.x, c.y - 14, '九つの影', '#d8c8ff', 11);
+      game.fx.text(c.x, c.y - 14, tr('九つの影'), '#d8c8ff', 11);
     }
   },
 };
@@ -269,7 +270,7 @@ export function castUnion(game) {
   game.union = { t: 0, dawn: false };
   p.iframeT = Math.max(p.iframeT, U.life);
   for (const c of list) c.pop = 2.4;
-  game.fx.setBanner('仲間技「夜明けの協奏」', 'ホタル・ネジ・チク、そしてあなたの力をひとつに', '#ffe6a0', 2.6);
+  game.fx.setBanner(tr('仲間技「夜明けの協奏」'), tr('ホタル・ネジ・チク、そしてあなたの力をひとつに'), '#ffe6a0', 2.6);
   game.fx.screenFlash('#ffe6a0', 0.4); game.sfx.play('perfect'); game.sfx.play('bossBell');
   const foes = () => game.room.enemies.filter((e) => e.alive && !(e.boss && e.defeated) && !e.invuln);
   const by = (id) => list.find((c) => c.id === id);

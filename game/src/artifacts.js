@@ -1,23 +1,24 @@
 // アーティファクト：特殊効果を持つ品。一度手に入れると夜が戻っても失われない（そのぶん出にくい）。
 // 通常（扉の報酬・ショップ）と黄金（黄金の部屋でのみ手に入る強いもの）、伝説（結末で得る「記憶の固執」）がある。
+import { tr } from './i18n.js';
 export const ARTIFACTS = {
-  whetstone: { rarity: 'normal', name: '鍛冶屋の砥石', desc: 'すべての与ダメージ +15%' },
-  guardgear: { rarity: 'normal', name: '守りの歯車', desc: '受けるダメージ -15%' },
-  purse: { rarity: 'normal', name: '商人の財布', desc: '敵から得る金貨 +50%' },
-  vial: { rarity: 'normal', name: '薬師の小瓶', desc: 'すべての回復量 +40%' },
-  springboots: { rarity: 'normal', name: '跳ね靴', desc: '空中ジャンプの回数 +1（3段ジャンプ）' },
-  pocketwatch: { rarity: 'normal', name: '錆びた懐中時計', desc: '秒針ゲージのたまり方 +30%' },
-  huntereye: { rarity: 'normal', name: '狩人の目', desc: '会心率 +10%' },
-  bellshard: { rarity: 'normal', name: '鐘の欠片', desc: '敵のいる部屋に入ると、周囲に鐘の衝撃（40）' },
-  kingsword: { rarity: 'gold', name: '王者の剣', desc: 'すべての与ダメージ ×1.4、会心ダメージ +50%' },
-  timeheart: { rarity: 'gold', name: '時の心臓', desc: '最大HP +40。毎秒、最大HPの0.5%回復' },
-  twinfang: { rarity: 'gold', name: '双牙', desc: '直接攻撃が 30% の確率でもう一度当たる' },
-  starmap: { rarity: 'gold', name: '星界の地図', desc: '常時の術のダメージ ×1.5（脅威は増えない）' },
-  goldhand: { rarity: 'gold', name: '黄金の秒針', desc: '連撃の速さ +25%' },
-  aegis: { rarity: 'gold', name: '不滅の歯車', desc: 'この夜に一度だけ、倒れてもHP100%で立ち上がる' },
-  stormcrown: { rarity: 'gold', name: '雷冠', desc: '2.5秒ごとに近くの敵へ雷が落ちる（50）' },
+  whetstone: { rarity: 'normal', name: tr('鍛冶屋の砥石'), desc: tr('すべての与ダメージ +15%') },
+  guardgear: { rarity: 'normal', name: tr('守りの歯車'), desc: tr('受けるダメージ -15%') },
+  purse: { rarity: 'normal', name: tr('商人の財布'), desc: tr('敵から得る金貨 +50%') },
+  vial: { rarity: 'normal', name: tr('薬師の小瓶'), desc: tr('すべての回復量 +40%') },
+  springboots: { rarity: 'normal', name: tr('跳ね靴'), desc: tr('空中ジャンプの回数 +1（3段ジャンプ）') },
+  pocketwatch: { rarity: 'normal', name: tr('錆びた懐中時計'), desc: tr('秒針ゲージのたまり方 +30%') },
+  huntereye: { rarity: 'normal', name: tr('狩人の目'), desc: tr('会心率 +10%') },
+  bellshard: { rarity: 'normal', name: tr('鐘の欠片'), desc: tr('敵のいる部屋に入ると、周囲に鐘の衝撃（40）') },
+  kingsword: { rarity: 'gold', name: tr('王者の剣'), desc: tr('すべての与ダメージ ×1.4、会心ダメージ +50%') },
+  timeheart: { rarity: 'gold', name: tr('時の心臓'), desc: tr('最大HP +40。毎秒、最大HPの0.5%回復') },
+  twinfang: { rarity: 'gold', name: tr('双牙'), desc: tr('直接攻撃が 30% の確率でもう一度当たる') },
+  starmap: { rarity: 'gold', name: tr('星界の地図'), desc: tr('常時の術のダメージ ×1.5（脅威は増えない）') },
+  goldhand: { rarity: 'gold', name: tr('黄金の秒針'), desc: tr('連撃の速さ +25%') },
+  aegis: { rarity: 'gold', name: tr('不滅の歯車'), desc: tr('この夜に一度だけ、倒れてもHP100%で立ち上がる') },
+  stormcrown: { rarity: 'gold', name: tr('雷冠'), desc: tr('2.5秒ごとに近くの敵へ雷が落ちる（50）') },
   // 伝説：真の結末「夜明けの楔」を見ると得る（扉・店・黄金の部屋には出ない）
-  persistence: { rarity: 'legend', name: '記憶の固執', desc: '結末のあとの夜でも、強化・Lv・金貨を持ったまま次の夜へ。継承の刻印の上限が無くなる' },
+  persistence: { rarity: 'legend', name: tr('記憶の固執'), desc: tr('結末のあとの夜でも、強化・Lv・金貨を持ったまま次の夜へ。継承の刻印の上限が無くなる') },
 };
 export const ARTIFACT_COLOR = { normal: '#7fe0d0', gold: '#ffd84a', legend: '#ff9ad8' };
 

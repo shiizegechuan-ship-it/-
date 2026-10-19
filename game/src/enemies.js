@@ -1,3 +1,4 @@
+import { tr } from './i18n.js';
 import { moveBody } from './tilemap.js';
 import { approach, sign, cx, cy, clamp } from './util.js';
 import { TILE } from './config.js';
@@ -59,11 +60,11 @@ export class Enemy {
     if (!away && !jump) return;
     this.aoeCd = this.boss ? 8 : this.elite ? 4 : 3.5;
     this.dodgeI = 0.4; // この間は術が当たらない
-    if (this.boss) { game.fx.text(ex, this.y - 14, '見切り', '#9fd0ff', 10); return; } // 刻守はその場で見切る（動かない）
+    if (this.boss) { game.fx.text(ex, this.y - 14, tr('見切り'), '#9fd0ff', 10); return; } // 刻守はその場で見切る（動かない）
     if (this.gravity && this.onGround) this.vy = jump ? -480 : -260;
     else if (!this.gravity) this.vy = -160;
     if (away) this.vx = away * 300;
-    game.fx.text(ex, this.y - 14, 'かわす', '#9fd0ff', 10);
+    game.fx.text(ex, this.y - 14, tr('かわす'), '#9fd0ff', 10);
     game.fx.dust(ex, ey, 4);
   }
   // 激ムズ：近づくと盾を構える（青く光る）。構えの間、正面からの攻撃をパリィして跳ね返す

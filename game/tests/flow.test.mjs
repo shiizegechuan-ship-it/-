@@ -755,7 +755,7 @@ test('タイトル：左上の設定ボタン（↑で選べる・タップで�
   const shake = g.settings.shake;
   d.frame(1, ['down']); d.frame(1); d.frame(1, ['confirm']); d.frame(1); assert.equal(g.settings.shake, !shake, 'shake toggled');
   d.frame(1, ['down']); d.frame(1); d.frame(1, ['confirm']); d.frame(1); assert.ok(g.settings.calmFlash, 'calm flash toggled');
-  d.frame(1, ['down']); d.frame(1); d.frame(1, ['confirm']); d.frame(1); assert.ok(g.titleSettings.about, 'about opens');
+  d.frame(1, ['down']); d.frame(1); d.frame(1, ['down']); d.frame(1); d.frame(1, ['confirm']); d.frame(1); assert.ok(g.titleSettings.about, 'about opens (below the language item)');
   d.frame(1, ['back']); d.frame(1); assert.ok(g.titleSettings && !g.titleSettings.about, 'about closes back to settings');
   // × で設定を閉じる
   assert.equal(g.handleTap(LB_CLOSE.x + 20, LB_CLOSE.y + 20), false); assert.equal(g.titleSettings, null);

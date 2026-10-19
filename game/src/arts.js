@@ -1,5 +1,6 @@
 // 術（じゅつ）：秒針ゲージで放つ「発動する術」と、条件で自動的に出る「発動条件つきの術」。
 // 術の当たり判定はここで持ち、ダメージ計算は game.dealDamage（cat:'skill', spell:true）に任せる。
+import { tr } from './i18n.js';
 import { cx, cy, sign, clamp } from './util.js';
 import { PASSIVE_IDS, FUSED_PASSIVES, passiveSynergy, BOONS } from './boons.js';
 
@@ -491,7 +492,7 @@ export function updatePassives(game, dt) {
       // 今装着している時歪の術（発動する術）を放つ。術が無ければ刻閃
       const art = p.stats.activeArt;
       if (art) { castArt(game, art); game.fx.text(cx(p), p.y - 26, BOONS[art.id].name, '#ff7ae0', 16); }
-      else { castWarpSlash(game, true); game.fx.text(cx(p), p.y - 26, '刻閃', '#ff7ae0', 16); }
+      else { castWarpSlash(game, true); game.fx.text(cx(p), p.y - 26, tr('刻閃'), '#ff7ae0', 16); }
       game.fx.twinkle(cx(p), cy(p), PRISM, 10, 34, 0.6); game.sfx.play('skill');
     }
   }
@@ -502,7 +503,7 @@ export function updatePassives(game, dt) {
       T.dawn = 0;
       const foes = game.room.enemies.filter((e) => e.alive && !(e.boss && e.defeated) && !e.invuln).sort((a, b) => Math.abs(cx(a) - cx(p)) - Math.abs(cx(b) - cx(p))).slice(0, 8);
       foes.forEach((e, i) => game.room.spells.push(new Spell('star', cx(e), cy(e), { delay: i * 0.06, fall: 0.28, dmg: 90, from: { x: cx(e) + 40, y: cy(e) - 300 }, legend: true, track: e })));
-      game.fx.text(cx(p), p.y - 26, '暁の剣', '#ffd38a', 15); game.fx.screenFlash('#ffd38a', 0.15); game.sfx.play('perfect');
+      game.fx.text(cx(p), p.y - 26, tr('暁の剣'), '#ffd38a', 15); game.fx.screenFlash('#ffd38a', 0.15); game.sfx.play('perfect');
     }
   }
   dt *= p.stats.passiveSpeed || 1; // 星の心臓：常時の術が速く回る

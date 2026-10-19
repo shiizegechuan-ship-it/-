@@ -1,4 +1,5 @@
 // ブラウザ側の起動処理：固定 60Hz 更新 + 描画。
+import { tr, LANG } from './i18n.js';
 import { DT, VIEW_W, VIEW_H } from './config.js';
 import { Input, attachKeyboard, pollGamepad } from './input.js';
 import { Game } from './game.js';
@@ -18,12 +19,16 @@ const storage = {
 };
 
 // 同梱のフォントを先に読み込む（読み込むまでは端末の日本語フォントで描く）
-try { document.fonts && document.fonts.load("16px 'DotGothic16'"); } catch { /* 古いブラウザ */ }
+try { document.fonts && document.fonts.load("16px 'DotGothic16'"); document.fonts && document.fonts.load("16px 'DotGothic16 Latin'"); } catch { /* 古いブラウザ */ }
+// 言語：ページの言語と題名を合わせる（切り替えたら読み込み直す）
+document.documentElement.lang = LANG;
+document.title = tr('夜明けの楔');
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const input = new Input();
 const sfx = new Sfx();
 const game = new Game({ sfx, storage });
+game.onLangChange = () => location.reload();
 sfx.setVolume(game.settings.volume); // 保存した音量
 const music = new Music(sfx);
 window.__music = music; // デバッグ・自動テスト用

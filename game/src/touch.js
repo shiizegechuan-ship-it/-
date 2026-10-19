@@ -1,6 +1,7 @@
+import { tr } from './i18n.js';
 import { AXIS } from './input.js';
 // スマホ用のタッチ操作。左に仮想スティック、右に行動ボタン。入力は 'touch' 入力源としてキーボードと合流する。
-const CSS = `
+const CSS = tr`
 #touch { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #touch > * { pointer-events: auto; }
 #touch .t-hint { pointer-events: none; }
@@ -20,11 +21,11 @@ const CSS = `
 `;
 
 const BUTTONS = [
-  { act: 'attack', label: '攻撃', sub: '長押し 重撃', size: 78, right: 18, bottom: 24 },
-  { act: 'jump', alias: 'confirm', label: '跳ぶ', sub: '決定', size: 64, right: 108, bottom: 14 },
-  { act: 'dodge', alias: 'back', label: '回避', sub: '戻る', size: 58, right: 112, bottom: 92 },
-  { act: 'skill', label: '時歪', size: 50, right: 30, bottom: 116 },
-  { act: 'interact', label: '調べる', size: 46, right: 180, bottom: 70 },
+  { act: 'attack', label: tr('攻撃'), sub: tr('長押し 重撃'), size: 78, right: 18, bottom: 24 },
+  { act: 'jump', alias: 'confirm', label: tr('跳ぶ'), sub: tr('決定'), size: 64, right: 108, bottom: 14 },
+  { act: 'dodge', alias: 'back', label: tr('回避'), sub: tr('戻る'), size: 58, right: 112, bottom: 92 },
+  { act: 'skill', label: tr('時歪'), size: 50, right: 30, bottom: 116 },
+  { act: 'interact', label: tr('調べる'), size: 46, right: 180, bottom: 70 },
 ];
 
 export function isTouchDevice() {
@@ -123,11 +124,11 @@ export function setupTouch(input, root) {
     return el;
   };
   for (const b of BUTTONS) addBtn(b);
-  const pauseBtn = addBtn({ act: 'pause', label: '中断' }, 't-btn t-top');
-  const journalBtn = addBtn({ act: 'journal', label: '記録帳' }, 't-btn t-top');
+  const pauseBtn = addBtn({ act: 'pause', label: tr('中断') }, 't-btn t-top');
+  const journalBtn = addBtn({ act: 'journal', label: tr('記録帳') }, 't-btn t-top');
   const hint = document.createElement('div');
   hint.className = 't-hint';
-  hint.textContent = '横向きにすると画面が大きくなります';
+  hint.textContent = tr('横向きにすると画面が大きくなります');
   wrap.appendChild(hint);
 
   // 縦向き：ゲーム画面の下に操作盤。横向き：画面の左右に重ねる。

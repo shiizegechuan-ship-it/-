@@ -1,5 +1,6 @@
 // 部屋のレイアウトと、周回ごとの塔の構成。
 // 揺らぎ（周回シードで変わる）と因果（meta だけで決まる）をこのモジュールで分ける。
+import { tr } from './i18n.js';
 import { makeRng } from './util.js';
 import { hasWedge } from './meta.js';
 
@@ -329,7 +330,7 @@ const COMBAT_POOLS = [
   ['gears', 'hall', 'alley', 'drop', 'tower', 'bridge', 'twin', 'canyon', 'islands', 'atrium', 'terrace'],
 ];
 
-export const FLOOR_NAMES = ['下層・市場', '中層・歯車回廊', '上層・鐘楼'];
+export const FLOOR_NAMES = [tr('下層・市場'), tr('中層・歯車回廊'), tr('上層・鐘楼')];
 
 function fillEnemies(layoutName, floor, rng, nl) {
   const t = floorEnemies(floor, nl);

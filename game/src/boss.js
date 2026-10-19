@@ -1,4 +1,5 @@
 // 刻守（ときもり）。3段階。前の周回の戦い方への対策を1つだけ持ち込む（刻守の記憶）。
+import { tr } from './i18n.js';
 import { Enemy, Projectile } from './enemies.js';
 import { COUNTERS } from './meta.js';
 import { approach, clamp, cx, cy, sign } from './util.js';
@@ -48,7 +49,7 @@ export class Tokimori extends Enemy {
     if (this.ringT > 0) { this.ringT -= dt; if (this.ringT <= 0) this.ringHits = 0; }
     if (this.counter === 'combo') {
       if (!this.shellMax) { this.shellMax = this.shell = Math.round(this.maxHp * 0.07); }
-      if (this.shell <= 0) { this.shellDown -= dt; if (this.shellDown <= 0) { this.shell = this.shellMax; game.fx.setBanner('外殻が戻った', '', '#c9a052', 0.8); } }
+      if (this.shell <= 0) { this.shellDown -= dt; if (this.shellDown <= 0) { this.shell = this.shellMax; game.fx.setBanner(tr('外殻が戻った'), '', '#c9a052', 0.8); } }
     }
     this.lightHits = this.lightHits.filter((t) => game.run.clock - t < 1.2);
 
@@ -355,7 +356,7 @@ export class Tokimori extends Enemy {
     // 残響喰い：輪の間は残響を吸って回復。直接攻撃 3 回で輪が割れる
     if (this.ringT > 0) {
       if (info.echo) { this.hp = Math.min(this.maxHp, this.hp + info.dmg * 0.5); return { blocked: true, absorbed: true }; }
-      if (++this.ringHits >= 3) { this.ringT = 0; this.ringHits = 0; this.setState('stagger'); game.fx.setBanner('輪が割れた', '', '#b67cf0', 0.8); game.sfx.play('guardBreak'); }
+      if (++this.ringHits >= 3) { this.ringT = 0; this.ringHits = 0; this.setState('stagger'); game.fx.setBanner(tr('輪が割れた'), '', '#b67cf0', 0.8); game.sfx.play('guardBreak'); }
     }
     if (this.state === 'parry') {
       if (info.cat === 'heavy') {
@@ -363,7 +364,7 @@ export class Tokimori extends Enemy {
         this.setState('riposte'); this.swing++; this.facePlayer(game.player);
         return { blocked: true, parried: true };
       }
-      if (!info.echo) { this.setState('stagger'); this.stateT = -0.4; this.hp -= info.dmg; this.hitFlash = 0.12; game.fx.setBanner('構えが崩れた', '', '#5aa9e6', 0.8); return { blocked: false, guardBreak: true }; }
+      if (!info.echo) { this.setState('stagger'); this.stateT = -0.4; this.hp -= info.dmg; this.hitFlash = 0.12; game.fx.setBanner(tr('構えが崩れた'), '', '#5aa9e6', 0.8); return { blocked: false, guardBreak: true }; }
     }
     if (info.cat === 'combo' && !info.echo) this.lightHits.push(game.run.clock);
     // 耐性（対策）。外殻は割れている間は効かない。よろめき中は耐性なし
@@ -373,7 +374,7 @@ export class Tokimori extends Enemy {
     if (this.counter === 'combo' && this.shell > 0 && (info.cat === 'heavy' || info.cat === 'skill')) {
       this.shell -= info.dmg;
       game.fx.sparks(cx(this), cy(this), '#c9a052', 6);
-      if (this.shell <= 0) { this.shellDown = 7; this.setState('stagger'); this.stateT = -0.3; game.fx.setBanner('外殻が割れた', '7秒間、連撃が通る', '#f2c14e', 1.2); game.sfx.play('guardBreak'); game.fx.shake(6, 0.2); }
+      if (this.shell <= 0) { this.shellDown = 7; this.setState('stagger'); this.stateT = -0.3; game.fx.setBanner(tr('外殻が割れた'), tr('7秒間、連撃が通る'), '#f2c14e', 1.2); game.sfx.play('guardBreak'); game.fx.shake(6, 0.2); }
     }
     const dmg = Math.round(info.dmg * mult);
     this.hp -= dmg;

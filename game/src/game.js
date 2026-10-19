@@ -1,4 +1,5 @@
 // ゲーム本体。シミュレーションのみで DOM に触れない（テストからも動かせる）。
+import { tr, LANGS, LANG, langName } from './i18n.js';
 import { DT, TILE, VIEW_W, VIEW_H, ZOOM, PLAYER as PC, DIFFICULTY, DIFF_ORDER } from './config.js';
 import { overlap, cx, cy, clamp, lerp, makeRng, sign } from './util.js';
 import { TileMap, ONEWAY, EMPTY } from './tilemap.js';
@@ -26,7 +27,7 @@ const BUFFERED = ['attack', 'jump', 'dodge', 'skill'];
 const MELEE_IDS = ['edge', 'crit', 'critdmg', 'comboheat', 'heavyart', 'fourth', 'execute', 'aerial', 'momentum', 'opener'];
 // 脅威 1 段あたりの上がり幅（常時の術 3 つごとに 1 段）
 export const THREAT = { free: 3, per: 3, hp: 0.45, dmg: 0.08, bossHp: 0.65, extraCap: 3, growCap: 2 }; // 最初の 3 つ（Lv の合計）は数えない
-const REWARD_LABEL = { boon: '強化', boon2: '強化×2', heal: '回復', hourglass: '砂時計：強化を鍛える', gold: '金貨', artifact: 'アーティファクト' };
+const REWARD_LABEL = { boon: tr('強化'), boon2: tr('強化×2'), heal: tr('回復'), hourglass: tr('砂時計：強化を鍛える'), gold: tr('金貨'), artifact: tr('アーティファクト') };
 // 敵ごとの金貨（夜が深いほど多い）
 // 小さな護衛の数：中ボスに 3 体、刻守に 5 体（第二楽章の増援は難易度による）
 export const GUARDS = { elite: 3, boss: 5 };
@@ -122,7 +123,7 @@ export class Game {
     this.saveSettings();
   }
   saveSettings() {
-    if (this.storage && this.storage.saveSettings) { try { this.storage.saveSettings(JSON.stringify({ difficulty: this.settings.difficulty, shake: this.settings.shake, volume: this.settings.volume, bgm: this.settings.bgm, textSize: this.settings.textSize, calmFlash: !!this.settings.calmFlash })); } catch { /* 保存できなくても遊べる */ } }
+    if (this.storage && this.storage.saveSettings) { try { this.storage.saveSettings(JSON.stringify({ difficulty: this.settings.difficulty, shake: this.settings.shake, volume: this.settings.volume, bgm: this.settings.bgm, textSize: this.settings.textSize, calmFlash: !!this.settings.calmFlash, lang: this.settings.lang })); } catch { /* 保存できなくても遊べる */ } }
   }
 
   // ───────── 進行 ─────────
@@ -236,18 +237,18 @@ export class Game {
     // 夜ごとの様相の一言（天気や塔の変化）
     const note = nightLook(meta).note;
     this.nightNote = note ? { text: note, t: 0 } : null;
-    if (decisiveNight(meta)) this.fx.setBanner(`第 ${meta.loop} 夜 ― 決着の夜`, finalReady(meta) ? '鐘楼で、リラの言葉を師に届けよ' : '歯止めの楔：刻守との戦いが決着になる', '#ffd38a', 3);
-    else if (badFinalNight(meta)) this.fx.setBanner(`第 ${meta.loop} 夜`, '鐘はもう夜を戻せない。けれど、楔の無い勝利で朝は来るだろうか', '#ffd38a', 3);
-    else if (canWedgeBrake(meta) && !meta.flags.ending) this.fx.setBanner(`第 ${meta.loop} 夜`, '鐘楼の歯止めに楔を打てば、この夜の刻守戦が決着の戦いになる', '#ffd38a', 3);
-    else this.fx.setBanner(`第 ${meta.loop} 夜`, pr.next ? `夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}` : `${endlessName(meta)}　深さLv${this.run.scale.level}`, '#f2c14e', 2.6);
+    if (decisiveNight(meta)) this.fx.setBanner(tr`第 ${meta.loop} 夜 ― 決着の夜`, finalReady(meta) ? tr('鐘楼で、リラの言葉を師に届けよ') : tr('歯止めの楔：刻守との戦いが決着になる'), '#ffd38a', 3);
+    else if (badFinalNight(meta)) this.fx.setBanner(tr`第 ${meta.loop} 夜`, tr('鐘はもう夜を戻せない。けれど、楔の無い勝利で朝は来るだろうか'), '#ffd38a', 3);
+    else if (canWedgeBrake(meta) && !meta.flags.ending) this.fx.setBanner(tr`第 ${meta.loop} 夜`, tr('鐘楼の歯止めに楔を打てば、この夜の刻守戦が決着の戦いになる'), '#ffd38a', 3);
+    else this.fx.setBanner(tr`第 ${meta.loop} 夜`, pr.next ? tr`夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}` : tr`${endlessName(meta)}　深さLv${this.run.scale.level}`, '#f2c14e', 2.6);
     if (meta.loop === 1 && !meta.flags.ending && !meta.flags.seenRewind) this.openDialog([
-      { who: '', text: 'あなたは時計塔の主「刻守」の弟子。この町は、同じ夜を繰り返している。' },
-      { who: '', text: '夜の終わりに師が鐘を鳴らすと、時は夜のはじめに戻る。それを覚えていられるのは、師から「時の楔」を習ったあなただけ。' },
-      { who: '', text: '時戻しの鐘は禁忌の技。鳴らすたびに、鳴らした者の命を一夜ぶん削る。このままでは、師は朝を待たずに尽きてしまう。' },
-      { who: '', text: '目的は「夜明けを迎える」こと。師を倒して鐘を止めても、夜は戻る。師が命を削ってまで夜を止める理由を探そう。', note: '進み具合は 記録帳（Tab）の「夜明け」で確認できる' },
-      { who: '', text: '攻撃を当てると秒針ゲージがたまる。V（術ボタン）でゲージを消費して、装着した術を放つ。術がまだなければ「時歪・刻閃」――身をかわして時を止め、敵の数だけ白い斬撃を走らせる。', note: '術は強化の「術」系統で手に入る' },
-      { who: '', text: `あなたのそばには、小さなお供「${COMPANIONS[meta.companion] ? COMPANIONS[meta.companion].name : 'ホタル'}」がいる。近くの敵を自動で攻撃し、あなたのレベルが 5・10 に上がると進化する。`, note: 'お供は 中断メニュー・巻き戻り画面で 3 匹から選び替えられる' },
-      { who: '', text: '倒れても、知ったことと、楔を打ったものは次の夜に残る。' },
+      { who: '', text: tr('あなたは時計塔の主「刻守」の弟子。この町は、同じ夜を繰り返している。') },
+      { who: '', text: tr('夜の終わりに師が鐘を鳴らすと、時は夜のはじめに戻る。それを覚えていられるのは、師から「時の楔」を習ったあなただけ。') },
+      { who: '', text: tr('時戻しの鐘は禁忌の技。鳴らすたびに、鳴らした者の命を一夜ぶん削る。このままでは、師は朝を待たずに尽きてしまう。') },
+      { who: '', text: tr('目的は「夜明けを迎える」こと。師を倒して鐘を止めても、夜は戻る。師が命を削ってまで夜を止める理由を探そう。'), note: tr('進み具合は 記録帳（Tab）の「夜明け」で確認できる') },
+      { who: '', text: tr('攻撃を当てると秒針ゲージがたまる。V（術ボタン）でゲージを消費して、装着した術を放つ。術がまだなければ「時歪・刻閃」――身をかわして時を止め、敵の数だけ白い斬撃を走らせる。'), note: tr('術は強化の「術」系統で手に入る') },
+      { who: '', text: tr`あなたのそばには、小さなお供「${COMPANIONS[meta.companion] ? COMPANIONS[meta.companion].name : tr('ホタル')}」がいる。近くの敵を自動で攻撃し、あなたのレベルが 5・10 に上がると進化する。`, note: tr('お供は 中断メニュー・巻き戻り画面で 3 匹から選び替えられる') },
+      { who: '', text: tr('倒れても、知ったことと、楔を打ったものは次の夜に残る。') },
     ]);
     this.save();
     this.emit('loopStart', { loop: meta.loop });
@@ -275,7 +276,7 @@ export class Game {
     this.updateCamera(DT, true);
     if (fi !== prevFloor) {
       this.player.hp = Math.min(this.player.maxHp, this.player.hp + 22);
-      this.fx.setBanner(FLOOR_NAMES[fi], `夜 ${fmtClock(run.clock)}`, '#efe6d2', 1.8);
+      this.fx.setBanner(FLOOR_NAMES[fi], tr`夜 ${fmtClock(run.clock)}`, '#efe6d2', 1.8);
     }
     const setup = {
       entry: () => this.setupEntry(),
@@ -293,7 +294,7 @@ export class Game {
         // 試練の間も戦闘部屋と同じく、最低 15 秒は増援が湧き続ける（取り分は 2 波ぶんの総量を分ける）
         this.ensureVisibleFoe(); this.room.incoming = []; this.initRoomBudget(desc.waves[1].map((w) => makeEnemy(this.easyType(w.type), 0, 0)).filter(Boolean));
         for (const e of this.room.enemies) e.initial = true; this.room.initCount = this.room.enemies.length;
-        this.fx.setBanner('試練の間', '2 波を退けると、アーティファクトか強化と金貨', '#ff9a7a', 1.8);
+        this.fx.setBanner(tr('試練の間'), tr('2 波を退けると、アーティファクトか強化と金貨'), '#ff9a7a', 1.8);
       },
       golden: () => this.setupGolden(),
     }[desc.type];
@@ -308,7 +309,7 @@ export class Game {
     // 番人たちの対策を、その夜の最初の戦いで知らせる
     if (this.run.mobCounter && !this.run.counterShown && this.room.enemies.some((e) => e.counter)) {
       this.run.counterShown = true;
-      this.fx.setBanner('番人たちも学んだ', `あなたの${COUNTERS[this.run.mobCounter].habit}：${MOB_COUNTERS[this.run.mobCounter]}`, '#ff7a5a', 2.4);
+      this.fx.setBanner(tr('番人たちも学んだ'), tr`あなたの${COUNTERS[this.run.mobCounter].habit}：${MOB_COUNTERS[this.run.mobCounter]}`, '#ff7a5a', 2.4);
     }
     // 鐘の欠片：敵のいる部屋に入ると衝撃
     if (this.player.stats.bellshard && this.room.enemies.some((e) => !e.boss)) this.room.spells.push(new Spell('toll', cx(this.player), cy(this.player), { r: 0, maxR: 220, dmg: 40 }));
@@ -342,7 +343,7 @@ export class Game {
       // 上限を超えた分：1 割、ただし 1 回の攻撃で「毎秒の目安」の 1/4 まで（桁違いの一撃でも削りすぎない）
       d = avail + Math.min((d - avail) * 0.1, rate * 0.25);
       e.barrierFx = 0.25;
-      if (!B.msgT || this.run.clock - B.msgT > 1.2) { B.msgT = this.run.clock; this.fx.text(cx(e), e.y - 30, '時の障壁', '#9fe3ff', 12); }
+      if (!B.msgT || this.run.clock - B.msgT > 1.2) { B.msgT = this.run.clock; this.fx.text(cx(e), e.y - 30, tr('時の障壁'), '#9fe3ff', 12); }
     }
     return d;
   }
@@ -355,7 +356,7 @@ export class Game {
     g.b = Math.min(cap * 1.5, g.b + (now - g.t) * cap); g.t = now;
     if (g.b >= dmg) { g.b -= dmg; return dmg; }
     const ok = Math.max(0, g.b); g.b = 0;
-    if (!e.sgText || now - e.sgText > 0.8) { e.sgText = now; this.fx.text(cx(e), e.y - 22, '術の守り', '#9fd0ff', 12); }
+    if (!e.sgText || now - e.sgText > 0.8) { e.sgText = now; this.fx.text(cx(e), e.y - 22, tr('術の守り'), '#9fd0ff', 12); }
     return ok + Math.min((dmg - ok) * 0.03, e.maxHp * (e.boss ? 0.001 : 0.002)); // 上限を超えた分はごくわずか
   }
   threatHp() { return 1 + THREAT.hp * this.threatStep(); }
@@ -539,7 +540,7 @@ export class Game {
     }
     if (!this.run.formShown || this.run.formShown !== style) {
       this.run.formShown = style;
-      this.fx.setBanner(style === 'melee' ? '陣形：槍衾' : '陣形：散開', style === 'melee' ? '前衛が押し、後衛が撃つ――剣のあなたへの備え' : '固まらず、足の速い者と遠距離で――術のあなたへの備え', '#ff9a7a', 2.0);
+      this.fx.setBanner(style === 'melee' ? tr('陣形：槍衾') : tr('陣形：散開'), style === 'melee' ? tr('前衛が押し、後衛が撃つ――剣のあなたへの備え') : tr('固まらず、足の速い者と遠距離で――術のあなたへの備え'), '#ff9a7a', 2.0);
     }
     return out;
   }
@@ -627,11 +628,11 @@ export class Game {
   addItem(it) { this.room.items.push({ w: 24, h: 40, ...it }); return it; }
   addSign(m) {
     const texts = this.touch ? [
-      '左のスティックで移動。右のボタンで 跳ぶ・攻撃（長押しで重撃）・回避。上下＋攻撃で上攻撃・下攻撃',
-      '術ボタン：攻撃でたまる秒針ゲージを消費して、装着した術を放つ（術がなければ時歪・刻閃＝敵の数だけ斬撃が走る必殺技）。光る印の前で「調べる」',
+      tr('左のスティックで移動。右のボタンで 跳ぶ・攻撃（長押しで重撃）・回避。上下＋攻撃で上攻撃・下攻撃'),
+      tr('術ボタン：攻撃でたまる秒針ゲージを消費して、装着した術を放つ（術がなければ時歪・刻閃＝敵の数だけ斬撃が走る必殺技）。光る印の前で「調べる」'),
     ] : [
-      '←→ 移動　Z ジャンプ（空中でもう一度）　X 攻撃（長押しで重撃、↑↓＋Xで上・下攻撃）　C 回避',
-      'V 術：攻撃でたまる秒針ゲージを消費して、装着した術を放つ（術がなければ時歪・刻閃＝敵の数だけ斬撃が走る必殺技）　↑/E 調べる　Tab 記録帳',
+      tr('←→ 移動　Z ジャンプ（空中でもう一度）　X 攻撃（長押しで重撃、↑↓＋Xで上・下攻撃）　C 回避'),
+      tr('V 術：攻撃でたまる秒針ゲージを消費して、装着した術を放つ（術がなければ時歪・刻閃＝敵の数だけ斬撃が走る必殺技）　↑/E 調べる　Tab 記録帳'),
     ];
     const i = this.map.markers.filter((x) => x.c === 'Q').indexOf(m);
     this.addItem({ kind: 'sign', x: m.x, y: m.y + TILE - 40, text: texts[i] || texts[0] });
@@ -651,7 +652,7 @@ export class Game {
     const G = this.marker('G');
     const run = this.run;
     if (hasWedge(this.meta, 'glen')) {
-      this.addItem({ kind: 'sign', x: G.x, y: G.y + TILE - 40, text: '鍛冶場は空っぽだ。グレンは塔の入口にいる。' });
+      this.addItem({ kind: 'sign', x: G.x, y: G.y + TILE - 40, text: tr('鍛冶場は空っぽだ。グレンは塔の入口にいる。') });
       this.clearRoom(true);
       return;
     }
@@ -668,7 +669,7 @@ export class Game {
       const s = this.addEnemy(new RustSoldier(m.x + 5, m.y + TILE));
       s.setState('chase');
     }
-    this.fx.setBanner('鍛冶屋が襲われている！', '錆兵を倒せ', '#ff5a3c', 1.6);
+    this.fx.setBanner(tr('鍛冶屋が襲われている！'), tr('錆兵を倒せ'), '#ff5a3c', 1.6);
   }
   setupElite() {
     const K = this.marker('K');
@@ -682,7 +683,7 @@ export class Game {
     this.addItem({ kind: 'lift', x: U.x - 6, y: U.y + TILE - 50, w: 42, h: 50, dead: true });
     const kn = this.addEnemy(new GearKnight(K.x, K.y + TILE));
     this.spawnGuards(GUARDS.elite, kn);
-    this.fx.setBanner('歯車騎士', '盾は重撃で崩せる。従者は騎士を倒すと崩れる', '#f2c14e', 1.6);
+    this.fx.setBanner(tr('歯車騎士'), tr('盾は重撃で崩せる。従者は騎士を倒すと崩れる'), '#f2c14e', 1.6);
   }
   setupArchive() {
     const C = this.marker('C'), Y = this.marker('Y'), O = this.marker('O'), H = this.marker('H');
@@ -706,15 +707,15 @@ export class Game {
     this.spawnGuards(GUARDS.boss);
     this.room.boss = b;
     const lines = [];
-    if (this.meta.flags.bossBeaten) lines.push({ who: '刻守（師）', text: 'また来たか、弟子よ。この命が尽きるまで、鐘は鳴らす。朝は来させん。' });
-    else lines.push({ who: '刻守（師）', text: '弟子よ、時戻しは禁忌だ。代償は私の命で払っている。お前が背負うものではない……下がっていろ。' });
-    if (counter) lines.push({ who: '刻守（師）', text: `前の夜、お前は${COUNTERS[counter].habit}に頼りすぎた。もう通じんぞ。` });
-    if (hasWedge(this.meta, 'brake')) lines.push({ who: '刻守（師）', text: '歯止めに楔を……！ 私の教えた技で、私を止めるか。ならば力で応えよう！', note: '時止め封印／第2段階が早まり、技が速くなる' });
+    if (this.meta.flags.bossBeaten) lines.push({ who: tr('刻守（師）'), text: tr('また来たか、弟子よ。この命が尽きるまで、鐘は鳴らす。朝は来させん。') });
+    else lines.push({ who: tr('刻守（師）'), text: tr('弟子よ、時戻しは禁忌だ。代償は私の命で払っている。お前が背負うものではない……下がっていろ。') });
+    if (counter) lines.push({ who: tr('刻守（師）'), text: tr`前の夜、お前は${COUNTERS[counter].habit}に頼りすぎた。もう通じんぞ。` });
+    if (hasWedge(this.meta, 'brake')) lines.push({ who: tr('刻守（師）'), text: tr('歯止めに楔を……！ 私の教えた技で、私を止めるか。ならば力で応えよう！'), note: tr('時止め封印／第2段階が早まり、技が速くなる') });
     // 決着：歯止めに楔を打った夜（第 2 夜から）の刻守戦は決着の戦い。第 3 夜から楔が無ければ、勝っても夜は明けない
     this.run.decisive = decisiveNight(this.meta);
     this.run.badFinal = badFinalNight(this.meta);
-    if (this.run.decisive) lines.push({ who: '', text: '歯止めの楔が、鐘を止めている。この戦いで決着がつく。', note: '倒れても、同じ夜にもう一度挑める（楔は歯止めか巻き戻り画面で抜ける）' });
-    else if (this.run.badFinal) lines.push({ who: '', text: '鐘はもう掠れて、夜を戻せない。……けれど、歯止めは動いたままだ。', note: '歯止めに楔を打たずに勝っても、夜は明けない' });
+    if (this.run.decisive) lines.push({ who: '', text: tr('歯止めの楔が、鐘を止めている。この戦いで決着がつく。'), note: tr('倒れても、同じ夜にもう一度挑める（楔は歯止めか巻き戻り画面で抜ける）') });
+    else if (this.run.badFinal) lines.push({ who: '', text: tr('鐘はもう掠れて、夜を戻せない。……けれど、歯止めは動いたままだ。'), note: tr('歯止めに楔を打たずに勝っても、夜は明けない') });
     // 前の夜の戦い方の分析を先に見せる
     if (counter) this.modal = { type: 'analysis', a: habitAnalysis(this.meta.lastLoop), counter, next: lines, nextChoices: null, t: 0 };
     else this.openDialog(lines);
@@ -853,7 +854,7 @@ export class Game {
       // 残心：連撃の 3 段目以降の命中に、遅れて十字の追撃
       if (p.stats.zanshin && (a.name === 'combo3' || a.name === 'combo4')) MELEE.cross(this, e, p.stats.zanshin);
       // 双牙：もう一度当たる
-      if (p.stats.twinfang && e.alive && this.run.critRng.next() < p.stats.twinfang) { this.dealDamage(e, { ...info, parry: false }); this.fx.text(cx(e), e.y - 46, '双牙', '#ffd84a', 12); }
+      if (p.stats.twinfang && e.alive && this.run.critRng.next() < p.stats.twinfang) { this.dealDamage(e, { ...info, parry: false }); this.fx.text(cx(e), e.y - 46, tr('双牙'), '#ffd84a', 12); }
       // 下突き：当たったら跳ね上がる（2段ジャンプと空中回避も回復）
       if (a.def.bounce && !p.onGround && !a.bounced) {
         a.bounced = true;
@@ -891,10 +892,10 @@ export class Game {
     if (e.guardT > 0 && !info.echo && !info.spell && sign(info.dir) === -e.face) {
       if (info.heavy || info.breaks) {
         e.guardT = 0; if (e.setState) { e.setState('flinch'); e.stateT = -0.8; }
-        this.fx.text(cx(e), e.y - 30, '構えを崩した', '#5aa9e6', 14); this.sfx.play('guardBreak'); this.fx.shake(4, 0.15);
+        this.fx.text(cx(e), e.y - 30, tr('構えを崩した'), '#5aa9e6', 14); this.sfx.play('guardBreak'); this.fx.shake(4, 0.15);
       } else {
         e.guardT = 0; e.guardCd = 3.5;
-        this.fx.text(cx(e), e.y - 30, 'パリィ！', '#5aa9e6', 15); this.fx.sparks(cx(e) - e.face * 10, cy(e), '#9fd0ff', 14, 300);
+        this.fx.text(cx(e), e.y - 30, tr('パリィ！'), '#5aa9e6', 15); this.fx.sparks(cx(e) - e.face * 10, cy(e), '#9fd0ff', 14, 300);
         this.sfx.play('block'); this.hitstop = Math.max(this.hitstop, 6 / 60);
         if (info.proj) { // 飛ぶ斬撃は跳ね返ってくる
           const pr = new Projectile('bolt', cx(e) - 5, cy(e) - 5, -sign(info.dir) * 360, 0, 10); this.spawnProjectile(pr);
@@ -907,7 +908,7 @@ export class Game {
     }
     // 出てすぐ（SPAWN_GUARD 秒）の敵は、常時の術とお供の攻撃（仲間技も）を防ぐ
     if ((info.passive || info.companion) && this.spawnGuarded(e)) {
-      if (!e.sgT || this.run.clock - e.sgT > 0.35) { e.sgT = this.run.clock; this.fx.text(cx(e), e.y - 22, 'ガード', '#cfe8ff', 11); this.fx.sparks(cx(e), cy(e), '#cfe8ff', 4, 160); }
+      if (!e.sgT || this.run.clock - e.sgT > 0.35) { e.sgT = this.run.clock; this.fx.text(cx(e), e.y - 22, tr('ガード'), '#cfe8ff', 11); this.fx.sparks(cx(e), cy(e), '#cfe8ff', 4, 160); }
       return { silent: true };
     }
     // 範囲攻撃を躱している最中は術が当たらない
@@ -915,7 +916,7 @@ export class Game {
     const direct = !info.echo && !info.spell && !info.proj;
     // 断罪：重撃で弱った雑魚を断つ。中ボス以上には大きく効く
     if (info.heavy && st.judgement) {
-      if (!e.boss && !e.elite && e.hp <= e.maxHp * 0.25) { dmg = Math.max(dmg, e.hp + 1); this.fx.text(cx(e), e.y - 40, '断罪', '#ff4a2a', 18); }
+      if (!e.boss && !e.elite && e.hp <= e.maxHp * 0.25) { dmg = Math.max(dmg, e.hp + 1); this.fx.text(cx(e), e.y - 40, tr('断罪'), '#ff4a2a', 18); }
       else if ((e.boss || e.elite) && e.hp <= e.maxHp * 0.35) dmg *= 2;
     }
     if (!info.echo) {
@@ -923,13 +924,13 @@ export class Game {
       if (p.onGround && Math.abs(p.vx) > 150 && st.momentumMul > 1) dmg *= st.momentumMul;
       // パリィ斬りは必ず会心
       if (info.parry || run.critRng.next() < st.critChance + 0.02 * upLv(this.meta, 'crit') + levelBonus(run.level || 1).crit) { crit = true; dmg *= st.critMul; }
-      if (info.parry) { this.fx.text(cx(e), e.y - 34, 'パリィ', '#ffe14a', 16); this.parryMoment(e); }
-      if (direct && p.afterT > 0 && st.afterimageMul > 1) { dmg *= st.afterimageMul; p.afterT = 0; this.fx.text(cx(e), e.y - 18, '残影', '#5fd18b', 12); }
+      if (info.parry) { this.fx.text(cx(e), e.y - 34, tr('パリィ'), '#ffe14a', 16); this.parryMoment(e); }
+      if (direct && p.afterT > 0 && st.afterimageMul > 1) { dmg *= st.afterimageMul; p.afterT = 0; this.fx.text(cx(e), e.y - 18, tr('残影'), '#5fd18b', 12); }
       if (direct && st.dawnblade) dmg *= 1.25; // 暁の剣
       if (direct && p.empowerNext > 1) { dmg *= p.empowerNext; p.empowerNext = 1; this.fx.text(cx(e), e.y - 30, '×3', '#e35d5d', 14); }
       if (info.heavy && e.slowed && st.shatterMul > 1) {
         dmg *= st.shatterMul; info.breaks = true;
-        this.fx.burst(cx(e), cy(e), '#5aa9e6', 22); this.fx.text(cx(e), e.y - 30, '粉砕', '#5aa9e6', 16);
+        this.fx.burst(cx(e), cy(e), '#5aa9e6', 22); this.fx.text(cx(e), e.y - 30, tr('粉砕'), '#5aa9e6', 16);
       }
     }
     if (e.warp > 0) cat = 'skill';
@@ -954,17 +955,17 @@ export class Game {
         e.adapted = true;
         if (tot > 0 && v / tot >= 0.5 && COUNTERS[top]) {
           e.resist = { ...(e.resist || {}), [top]: Math.min((e.resist || {})[top] ?? 1, 0.5) };
-          this.fx.setBanner('刻守が見切った', `あなたの${COUNTERS[top].habit}は、ここから半分しか通らない`, '#ff7a5a', 2.0);
+          this.fx.setBanner(tr('刻守が見切った'), tr`あなたの${COUNTERS[top].habit}は、ここから半分しか通らない`, '#ff7a5a', 2.0);
           this.sfx.play('tellBig');
         }
       }
     }
     const res = e.takeHit(this, { dmg, dir: info.dir, knock: info.knock, breaks: info.breaks, echo: !!info.echo, cat: info.cat, lift: info.lift || 0, passive: !!info.passive || (!!info.proj && !!e.boss) });
     if (res.silent) return res;
-    if (res.absorbed) { this.fx.text(cx(e), e.y - 10, '吸収', '#b67cf0', 12); return res; }
+    if (res.absorbed) { this.fx.text(cx(e), e.y - 10, tr('吸収'), '#b67cf0', 12); return res; }
     if (res.parried) {
       this.sfx.play('block'); this.fx.sparks(cx(e) - e.face * 16, cy(e), '#5aa9e6', 14, 300);
-      this.fx.text(cx(e), e.y - 16, '受け流し', '#5aa9e6', 14);
+      this.fx.text(cx(e), e.y - 16, tr('受け流し'), '#5aa9e6', 14);
       this.hitstop = Math.max(this.hitstop, 6 / 60);
       p.vx = -p.face * 260;
       return res;
@@ -974,7 +975,7 @@ export class Game {
       this.fx.sparks(info.dir > 0 ? e.x : e.x + e.w, cy(e), '#e8e8e8', 7, 240, -info.dir);
       this.hitstop = Math.max(this.hitstop, 2 / 60);
       if (!info.echo) p.vx = -info.dir * 160;
-      this.fx.text(cx(e), e.y - 10, '弾かれた', '#9a8fa6', 11);
+      this.fx.text(cx(e), e.y - 10, tr('弾かれた'), '#9a8fa6', 11);
       this.learnOnce(e);
       return res;
     }
@@ -983,14 +984,14 @@ export class Game {
     if (st.lifesteal && direct && !info.spell && p.state !== 'dead') p.hp = Math.min(p.maxHp, p.hp + Math.min(dmg * st.lifesteal, p.maxHp * 0.02));
     run.dmgByCat[info.echo ? 'echo' : cat] = (run.dmgByCat[info.echo ? 'echo' : cat] || 0) + dmg;
     this.addCombo();
-    if (res.guardBreak) { this.sfx.play('guardBreak'); this.fx.text(cx(e), e.y - 30, '崩し', '#f2c14e', 16); this.fx.shake(5, 0.2); }
+    if (res.guardBreak) { this.sfx.play('guardBreak'); this.fx.text(cx(e), e.y - 30, tr('崩し'), '#f2c14e', 16); this.fx.shake(5, 0.2); }
     const hx = info.dir > 0 ? e.x + 4 : e.x + e.w - 4;
     if (!info.echo) this.fx.impact(hx, cy(e), crit ? '#ffe14a' : info.heavy ? '#f2c14e' : info.spell ? '#9fe3ff' : '#ffffff', crit ? 10 : info.heavy ? 9 : 6);
     if (info.heavy || crit) for (let i = 0; i < 4; i++) this.fx.parts.push({ x: hx, y: cy(e), vx: (Math.random() - 0.5) * 300, vy: -100 - Math.random() * 200, life: 0.5, t: 0, color: '#c9a052', size: 3, g: 900 }); // 歯車の破片
     this.fx.sparks(hx, cy(e), info.echo ? '#b67cf0' : info.heavy ? '#f2c14e' : '#fff3d6', info.heavy ? 14 : 7, info.heavy ? 380 : 260, info.dir);
     const num = fmtNum(dmg) + (crit ? '!' : '');
     if (countered) res.resisted = true;
-    if (res.resisted) { this.fx.text(cx(e) + 14, e.y - 22, '耐性', '#8a8a92', 11); this.fx.text(cx(e) + (Math.random() - 0.5) * 10, e.y - 6, num, '#8a8a92', 12); this.addCombo(); this.learnOnce(e); return res; }
+    if (res.resisted) { this.fx.text(cx(e) + 14, e.y - 22, tr('耐性'), '#8a8a92', 11); this.fx.text(cx(e) + (Math.random() - 0.5) * 10, e.y - 6, num, '#8a8a92', 12); this.addCombo(); this.learnOnce(e); return res; }
     this.fx.text(cx(e) + (Math.random() - 0.5) * 10, e.y - 6, num, crit ? '#ffe14a' : info.echo ? '#c9a0ff' : info.heavy ? '#f2c14e' : '#ffffff', crit ? 20 : info.heavy ? 18 : 13);
     if (info.spell || info.proj) {
       this.sfx.play(crit ? 'heavyHit' : 'hit');
@@ -1033,7 +1034,7 @@ export class Game {
     if (st.snare && info.heavy && e.alive) {
       const was = e.snareT > 0;
       e.snareT = Math.max(e.snareT || 0, st.snare * k * (st.hexTime || 1));
-      if (!was) { this.fx.text(cx(e), e.y - 28, '鎖', '#c9a35a', 13); this.fx.ring(cx(e), cy(e), '#c9a35a', 26, 0.3); }
+      if (!was) { this.fx.text(cx(e), e.y - 28, tr('鎖'), '#c9a35a', 13); this.fx.ring(cx(e), cy(e), '#c9a35a', 26, 0.3); }
     }
   }
   // 錆びた敵の攻撃は弱まる
@@ -1045,7 +1046,7 @@ export class Game {
     c.max = Math.max(c.max, c.n);
     this.run.maxCombo = Math.max(this.run.maxCombo || 0, c.n);
     if (c.n % 10 === 0 && this.player.stats.procs.secondhand) PROCS.secondhand(this, this.player.stats.procs.secondhand);
-    if (c.n % 25 === 0) { this.fx.setBanner(`${c.n} HIT`, `与ダメージ +${Math.round(c.n * this.player.stats.comboPer * 100)}%`, '#ff9a3c', 0.9); this.sfx.play('charged'); }
+    if (c.n % 25 === 0) { this.fx.setBanner(`${c.n} HIT`, tr`与ダメージ +${Math.round(c.n * this.player.stats.comboPer * 100)}%`, '#ff9a3c', 0.9); this.sfx.play('charged'); }
   }
   // ───────── 激ムズ：床全体が震える（赤く光ったら跳べ） ─────────
   updateQuake(dt) {
@@ -1159,16 +1160,16 @@ export class Game {
     const Z = this.marker('Z');
     const wd = this.addEnemy(new Warden(Z.x, Z.y + TILE));
     this.spawnGuards(GUARDS.elite, wd);
-    this.fx.setBanner('振り子の番人', '大技のあとに長い隙。そこへ重撃を', '#f2c14e', 1.8);
+    this.fx.setBanner(tr('振り子の番人'), tr('大技のあとに長い隙。そこへ重撃を'), '#f2c14e', 1.8);
   }
   useShrine(it) {
     const p = this.player;
     if (it.used) return;
     const cost = Math.round(p.maxHp * 0.2);
-    this.openDialog([{ who: '', text: '時の祠。古い文字が刻まれている――「時を欲する者は、命で払え」' }], [
-      { label: `命を捧げる（HP -${cost}）：強化を 1 つ得る`, fn: () => { it.used = true; p.hp = Math.max(1, p.hp - cost); this.fx.text(cx(p), p.y - 20, `-${cost}`, '#ff5a3c', 16); this.fx.burst(cx(it), cy(it), '#e35d5d', 20); this.sfx.play('hurt'); this.openBoonPick(1, null, true); } },
-      { label: '祈る：HP を最大の 25% 回復', fn: () => { it.used = true; const a = Math.round(p.maxHp * 0.25 * p.stats.healMul); p.hp = Math.min(p.maxHp, p.hp + a); this.fx.text(cx(p), p.y - 20, `+${a}`, '#5fd18b', 16); this.fx.ring(cx(p), cy(p), '#5fd18b', 40); this.sfx.play('heal'); } },
-      { label: '立ち去る', fn: () => {} },
+    this.openDialog([{ who: '', text: tr('時の祠。古い文字が刻まれている――「時を欲する者は、命で払え」') }], [
+      { label: tr`命を捧げる（HP -${cost}）：強化を 1 つ得る`, fn: () => { it.used = true; p.hp = Math.max(1, p.hp - cost); this.fx.text(cx(p), p.y - 20, `-${cost}`, '#ff5a3c', 16); this.fx.burst(cx(it), cy(it), '#e35d5d', 20); this.sfx.play('hurt'); this.openBoonPick(1, null, true); } },
+      { label: tr('祈る：HP を最大の 25% 回復'), fn: () => { it.used = true; const a = Math.round(p.maxHp * 0.25 * p.stats.healMul); p.hp = Math.min(p.maxHp, p.hp + a); this.fx.text(cx(p), p.y - 20, `+${a}`, '#5fd18b', 16); this.fx.ring(cx(p), cy(p), '#5fd18b', 40); this.sfx.play('heal'); } },
+      { label: tr('立ち去る'), fn: () => {} },
     ]);
   }
   setupShop() {
@@ -1179,7 +1180,7 @@ export class Game {
   setupGolden() {
     const J = this.marker('J');
     this.addItem({ kind: 'goldchest', x: J.x - 4, y: J.y + TILE - 26, w: 38, h: 26, opened: false });
-    this.fx.setBanner('黄金の部屋', '宝箱から、強いアーティファクトを 1 つ選べる', '#ffd84a', 1.8);
+    this.fx.setBanner(tr('黄金の部屋'), tr('宝箱から、強いアーティファクトを 1 つ選べる'), '#ffd84a', 1.8);
   }
   // 店の品ぞろえ（その店に最初に入ったときに決まる）
   shopStock() {
@@ -1209,25 +1210,25 @@ export class Game {
     return stock;
   }
   shopLabel(s) {
-    if (s.kind === 'boon') { const d = BOONS[s.id], own = this.player.boons.find((b) => b.id === s.id); return { name: `${d.school === 'legend' ? '★伝説' : d.school === 'rare' ? '◆稀少' : '強化'}：${d.name}` + (own && d.max ? ` Lv${own.tier}→${own.tier + 1}` : ''), desc: d.desc(own ? own.tier + 1 : 1) }; }
-    if (s.kind === 'potion') return { name: s.size > 0.5 ? '大きな回復薬' : '小さな回復薬', desc: `HP を最大HPの ${Math.round(s.size * 100)}% 回復する` };
-    if (s.kind === 'artifact') return { name: `遺物：${ARTIFACTS[s.id].name}`, desc: 'アーティファクト：' + ARTIFACTS[s.id].desc };
-    if (s.kind === 'whetstone') return { name: '砥石', desc: '手持ちの強化を 1 つ選んで鍛える（Lv +1）。やめれば代金は返す' };
-    if (s.kind === 'reroll') return { name: '品替え', desc: `まだ売れていない強化の品を、別の品に入れ替える（買うたびに高くなる）` };
-    return { name: '黄金の鍵', desc: '次の扉の選択に「黄金の部屋」が加わる。強いアーティファクトを 1 つ選べる' };
+    if (s.kind === 'boon') { const d = BOONS[s.id], own = this.player.boons.find((b) => b.id === s.id); return { name: tr`${d.school === 'legend' ? tr('★伝説') : d.school === 'rare' ? tr('◆稀少') : tr('強化')}：${d.name}` + (own && d.max ? ` Lv${own.tier}→${own.tier + 1}` : ''), desc: d.desc(own ? own.tier + 1 : 1) }; }
+    if (s.kind === 'potion') return { name: s.size > 0.5 ? tr('大きな回復薬') : tr('小さな回復薬'), desc: tr`HP を最大HPの ${Math.round(s.size * 100)}% 回復する` };
+    if (s.kind === 'artifact') return { name: tr`遺物：${ARTIFACTS[s.id].name}`, desc: tr('アーティファクト：') + ARTIFACTS[s.id].desc };
+    if (s.kind === 'whetstone') return { name: tr('砥石'), desc: tr('手持ちの強化を 1 つ選んで鍛える（Lv +1）。やめれば代金は返す') };
+    if (s.kind === 'reroll') return { name: tr('品替え'), desc: tr`まだ売れていない強化の品を、別の品に入れ替える（買うたびに高くなる）` };
+    return { name: tr('黄金の鍵'), desc: tr('次の扉の選択に「黄金の部屋」が加わる。強いアーティファクトを 1 つ選べる') };
   }
   openShop() {
     this.modal = { type: 'shop', stock: this.shopStock(), sel: 0, t: 0, scroll: 0 };
-    if (!this.run.shopGreeted) { this.run.shopGreeted = true; this.fx.text(cx(this.player), this.player.y - 40, '行商人「夜が明けねえもんで、商売あがったりさ」', '#ffd84a', 12); }
+    if (!this.run.shopGreeted) { this.run.shopGreeted = true; this.fx.text(cx(this.player), this.player.y - 40, tr('行商人「夜が明けねえもんで、商売あがったりさ」'), '#ffd84a', 12); }
     this.sfx.play('select');
   }
   buyShop(m) {
     const s = m.stock[m.sel], p = this.player, run = this.run;
     if (!s || s.sold) { this.sfx.play('deny'); return; }
-    if (run.gold < s.price) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 30, '金貨が足りない', '#9a8fa6', 12); return; }
+    if (run.gold < s.price) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 30, tr('金貨が足りない'), '#9a8fa6', 12); return; }
     if (s.kind === 'artifact' && p.artifacts.includes(s.id)) { this.sfx.play('deny'); return; }
-    if (s.kind === 'whetstone' && !p.boons.some(canForge)) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 30, '鍛えられる強化が無い', '#9a8fa6', 12); return; }
-    if (s.kind === 'reroll' && !m.stock.some((x) => x.kind === 'boon' && !x.sold)) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 30, '入れ替える品が無い', '#9a8fa6', 12); return; }
+    if (s.kind === 'whetstone' && !p.boons.some(canForge)) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 30, tr('鍛えられる強化が無い'), '#9a8fa6', 12); return; }
+    if (s.kind === 'reroll' && !m.stock.some((x) => x.kind === 'boon' && !x.sold)) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 30, tr('入れ替える品が無い'), '#9a8fa6', 12); return; }
     run.gold -= s.price;
     if (s.kind === 'reroll') { this.rerollShop(m, s); return; }
     s.sold = true;
@@ -1235,12 +1236,12 @@ export class Game {
     if (s.kind === 'boon') {
       this.grantBoon(s.id);
       const sc = BOONS[s.id].school;
-      if (sc === 'legend') { this.fx.setBanner(`伝説：${BOONS[s.id].name}`, BOONS[s.id].desc(1), '#ff7ae0', 2.4); this.fx.screenFlash('#ff7ae0', 0.4); this.fx.shake(6, 0.3); this.sfx.play('perfect'); this.fx.burst(cx(p), cy(p), '#ff7ae0', 40); }
+      if (sc === 'legend') { this.fx.setBanner(tr`伝説：${BOONS[s.id].name}`, BOONS[s.id].desc(1), '#ff7ae0', 2.4); this.fx.screenFlash('#ff7ae0', 0.4); this.fx.shake(6, 0.3); this.sfx.play('perfect'); this.fx.burst(cx(p), cy(p), '#ff7ae0', 40); }
       else if (sc === 'rare') { this.fx.screenFlash('#ffd84a', 0.25); this.fx.burst(cx(p), cy(p), '#ffd84a', 24); }
     }
     else if (s.kind === 'potion') { const amt = Math.round(p.maxHp * s.size * p.stats.healMul); p.hp = Math.min(p.maxHp, p.hp + amt); this.fx.text(cx(p), p.y - 20, `+${amt}`, '#5fd18b', 16); this.fx.ring(cx(p), cy(p), '#5fd18b', 40); }
     else if (s.kind === 'artifact') { p.addArtifact(s.id); this.fx.setBanner(ARTIFACTS[s.id].name, ARTIFACTS[s.id].desc, '#7fe0d0', 1.4); }
-    else if (s.kind === 'key') { run.keys++; this.fx.setBanner('黄金の鍵', '次の扉の選択に「黄金の部屋」が加わる', '#ffd84a', 1.4); }
+    else if (s.kind === 'key') { run.keys++; this.fx.setBanner(tr('黄金の鍵'), tr('次の扉の選択に「黄金の部屋」が加わる'), '#ffd84a', 1.4); }
     this.sfx.play('pickup');
     this.emit('buy', { kind: s.kind });
     // 鍵を買った直後なら、この部屋の出口にも黄金の扉を足す
@@ -1282,7 +1283,7 @@ export class Game {
     const col = BOON_COLORS[BOONS[to].school];
     this.fx.burst(cx(p), cy(p), '#ffd84a', 40); this.fx.ring(cx(p), cy(p), '#ffffff', 90, 0.5); this.fx.ring(cx(p), cy(p), col, 60, 0.4);
     this.fx.screenFlash('#ffd84a', 0.35); this.fx.shake(6, 0.25);
-    this.fx.setBanner(`合成：${BOONS[to].name}`, BOONS[to].desc(1), '#ffd84a', 2.2);
+    this.fx.setBanner(tr`合成：${BOONS[to].name}`, BOONS[to].desc(1), '#ffd84a', 2.2);
     this.sfx.play('perfect'); this.sfx.play('guardBreak');
     this.emit('fusion', { to });
     return true;
@@ -1328,7 +1329,7 @@ export class Game {
     const def = COMPANIONS[c.id], stage = c.announce;
     c.announce = 0; c.pop = 1.2;
     const newSkill = def.skills[stage - 1].names[stage - 1];
-    this.fx.setBanner(`${def.name}が「${def.forms[stage - 1]}」に進化した！`, `新しい技：${newSkill}　手助け：${def.buff.name}`, def.color, 2.4);
+    this.fx.setBanner(tr`${def.name}が「${def.forms[stage - 1]}」に進化した！`, tr`新しい技：${newSkill}　手助け：${def.buff.name}`, def.color, 2.4);
     this.fx.ring(c.x, c.y, def.color, 50, 0.5); this.fx.ring(c.x, c.y, '#ffffff', 30, 0.35);
     this.fx.sparks(c.x, c.y, def.color, 24, 260); this.fx.screenFlash(def.color, 0.25);
     this.sfx.play('perfect');
@@ -1359,7 +1360,7 @@ export class Game {
     this.refreshCompMods();
     const def = COMPANIONS[id];
     c.pop = 1.5;
-    this.fx.setBanner(`${def.name}が仲間に加わった！`, `${def.forms[st - 1]}　${'★'.repeat(st)}`, def.color, 2.2);
+    this.fx.setBanner(tr`${def.name}が仲間に加わった！`, tr`${def.forms[st - 1]}　${'★'.repeat(st)}`, def.color, 2.2);
     this.fx.ring(c.x, c.y, def.color, 40, 0.4); this.sfx.play('perfect');
     this.save();
     return true;
@@ -1379,8 +1380,8 @@ export class Game {
     if (rare) run.pendingRare++;
     this.fx.ring(cx(p), cy(p), '#a8f07a', 60, 0.5);
     this.fx.sparks(cx(p), cy(p), '#d8ffb0', 16, 260);
-    this.fx.text(cx(p), p.y - 30, `Lv ${run.level}！`, '#a8f07a', 20);
-    this.fx.setBanner(`レベル ${run.level}`, `最大HP +${LEVEL.hpPer}・攻撃 +${Math.round(LEVEL.atkPer * 100)}%・会心 +${LEVEL.critPer * 100}%` + (rare ? '　稀少の強化を選べる！' : ''), '#a8f07a', 1.4);
+    this.fx.text(cx(p), p.y - 30, tr`Lv ${run.level}！`, '#a8f07a', 20);
+    this.fx.setBanner(tr`レベル ${run.level}`, tr`最大HP +${LEVEL.hpPer}・攻撃 +${Math.round(LEVEL.atkPer * 100)}%・会心 +${LEVEL.critPer * 100}%` + (rare ? tr('　稀少の強化を選べる！') : ''), '#a8f07a', 1.4);
     this.sfx.play('charged');
     // お供の進化（Lv5・Lv10）
     for (const c of allComps(this)) if (stageOf(run.level) > c.stage) this.evolveCompanion(stageOf(run.level), c);
@@ -1390,7 +1391,7 @@ export class Game {
     const run = this.run, p = this.player;
     run.pendingRare--;
     const offer = rollRare(run.rareRng, p.boons, 3, this.presentCallBoons());
-    if (!offer.length) { p.hp = p.maxHp; this.fx.text(cx(p), p.y - 30, '全回復', '#5fd18b', 16); return; }
+    if (!offer.length) { p.hp = p.maxHp; this.fx.text(cx(p), p.y - 30, tr('全回復'), '#5fd18b', 16); return; }
     this.modal = { type: 'boon', offer, sel: 1 % offer.length, count: 1, rare: true, t: 0 };
     this.sfx.play('perfect');
   }
@@ -1403,7 +1404,7 @@ export class Game {
   addShards(n, x, y) {
     if (n <= 0) return;
     this.run.shards += n;
-    if (x != null) this.fx.text(x, y, `+${n} 欠片`, '#9fd0ff', 11);
+    if (x != null) this.fx.text(x, y, tr`+${n} 欠片`, '#9fd0ff', 11);
   }
 
   updateEchoes(dt) {
@@ -1437,7 +1438,7 @@ export class Game {
       }
       if (this.hitPlayer(pr, pr.dmg, pr.x + pr.w / 2, pr.key, pr.knock) && pr.kind !== 'wave') {
         pr.alive = false;
-        if (pr.kind === 'trap') { p.rootT = 0.7; this.fx.text(cx(p), p.y - 30, '罠に挟まれた', '#ff9a5a', 11); this.fx.sparks(pr.x + 10, pr.y + 4, '#c9a052', 10, 200); this.sfx.play('block'); }
+        if (pr.kind === 'trap') { p.rootT = 0.7; this.fx.text(cx(p), p.y - 30, tr('罠に挟まれた'), '#ff9a5a', 11); this.fx.sparks(pr.x + 10, pr.y + 4, '#c9a052', 10, 200); this.sfx.play('block'); }
       }
     }
   }
@@ -1464,7 +1465,7 @@ export class Game {
     if (p.state === 'dead') return;
     const extra = Math.round(6 * this.enemyDmgMul() * (p.stats.dmgTaken || 1));
     p.hp = Math.max(1, p.hp - extra);
-    this.fx.text(cx(p), p.y - 22, `壁に激突！ -${extra}`, '#ff8a5a', 13);
+    this.fx.text(cx(p), p.y - 22, tr`壁に激突！ -${extra}`, '#ff8a5a', 13);
     this.fx.shake(9, 0.25); this.fx.dust(p.face > 0 ? p.x : p.x + p.w, cy(p), 10);
     this.fx.ring(cx(p), cy(p), '#ffb07a', 34, 0.25);
     this.sfx.play('heavyHit');
@@ -1481,7 +1482,7 @@ export class Game {
     p.iframeT = Math.max(p.iframeT, 0.25);
     this.sfx.play('perfect');
     this.fx.ring(cx(p), cy(p), '#ffffff', 46, 0.35);
-    this.fx.text(cx(p), p.y - 20, '刹那', '#ffffff', 16);
+    this.fx.text(cx(p), p.y - 20, tr('刹那'), '#ffffff', 16);
     // ジャスト回避に成功したら、クールタイム無しですぐ次の回避ができる（回避の最中からでも）
     p.dodgeCd = 0; p.airDodgeUsed = false; p.chainDodge = true;
     if (st.perfectGauge) p.gauge = Math.min(PC.gaugeMax, p.gauge + st.perfectGauge);
@@ -1501,15 +1502,15 @@ export class Game {
     if (!pit) dmg = Math.max(1, Math.round(dmg * (p.stats.dmgTaken || 1) * (p.stats.stance && p.onGround && p.state === 'normal' && Math.abs(p.vx) < 20 ? 1 - p.stats.stance : 1))); // 守りの歯車・不動の構え
     const st = p.stats;
     // 時の盾：次の被弾を 1 回まるごと防ぐ
-    if (!pit && p.wardUp) { p.wardUp = false; p.wardT = 0; p.iframeT = Math.max(p.iframeT, 0.5); this.fx.text(cx(p), p.y - 30, '時の盾', '#9fe3ff', 13); this.fx.ring(cx(p), cy(p), '#9fe3ff', 34, 0.35); this.fx.sparks(cx(p), cy(p), '#cfefff', 12, 220); this.sfx.play('block'); return; }
+    if (!pit && p.wardUp) { p.wardUp = false; p.wardT = 0; p.iframeT = Math.max(p.iframeT, 0.5); this.fx.text(cx(p), p.y - 30, tr('時の盾'), '#9fe3ff', 13); this.fx.ring(cx(p), cy(p), '#9fe3ff', 34, 0.35); this.fx.sparks(cx(p), cy(p), '#cfefff', 12, 220); this.sfx.play('block'); return; }
     // 踏みとどまる：部屋ごとに 1 度、倒れるほどの一撃を HP1 で耐える
     let stood = false;
     if (!pit && st.lastStand && dmg >= p.hp && !this.room.lastStandUsed) { this.room.lastStandUsed = true; dmg = Math.max(0, p.hp - 1); stood = true; }
-    if (!pit && p.compShield) { p.compShield = false; dmg = Math.max(1, Math.round(dmg * 0.5)); this.fx.text(cx(p), p.y - 34, '守りの羽', '#9fe3ff', 11); this.fx.ring(cx(p), cy(p), '#9fe3ff', 30, 0.3); }
+    if (!pit && p.compShield) { p.compShield = false; dmg = Math.max(1, Math.round(dmg * 0.5)); this.fx.text(cx(p), p.y - 34, tr('守りの羽'), '#9fe3ff', 11); this.fx.ring(cx(p), cy(p), '#9fe3ff', 30, 0.3); }
     p.hurt(dmg, fromX ?? cx(p), pit ? 0 : (st.steadfast ? 0 : knock));
     if (!pit && st.steadfast && p.state === 'hurt') { p.vx *= 0.3; p.vy = Math.max(p.vy, -120); p.hurtStun = (p.hurtStun || 0.3) * 0.6; p.iframeT += st.steadfast; }
     if (stood && p.state !== 'dead') {
-      this.fx.setBanner('踏みとどまった', '', '#9fe3ff', 1.2); this.fx.ring(cx(p), cy(p), '#ffffff', 50, 0.4);
+      this.fx.setBanner(tr('踏みとどまった'), '', '#9fe3ff', 1.2); this.fx.ring(cx(p), cy(p), '#ffffff', 50, 0.4);
       if (st.lastStand >= 2) p.iframeT = Math.max(p.iframeT, 2);
       if (st.lastStand >= 3) p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.2));
     }
@@ -1518,14 +1519,14 @@ export class Game {
       const src = this.attacker && this.attacker.alive ? this.attacker : this.room.enemies.filter((e) => e.alive && !(e.boss && e.defeated)).sort((a, b) => Math.abs(cx(a) - cx(p)) - Math.abs(cx(b) - cx(p)))[0];
       if (src && Math.hypot(cx(src) - cx(p), cy(src) - cy(p)) < 260) {
         this.dealDamage(src, { base: dmg * st.thorns / Math.max(0.01, st.dmgMul), cat: 'echo', knock: 100, dir: sign(cx(src) - cx(p)) || 1, echo: true });
-        this.fx.sparks(cx(src), cy(src), '#9fe3ff', 8, 220); this.fx.text(cx(src), src.y - 20, '棘', '#9fe3ff', 11);
+        this.fx.sparks(cx(src), cy(src), '#9fe3ff', 8, 220); this.fx.text(cx(src), src.y - 20, tr('棘'), '#9fe3ff', 11);
       }
     }
     // 吹き飛ばし：白い衝撃の輪と、飛ばされる向きの風切り
-    if (knock && p.state === 'hurt') { this.fx.ring(cx(p), cy(p), '#ffffff', 40, 0.3); this.fx.text(cx(p), p.y - 24, '吹き飛ばされた', '#ffd0a0', 11); this.fx.shake(8, 0.25); }
+    if (knock && p.state === 'hurt') { this.fx.ring(cx(p), cy(p), '#ffffff', 40, 0.3); this.fx.text(cx(p), p.y - 24, tr('吹き飛ばされた'), '#ffd0a0', 11); this.fx.shake(8, 0.25); }
     // 落下からの復帰では吹き飛ばさない（同じ穴へ落ち続けないように）
     if (pit && p.state !== 'dead') { p.vx = 0; p.vy = 0; }
-    if (this.combo.n >= 10) this.fx.text(cx(p), p.y - 26, `${this.combo.n} HIT 途切れた`, '#9a8fa6', 11);
+    if (this.combo.n >= 10) this.fx.text(cx(p), p.y - 26, tr`${this.combo.n} HIT 途切れた`, '#9a8fa6', 11);
     this.combo.n = 0;
     this.fx.vignette = 1;
     this.fx.shake(pit ? 3 : 6, 0.22);
@@ -1545,7 +1546,7 @@ export class Game {
       this.run.phoenixUsed = true;
       p.hp = Math.round(p.maxHp * 0.5); p.state = 'normal'; p.stateT = 0; p.iframeT = 2; p.vx = 0;
       this.fx.burst(cx(p), cy(p), '#ffd84a', 34); this.fx.screenFlash('#ffd84a', 0.4);
-      this.fx.setBanner('不死鳥の砂時計', '砂が逆さに落ちる――立ち上がった', '#ffd84a', 1.6);
+      this.fx.setBanner(tr('不死鳥の砂時計'), tr('砂が逆さに落ちる――立ち上がった'), '#ffd84a', 1.6);
       this.sfx.play('perfect'); this.slowT = 0.6; this.slowScale = 0.3;
     }
     // 不滅の歯車：一度だけ HP100% で立ち上がる
@@ -1553,7 +1554,7 @@ export class Game {
       this.run.aegisUsed = true;
       p.hp = p.maxHp; p.state = 'normal'; p.stateT = 0; p.iframeT = 2; p.vx = 0;
       this.fx.burst(cx(p), cy(p), '#ffd84a', 40); this.fx.screenFlash('#ffd84a', 0.45);
-      this.fx.setBanner('不滅の歯車', '歯車が回り直す――立ち上がった', '#ffd84a', 1.6);
+      this.fx.setBanner(tr('不滅の歯車'), tr('歯車が回り直す――立ち上がった'), '#ffd84a', 1.6);
       this.sfx.play('perfect'); this.slowT = 0.6; this.slowScale = 0.3;
     }
     if (p.state === 'dead') {
@@ -1576,14 +1577,14 @@ export class Game {
     const art = p.stats.activeArt;
     if (art) {
       const c = ACTIVE_ARTS[art.id].cost(art.tier || 1);
-      if (p.gauge < c) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 14, 'ゲージ不足', '#9a8fa6', 11); return false; }
+      if (p.gauge < c) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 14, tr('ゲージ不足'), '#9a8fa6', 11); return false; }
       p.gauge -= c;
       castArt(this, art);
       if (this.room.boss) this.room.boss.onPlayerCast(this);
       return true;
     }
     const cost = PC.skillCost * p.stats.skillCostMul;
-    if (p.gauge < cost) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 14, 'ゲージ不足', '#9a8fa6', 11); return false; }
+    if (p.gauge < cost) { this.sfx.play('deny'); this.fx.text(cx(p), p.y - 14, tr('ゲージ不足'), '#9a8fa6', 11); return false; }
     p.gauge -= cost;
     // 刻閃：後ろへ身をかわし（クールタイムを使わない）、斬撃が終わるまで無敵
     const cd = p.dodgeCd, air = p.airDodgeUsed;
@@ -1593,7 +1594,7 @@ export class Game {
     p.dodgeCd = cd; p.airDodgeUsed = air;
     const ws = castWarpSlash(this);
     p.iframeT = Math.max(p.iframeT, ws.life);
-    this.fx.text(cx(p), p.y - 26, '刻閃', '#e8f4ff', 18);
+    this.fx.text(cx(p), p.y - 26, tr('刻閃'), '#e8f4ff', 18);
     const t = PC.skillTime + p.stats.skillTimeAdd;
     for (const e of this.room.enemies) if (e.alive && Math.hypot(cx(e) - cx(p), cy(e) - cy(p)) < PC.skillRadius) {
       if (!e.boss && !e.elite) e.warp = t; // 中ボス・刻守は遅くならない
@@ -1664,7 +1665,7 @@ export class Game {
     if (t === 'trial' && !room.cleared && room.wave === 0 && !room.enemies.some((e) => e.alive && e.initial)) {
       room.wave = 1;
       for (const e of room.desc.waves[1]) this.addEnemy(makeEnemy(this.easyType(e.type), e.x * TILE, e.y * TILE));
-      this.fx.setBanner('第二波', '', '#ff9a7a', 1.0); this.sfx.play('tellBig');
+      this.fx.setBanner(tr('第二波'), '', '#ff9a7a', 1.0); this.sfx.play('tellBig');
       return;
     }
     // 戦闘部屋は MIN_FIGHT 秒たつまで終わらない（増援が湧き続ける）
@@ -1682,7 +1683,7 @@ export class Game {
     room.cleared = true;
     // 再生の刻：戦って制圧したときだけ回復（敵のいない部屋は入った時に静かに制圧扱いになるので、quiet では回復しない）
     const p = this.player, rc = p.stats.recover;
-    if (rc && !quiet && p.state !== 'dead' && p.hp < p.maxHp) { const a = Math.round(p.maxHp * rc * (p.stats.healMul || 1)); p.hp = Math.min(p.maxHp, p.hp + a); this.fx.text(cx(p), p.y - 24, `再生 +${a}`, '#9fe3ff', 13); }
+    if (rc && !quiet && p.state !== 'dead' && p.hp < p.maxHp) { const a = Math.round(p.maxHp * rc * (p.stats.healMul || 1)); p.hp = Math.min(p.maxHp, p.hp + a); this.fx.text(cx(p), p.y - 24, tr`再生 +${a}`, '#9fe3ff', 13); }
     const t = room.desc.type;
     let reward = null;
     if (t === 'combat') reward = this.run.nextReward || 'boon';
@@ -1691,7 +1692,7 @@ export class Game {
     if (t === 'trial') { reward = this.run.rareRng.next() < 0.5 ? 'artifact' : 'boon2'; this.dropGold(Math.round(60 * (1 + 0.25 * this.run.scale.level)), cx(this.player), this.player.y - 10, 1.4); }
     if (!quiet) {
       this.addShards(3 + this.run.scale.level);
-      this.fx.setBanner('制圧', '', '#f2c14e', 1.0);
+      this.fx.setBanner(tr('制圧'), '', '#f2c14e', 1.0);
       this.sfx.play('confirm');
     }
     if (reward) {
@@ -1728,12 +1729,12 @@ export class Game {
       choices.forEach((rw) => this.addItem({ kind: 'door', x: X.x + dir * (n++) * 90 - 6, y: doorY, w: 36, h: 50, to: next, reward: rw }));
     } else {
       n++;
-      this.addItem({ kind: 'door', x: X.x - 6, y: doorY, w: 36, h: 50, to: next, reward: null, label: next.stairs ? '階段' : { forge: '鍛冶場', elite: '強敵', elite2: '強敵', archive: '書庫', study: '書斎', boss: '鐘楼', shop: '店', shrine: '時の祠', trial: '試練の間', entry: '' }[next.desc.type], causal: ['forge', 'archive', 'study'].includes(next.desc.type), boss: next.desc.type === 'boss', elite: next.desc.type === 'elite' || next.desc.type === 'elite2' || next.desc.type === 'trial' });
+      this.addItem({ kind: 'door', x: X.x - 6, y: doorY, w: 36, h: 50, to: next, reward: null, label: next.stairs ? tr('階段') : { forge: tr('鍛冶場'), elite: tr('強敵'), elite2: tr('強敵'), archive: tr('書庫'), study: tr('書斎'), boss: tr('鐘楼'), shop: tr('店'), shrine: tr('時の祠'), trial: tr('試練の間'), entry: '' }[next.desc.type], causal: ['forge', 'archive', 'study'].includes(next.desc.type), boss: next.desc.type === 'boss', elite: next.desc.type === 'elite' || next.desc.type === 'elite2' || next.desc.type === 'trial' });
     }
     this.run.firstDoorDone = true;
     // 黄金の鍵があれば、黄金の部屋への扉が増える（鐘楼の前は除く）
     if (this.run.keys > 0 && next.desc.type !== 'boss' && this.room.desc.type !== 'golden') {
-      this.addItem({ kind: 'door', golden: true, x: X.x + dir * n * 90 - 6, y: doorY, w: 36, h: 50, to: { fi: this.run.fi, ri: this.run.ri, override: { type: 'golden', layout: 'vault' } }, reward: null, label: '黄金の部屋' });
+      this.addItem({ kind: 'door', golden: true, x: X.x + dir * n * 90 - 6, y: doorY, w: 36, h: 50, to: { fi: this.run.fi, ri: this.run.ri, override: { type: 'golden', layout: 'vault' } }, reward: null, label: tr('黄金の部屋') });
     }
     this.separateFromDoors();
     this.sfx.play('door');
@@ -1867,7 +1868,7 @@ export class Game {
     let tx = near.find((x) => okAt(x));
     if (tx == null) tx = cx(d) - p.w / 2; // 横に立てなければ扉の前
     // 拾いきれていない金貨・経験値の粒は、すべて自動で回収する
-    if ((this.room.pickups || []).length) { this.flushPickups(); this.fx.text(cx(p), p.y - 30, '回収', '#ffd84a', 12); this.sfx.play('coin'); }
+    if ((this.room.pickups || []).length) { this.flushPickups(); this.fx.text(cx(p), p.y - 30, tr('回収'), '#ffd84a', 12); this.sfx.play('coin'); }
     p.startTravel(tx, ty);
     this.sfx.play('dodge');
     return true;
@@ -1903,21 +1904,21 @@ export class Game {
   }
   interactPrompt(it) {
     switch (it.kind) {
-      case 'door': return it.golden ? '黄金の部屋へ（鍵を使う）' : it.reward ? `進む（${REWARD_LABEL[it.reward]}）` : `進む${it.label ? '：' + it.label : ''}`;
-      case 'npc': return '話す';
-      case 'sign': return '読む';
-      case 'corpse': return '調べる';
-      case 'codedoor': return this.run.vaultOpen ? '' : '番号を入れる';
-      case 'diary': return '日誌を読む';
-      case 'altar': return this.run.altarUsed ? '' : '祭壇に触れる';
-      case 'note': return '走り書きを読む';
-      case 'fountain': return this.run.fountainUsed[it.id] ? '' : '泉の水を飲む';
-      case 'brake': return '歯止めを調べる';
-      case 'wreck': return it.wedged ? '' : '楔を打つ';
-      case 'lift': return it.dead ? '動かない' : '昇降機に乗る（上層・書斎へ）';
-      case 'merchant': return '店を見る';
-      case 'shrine': return it.used ? '' : '祠に触れる';
-      case 'goldchest': return it.opened ? '' : '黄金の宝箱を開ける';
+      case 'door': return it.golden ? tr('黄金の部屋へ（鍵を使う）') : it.reward ? tr`進む（${REWARD_LABEL[it.reward]}）` : tr`進む${it.label ? tr('：') + it.label : ''}`;
+      case 'npc': return tr('話す');
+      case 'sign': return tr('読む');
+      case 'corpse': return tr('調べる');
+      case 'codedoor': return this.run.vaultOpen ? '' : tr('番号を入れる');
+      case 'diary': return tr('日誌を読む');
+      case 'altar': return this.run.altarUsed ? '' : tr('祭壇に触れる');
+      case 'note': return tr('走り書きを読む');
+      case 'fountain': return this.run.fountainUsed[it.id] ? '' : tr('泉の水を飲む');
+      case 'brake': return tr('歯止めを調べる');
+      case 'wreck': return it.wedged ? '' : tr('楔を打つ');
+      case 'lift': return it.dead ? tr('動かない') : tr('昇降機に乗る（上層・書斎へ）');
+      case 'merchant': return tr('店を見る');
+      case 'shrine': return it.used ? '' : tr('祠に触れる');
+      case 'goldchest': return it.opened ? '' : tr('黄金の宝箱を開ける');
     }
     return '';
   }
@@ -1939,7 +1940,7 @@ export class Game {
       case 'npc': it.who === 'lira' ? this.talkLira(it) : this.talkGlen(it); break;
       case 'corpse':
         this.learnK('glen_time');
-        this.openDialog([{ who: '', text: '鍛冶屋グレン――師の古い友で、塔の歯車を共に作った男が事切れている。' }, { who: '', text: `狂った時計人形にやられたのだ。ほんの少し前、夜の ${fmtClock(GLEN_DEADLINE)} 頃か。`, note: '記録帳に追加：グレンの最期' }]);
+        this.openDialog([{ who: '', text: tr('鍛冶屋グレン――師の古い友で、塔の歯車を共に作った男が事切れている。') }, { who: '', text: tr`狂った時計人形にやられたのだ。ほんの少し前、夜の ${fmtClock(GLEN_DEADLINE)} 頃か。`, note: tr('記録帳に追加：グレンの最期') }]);
         break;
       case 'codedoor': if (!this.run.vaultOpen) this.openCode(); break;
       case 'diary': this.readDiary(); break;
@@ -1948,13 +1949,13 @@ export class Game {
         this.run.altarUsed = true;
         if (!this.meta.unlocked.includes('stasis')) {
           this.meta.unlocked.push('stasis'); this.save();
-          this.fx.setBanner('「停滞」の系統を解放', 'これ以降の夜でも強化候補に現れる', '#5aa9e6', 2.2);
+          this.fx.setBanner(tr('「停滞」の系統を解放'), tr('これ以降の夜でも強化候補に現れる'), '#5aa9e6', 2.2);
         }
         this.openBoonPick(1, 'stasis');
         break;
       case 'note':
         this.learnK('code');
-        this.openDialog([{ who: '', text: '師の机の走り書き。日誌は書庫にしまってあるらしい。' }, { who: '', text: `「書庫の扉　${this.meta.code.join(' - ')}」`, note: '記録帳に追加：書庫の番号（次の夜も覚えている）' }]);
+        this.openDialog([{ who: '', text: tr('師の机の走り書き。日誌は書庫にしまってあるらしい。') }, { who: '', text: tr`「書庫の扉　${this.meta.code.join(' - ')}」`, note: tr('記録帳に追加：書庫の番号（次の夜も覚えている）') }]);
         break;
       case 'fountain':
         if (this.run.fountainUsed[it.id]) break;
@@ -1966,13 +1967,13 @@ export class Game {
       case 'brake': this.talkBrake(it); break;
       case 'wreck':
         if (it.wedged) break;
-        this.openDialog([{ who: '', text: '歯車騎士の残骸。胸の歯車がまだ回っている。' }], [
-          { label: '楔を打つ（次の夜も倒れたまま）', fn: () => this.doWedge({ target: 'knight' }, it) },
-          { label: 'やめる', fn: () => {} },
+        this.openDialog([{ who: '', text: tr('歯車騎士の残骸。胸の歯車がまだ回っている。') }], [
+          { label: tr('楔を打つ（次の夜も倒れたまま）'), fn: () => this.doWedge({ target: 'knight' }, it) },
+          { label: tr('やめる'), fn: () => {} },
         ]);
         break;
       case 'lift':
-        if (it.dead) { this.openDialog([{ who: '', text: '昇降機は動かない。動力の歯車がどこかで回っているようだ。' }]); break; }
+        if (it.dead) { this.openDialog([{ who: '', text: tr('昇降機は動かない。動力の歯車がどこかで回っているようだ。') }]); break; }
         this.startTransition({ fi: 2, ri: 1, desc: this.run.plan.floors[2][1], lift: true });
         break;
     }
@@ -1982,7 +1983,7 @@ export class Game {
     if (it.golden) {
       if (this.run.keys <= 0) return;
       this.run.keys--;
-      this.fx.setBanner('黄金の鍵を使った', '', '#ffd84a', 1.0);
+      this.fx.setBanner(tr('黄金の鍵を使った'), '', '#ffd84a', 1.0);
     }
     if (it.reward) this.run.nextReward = it.reward;
     this.sfx.play('door');
@@ -1990,10 +1991,10 @@ export class Game {
   }
   startTransition(to) { this.transition = { to, t: 0, entered: false }; }
   updateTransition() {
-    const tr = this.transition;
-    tr.t += DT;
-    if (!tr.entered && tr.t >= 0.22) { tr.entered = true; this.enterRoom(tr.to.fi, tr.to.ri, tr.to.override || null); if (tr.to.lift) this.fx.setBanner('昇降機', '上層・書斎へ', '#f2c14e', 1.4); }
-    if (tr.t >= 0.44) this.transition = null;
+    const trn = this.transition;
+    trn.t += DT;
+    if (!trn.entered && trn.t >= 0.22) { trn.entered = true; this.enterRoom(trn.to.fi, trn.to.ri, trn.to.override || null); if (trn.to.lift) this.fx.setBanner(tr('昇降機'), tr('上層・書斎へ'), '#f2c14e', 1.4); }
+    if (trn.t >= 0.44) this.transition = null;
   }
 
   // ───────── 人物 ─────────
@@ -2003,61 +2004,61 @@ export class Game {
     const lines = [];
     const choices = [];
     if (!wedged) {
-      lines.push({ who: '市場の少女', text: '朝になったら、一番の汽車で遠くの療養所へ行くの。お父さん、見送りに来てくれるかな。' });
+      lines.push({ who: tr('市場の少女'), text: tr('朝になったら、一番の汽車で遠くの療養所へ行くの。お父さん、見送りに来てくれるかな。') });
       if (knows(m, 'lira_name')) {
-        choices.push({ label: '「リラ？」と呼ぶ', fn: () => this.openDialog([{ who: '市場の少女', text: '……どうして、わたしの名前を？' }, { who: 'リラ', text: 'あなた、お父さんのお弟子さん……？ 前にも会った気がする。' }, { who: '', text: '刻守の娘、リラ。次の夜になれば、彼女はまた忘れてしまうだろう。', note: '金の印のついた人物には、楔を打てる' }], this.wedgeChoices('lira', it)) });
+        choices.push({ label: tr('「リラ？」と呼ぶ'), fn: () => this.openDialog([{ who: tr('市場の少女'), text: tr('……どうして、わたしの名前を？') }, { who: tr('リラ'), text: tr('あなた、お父さんのお弟子さん……？ 前にも会った気がする。') }, { who: '', text: tr('刻守の娘、リラ。次の夜になれば、彼女はまた忘れてしまうだろう。'), note: tr('金の印のついた人物には、楔を打てる') }], this.wedgeChoices('lira', it)) });
       }
       choices.push(...this.wedgeChoices('lira', it));
     } else if (!knows(m, 'lira_name')) {
-      lines.push({ who: '市場の少女', text: 'あなたのこと、覚えてる。前の夜にも来たよね？ ……ずっと同じ夜なの？' });
-      lines.push({ who: '市場の少女', text: 'お父さんは時計塔のてっぺん。わたしが汽車に乗る朝が、こわいのかな。', note: '記録帳に追加：塔の上の父' });
+      lines.push({ who: tr('市場の少女'), text: tr('あなたのこと、覚えてる。前の夜にも来たよね？ ……ずっと同じ夜なの？') });
+      lines.push({ who: tr('市場の少女'), text: tr('お父さんは時計塔のてっぺん。わたしが汽車に乗る朝が、こわいのかな。'), note: tr('記録帳に追加：塔の上の父') });
       this.learnK('lira_father');
     } else {
-      lines.push({ who: 'リラ', text: '来てくれた。……ちゃんと覚えてるよ、何度も同じ夜だったこと。' });
-      lines.push({ who: 'リラ', text: 'お父さんは、わたしを見送る朝が来ないように、鐘で夜を戻してるんだね。……夜が戻るたび、お父さんのしわが増えていくの。' });
-      lines.push({ who: 'リラ', text: 'お父さんに伝えて。「リラは覚えてる。朝が来ても、ちゃんと治して帰ってくる」って。', note: '記録帳に追加：リラの伝言' });
+      lines.push({ who: tr('リラ'), text: tr('来てくれた。……ちゃんと覚えてるよ、何度も同じ夜だったこと。') });
+      lines.push({ who: tr('リラ'), text: tr('お父さんは、わたしを見送る朝が来ないように、鐘で夜を戻してるんだね。……夜が戻るたび、お父さんのしわが増えていくの。') });
+      lines.push({ who: tr('リラ'), text: tr('お父さんに伝えて。「リラは覚えてる。朝が来ても、ちゃんと治して帰ってくる」って。'), note: tr('記録帳に追加：リラの伝言') });
       this.learnK('lira_message');
     }
-    this.openDialog(lines, choices.length ? [...choices, { label: '立ち去る', fn: () => {} }] : null);
+    this.openDialog(lines, choices.length ? [...choices, { label: tr('立ち去る'), fn: () => {} }] : null);
   }
   wedgeChoices(target, it) {
     if (hasWedge(this.meta, target)) return [];
-    return [{ label: `楔を打つ（人の楔 残り ${freeSlots(this.meta, 'person')} 本）`, fn: () => this.doWedge({ target }, it) }];
+    return [{ label: tr`楔を打つ（人の楔 残り ${freeSlots(this.meta, 'person')} 本）`, fn: () => this.doWedge({ target }, it) }];
   }
   talkGlen(it) {
     const run = this.run;
     if (it.inDanger && this.room.desc.type === 'forge' && run.glen === 'attacked') {
-      this.openDialog([{ who: 'グレン', text: 'うおっ、来るな！ いや、お前じゃない、時計人形どもだ！' }]);
+      this.openDialog([{ who: tr('グレン'), text: tr('うおっ、来るな！ いや、お前じゃない、時計人形どもだ！') }]);
       return;
     }
     const lines = [];
     if (hasWedge(this.meta, 'glen') && this.room.desc.type === 'entry') {
-      lines.push({ who: 'グレン', text: '妙な夢を見た。お前に助けられた夢だ。……借りは返すぜ、刻守の弟子。' });
-      lines.push({ who: 'グレン', text: 'あの鐘は人の命を喰う禁忌の道具だ。あいつ、もう何百夜ぶん削ってると思う？' });
-      lines.push({ who: 'グレン', text: '娘を見送るのが怖ぇのさ。このままじゃ朝より先に、あいつが尽きる。止めてやれるのはお前だけだ。' });
+      lines.push({ who: tr('グレン'), text: tr('妙な夢を見た。お前に助けられた夢だ。……借りは返すぜ、刻守の弟子。') });
+      lines.push({ who: tr('グレン'), text: tr('あの鐘は人の命を喰う禁忌の道具だ。あいつ、もう何百夜ぶん削ってると思う？') });
+      lines.push({ who: tr('グレン'), text: tr('娘を見送るのが怖ぇのさ。このままじゃ朝より先に、あいつが尽きる。止めてやれるのはお前だけだ。') });
     } else {
-      lines.push({ who: 'グレン', text: '助かった、刻守の弟子か。あの人形どもは塔の番人だ。夜が止まってから狂っちまった。' });
-      lines.push({ who: 'グレン', text: '礼だ。腕を見せな、一つ鍛えてやる。' });
+      lines.push({ who: tr('グレン'), text: tr('助かった、刻守の弟子か。あの人形どもは塔の番人だ。夜が止まってから狂っちまった。') });
+      lines.push({ who: tr('グレン'), text: tr('礼だ。腕を見せな、一つ鍛えてやる。') });
     }
     lines.push(this.fusionHint());
     const choices = [];
-    if (!run.forged) choices.push({ label: '強化を鍛えてもらう（II）', fn: () => this.openForge() });
-    else lines.push({ who: 'グレン', text: '今夜の分はもう打った。次の夜にまた来い。' });
+    if (!run.forged) choices.push({ label: tr('強化を鍛えてもらう（II）'), fn: () => this.openForge() });
+    else lines.push({ who: tr('グレン'), text: tr('今夜の分はもう打った。次の夜にまた来い。') });
     choices.push(...this.wedgeChoices('glen', it));
-    choices.push({ label: '立ち去る', fn: () => {} });
+    choices.push({ label: tr('立ち去る'), fn: () => {} });
     this.openDialog(lines, choices);
   }
   // グレンの合成の手がかり：手持ちの強化が素材になる合成のうち、いちばん近いものを教える
   fusionHint() {
     const lv = Object.fromEntries(this.player.boons.map((b) => [b.id, b.tier || 1]));
-    const name = (id) => `「${BOONS[id].name}」`;
+    const name = (id) => tr`「${BOONS[id].name}」`;
     const cands = FUSIONS.filter((f) => !(f.to in lv) && ((f.a in lv) || (f.b in lv)))
       .map((f) => ({ f, score: Math.min(2, lv[f.a] || 0) + Math.min(2, lv[f.b] || 0) }))
       .sort((x, y) => y.score - x.score);
-    if (!cands.length) return { who: 'グレン', text: '覚えときな。強化には噛み合う組がある。決まった二つを両方 Lv2 まで上げりゃ、合わさって上の強化に化ける。', note: '合成：素材の 2 つを両方 Lv2 以上で持つと、上位の強化に合成できる' };
+    if (!cands.length) return { who: tr('グレン'), text: tr('覚えときな。強化には噛み合う組がある。決まった二つを両方 Lv2 まで上げりゃ、合わさって上の強化に化ける。'), note: tr('合成：素材の 2 つを両方 Lv2 以上で持つと、上位の強化に合成できる') };
     const { f } = cands[0];
-    const st = (id) => (lv[id] ? `今 Lv${lv[id]}` : 'まだ持ってねえ');
-    return { who: 'グレン', text: `${name(f.a)}と${name(f.b)}――両方 Lv2 まで上げりゃ、噛み合って${name(f.to)}になるぜ。${name(f.a)}は${st(f.a)}、${name(f.b)}は${st(f.b)}だな。`, note: `合成の手がかり：${BOONS[f.a].name}（Lv2）＋${BOONS[f.b].name}（Lv2）→ ${BOONS[f.to].name}` };
+    const st = (id) => (lv[id] ? tr`今 Lv${lv[id]}` : tr('まだ持ってねえ'));
+    return { who: tr('グレン'), text: tr`${name(f.a)}と${name(f.b)}――両方 Lv2 まで上げりゃ、噛み合って${name(f.to)}になるぜ。${name(f.a)}は${st(f.a)}、${name(f.b)}は${st(f.b)}だな。`, note: tr`合成の手がかり：${BOONS[f.a].name}（Lv2）＋${BOONS[f.b].name}（Lv2）→ ${BOONS[f.to].name}` };
   }
   onGlenSaved() {
     const room = this.room;
@@ -2066,7 +2067,7 @@ export class Game {
     const g = room.items.find((x) => x.kind === 'npc' && x.who === 'glen');
     if (g) g.inDanger = false;
     this.learnK('glen_saved');
-    this.fx.setBanner('鍛冶屋を救った', '話しかけよう', '#f2c14e', 1.6);
+    this.fx.setBanner(tr('鍛冶屋を救った'), tr('話しかけよう'), '#f2c14e', 1.6);
     this.sfx.play('pickup');
     this.openDoors();
   }
@@ -2081,7 +2082,7 @@ export class Game {
         const g = room.items.find((x) => x.kind === 'npc' && x.who === 'glen');
         if (g) { g.gone = true; this.addItem({ kind: 'corpse', who: 'glen', x: g.x - 4, y: g.y + 26, w: 34, h: 14 }); }
         this.learnK('glen_time');
-        this.fx.setBanner('グレンが倒れた', 'もっと早く着いていれば……', '#ff5a3c', 1.8);
+        this.fx.setBanner(tr('グレンが倒れた'), tr('もっと早く着いていれば……'), '#ff5a3c', 1.8);
         this.sfx.play('hurt');
       }
     }
@@ -2134,14 +2135,14 @@ export class Game {
     const first = !knows(this.meta, 'master_reason');
     this.learnK('master_reason');
     const lines = [
-      { who: '師の日誌', text: '明日の朝、リラは一番の汽車で療養所へ発つ。治るかどうかは、わからない。' },
-      { who: '師の日誌', text: '鐘には時を戻す力がある。鳴らせば、夜は今夜のはじめに戻る。' },
-      { who: '師の日誌', text: '鐘は禁忌。鳴らすたび、私の胸の時計が一夜ぶん進む。構わない。残りの命で、あの子が家にいる夜を買えるなら。' },
-      { who: '師の日誌', text: '朝など、来なくていい。' },
+      { who: tr('師の日誌'), text: tr('明日の朝、リラは一番の汽車で療養所へ発つ。治るかどうかは、わからない。') },
+      { who: tr('師の日誌'), text: tr('鐘には時を戻す力がある。鳴らせば、夜は今夜のはじめに戻る。') },
+      { who: tr('師の日誌'), text: tr('鐘は禁忌。鳴らすたび、私の胸の時計が一夜ぶん進む。構わない。残りの命で、あの子が家にいる夜を買えるなら。') },
+      { who: tr('師の日誌'), text: tr('朝など、来なくていい。') },
     ];
     if (first && !this.meta.flags.diaryRead) {
       this.meta.flags.diaryRead = true;
-      if (this.meta.personSlots < PERSON_MAX) { this.meta.personSlots++; lines.push({ who: '', text: '師の想いを知り、あなたの楔が強くなった。', note: '人の楔の枠が1つ増えた' }); }
+      if (this.meta.personSlots < PERSON_MAX) { this.meta.personSlots++; lines.push({ who: '', text: tr('師の想いを知り、あなたの楔が強くなった。'), note: tr('人の楔の枠が1つ増えた') }); }
       this.save();
     }
     this.openDialog(lines);
@@ -2150,20 +2151,20 @@ export class Game {
   talkBrake(it) {
     const m = this.meta;
     if (hasWedge(m, 'brake')) {
-      this.openDialog([{ who: '', text: '歯止めには金の楔が打ち込まれている。鐘楼の時止めの機構は動かない。', note: '楔があるかぎり、刻守との戦いは決着の戦いになる' }], [
-        { label: 'そのままにする', fn: () => {} },
-        { label: '楔を抜く（決着の戦いをやめる）', fn: () => this.pullBrake(it) },
+      this.openDialog([{ who: '', text: tr('歯止めには金の楔が打ち込まれている。鐘楼の時止めの機構は動かない。'), note: tr('楔があるかぎり、刻守との戦いは決着の戦いになる') }], [
+        { label: tr('そのままにする'), fn: () => {} },
+        { label: tr('楔を抜く（決着の戦いをやめる）'), fn: () => this.pullBrake(it) },
       ]);
       return;
     }
     if (!canWedgeBrake(m)) {
-      this.openDialog([{ who: '', text: '鐘楼へ続く歯止め。師の「時止め」は、この機構から力を引いている。' }, { who: '', text: '……楔を当てても、はじかれてしまう。この夜の鐘は、まだ一度も鳴っていない。', note: `歯止めに楔を打てるのは第 ${FINAL_NIGHT} 夜から（打った夜の刻守戦が決着の戦いになる）` }]);
+      this.openDialog([{ who: '', text: tr('鐘楼へ続く歯止め。師の「時止め」は、この機構から力を引いている。') }, { who: '', text: tr('……楔を当てても、はじかれてしまう。この夜の鐘は、まだ一度も鳴っていない。'), note: tr`歯止めに楔を打てるのは第 ${FINAL_NIGHT} 夜から（打った夜の刻守戦が決着の戦いになる）` }]);
       this.sfx.play('deny');
       return;
     }
-    this.openDialog([{ who: '', text: '鐘楼へ続く歯止め。師の「時止め」は、この機構から力を引いている。' }], [
-      { label: '楔を打つ（この夜の刻守戦が決着の戦いになる。時止めを封じる代償に刻守が怒る）', fn: () => this.doWedge({ target: 'brake' }, it) },
-      { label: 'やめる', fn: () => {} },
+    this.openDialog([{ who: '', text: tr('鐘楼へ続く歯止め。師の「時止め」は、この機構から力を引いている。') }], [
+      { label: tr('楔を打つ（この夜の刻守戦が決着の戦いになる。時止めを封じる代償に刻守が怒る）'), fn: () => this.doWedge({ target: 'brake' }, it) },
+      { label: tr('やめる'), fn: () => {} },
     ]);
   }
   pullBrake(it) {
@@ -2173,25 +2174,25 @@ export class Game {
     this.run.newWedges = this.run.newWedges.filter((w) => w.target !== 'brake');
     if (it) it.wedged = false;
     this.sfx.play('door');
-    this.fx.setBanner('楔を抜いた', '刻守との戦いは、決着の戦いではなくなった', '#c9a052', 1.8);
+    this.fx.setBanner(tr('楔を抜いた'), tr('刻守との戦いは、決着の戦いではなくなった'), '#c9a052', 1.8);
     this.save();
   }
 
   doWedge(w, it) {
     const kind = w.target === 'boon' ? 'boon' : 'person';
     if (freeSlots(this.meta, kind) <= 0) {
-      this.openDialog([{ who: '', text: kind === 'person' ? '人の楔が足りない。' : '技の楔が足りない。', note: '巻き戻りのときに、打った楔を外して枠を空けられる（人の楔と技の楔は別の枠）' }]);
+      this.openDialog([{ who: '', text: kind === 'person' ? tr('人の楔が足りない。') : tr('技の楔が足りない。'), note: tr('巻き戻りのときに、打った楔を外して枠を空けられる（人の楔と技の楔は別の枠）') }]);
       this.sfx.play('deny');
       return;
     }
-    this.player.startChannel(0.9, '楔', () => {
+    this.player.startChannel(0.9, tr('楔'), () => {
       if (!addWedge(this.meta, w)) return;
       this.run.newWedges.push(w);
       if (it) it.wedged = true;
       this.sfx.play('wedge');
       this.fx.burst(it ? cx(it) : cx(this.player), it ? cy(it) : cy(this.player), '#f2c14e', 26);
       this.fx.screenFlash('#f2c14e', 0.3);
-      this.fx.setBanner('楔を打った', wedgeLabel(w) + '――次の夜も、このまま', '#f2c14e', 1.8);
+      this.fx.setBanner(tr('楔を打った'), wedgeLabel(w) + tr('――次の夜も、このまま'), '#f2c14e', 1.8);
       this.hitstop = 6 / 60;
       this.save();
       this.emit('wedge', { target: w.target });
@@ -2203,7 +2204,7 @@ export class Game {
     this.run.learned.push(key);
     this.save();
     if (!quiet) this.sfx.play('knowledge');
-    this.fx.text(cx(this.player), this.player.y - 40, quiet ? `記録：${KNOWLEDGE[key].title}` : `◆ ${KNOWLEDGE[key].title}`, '#7fb8ff', quiet ? 11 : 13);
+    this.fx.text(cx(this.player), this.player.y - 40, quiet ? tr`記録：${KNOWLEDGE[key].title}` : `◆ ${KNOWLEDGE[key].title}`, '#7fb8ff', quiet ? 11 : 13);
     this.emit('learn', { key });
     return true;
   }
@@ -2236,31 +2237,31 @@ export class Game {
     room.wipeChecked = true;
     if (room.t <= PASSIVE_WIPE.within && (room.initPassive || 0) >= room.initCount * PASSIVE_WIPE.share) {
       run.passiveResist = PASSIVE_WIPE.resist;
-      this.fx.setBanner('番人たちが術に慣れた', '常時の術のダメージ −70%（この夜の間）', '#9fd0ff', 2.4);
+      this.fx.setBanner(tr('番人たちが術に慣れた'), tr('常時の術のダメージ −70%（この夜の間）'), '#9fd0ff', 2.4);
       this.sfx.play('tellBig');
     }
   }
   clearGuards(leader) {
-    for (const e of this.room.enemies) if (e.guard && e.alive && (!leader || e.leader === leader)) { e.alive = false; e.handled = true; this.fx.burst(cx(e), cy(e), '#c9a052', 12); this.fx.text(cx(e), e.y - 8, '崩れた', '#c9a052', 9); }
+    for (const e of this.room.enemies) if (e.guard && e.alive && (!leader || e.leader === leader)) { e.alive = false; e.handled = true; this.fx.burst(cx(e), cy(e), '#c9a052', 12); this.fx.text(cx(e), e.y - 8, tr('崩れた'), '#c9a052', 9); }
   }
   onBossPhase(b, phase) {
-    if (phase === 2) { const w = (this.run.diff || DIFFICULTY.normal).guardWave; this.spawnGuards(w); if (w) this.fx.text(cx(b), b.y - 40, '衛士の増援', '#c9a052', 14); }
+    if (phase === 2) { const w = (this.run.diff || DIFFICULTY.normal).guardWave; this.spawnGuards(w); if (w) this.fx.text(cx(b), b.y - 40, tr('衛士の増援'), '#c9a052', 14); }
     this.fx.shake(6, 0.4);
     this.sfx.play('bossBell');
     this.room.projectiles = [];
     if (phase === 2) {
-      this.fx.setBanner('第二楽章', b.brake ? '怒れる刻守' : '時が軋む', '#f2c14e', 1.5);
+      this.fx.setBanner(tr('第二楽章'), b.brake ? tr('怒れる刻守') : tr('時が軋む'), '#f2c14e', 1.5);
     }
     if (phase === 3) {
-      this.fx.setBanner('第三楽章', '', '#f2c14e', 1.2);
+      this.fx.setBanner(tr('第三楽章'), '', '#f2c14e', 1.2);
       this.learnK('lira_name');
-      const lines = [{ who: '刻守（師）', text: 'リラ……もう一度だけ、あの子が家にいる夜を……！' }];
-      if (trueEndReady(this.meta) && !this.run.decisive) lines.push({ who: '', text: '（リラの言葉を伝えようとしたが、鐘の音にかき消された。決着の戦いでなければ、師の耳には届かない）' });
+      const lines = [{ who: tr('刻守（師）'), text: tr('リラ……もう一度だけ、あの子が家にいる夜を……！') }];
+      if (trueEndReady(this.meta) && !this.run.decisive) lines.push({ who: '', text: tr('（リラの言葉を伝えようとしたが、鐘の音にかき消された。決着の戦いでなければ、師の耳には届かない）') });
       if (finalReady(this.meta) && this.run.decisive) {
         b.setState('talk');
         this.openDialog(lines, [
-          { label: '「リラは覚えている」と伝える', fn: () => this.beginTrueDuel(b) },
-          { label: '黙って斬る', fn: () => { b.setState('idle'); } },
+          { label: tr('「リラは覚えている」と伝える'), fn: () => this.beginTrueDuel(b) },
+          { label: tr('黙って斬る'), fn: () => { b.setState('idle'); } },
         ]);
       } else this.openDialog(lines);
     }
@@ -2281,10 +2282,10 @@ export class Game {
     this.fx.burst(cx(b), cy(b), '#ffffff', 50);
     this.hitstop = 0.25;
     this.openDialog([
-      { who: '刻守（師）', text: '……まだだ。最後の鐘の力を、すべてこの身に。' },
-      { who: '刻守（師）', text: '朝を見せるというなら、この白い夜を越えてみせろ！' },
+      { who: tr('刻守（師）'), text: tr('……まだだ。最後の鐘の力を、すべてこの身に。') },
+      { who: tr('刻守（師）'), text: tr('朝を見せるというなら、この白い夜を越えてみせろ！') },
     ]);
-    this.fx.setBanner('第 2 形態 ― 白き刻守', '攻撃の選択肢が増える', '#ffffff', 2.4);
+    this.fx.setBanner(tr('第 2 形態 ― 白き刻守'), tr('攻撃の選択肢が増える'), '#ffffff', 2.4);
     this.emit('bossFinalForm');
   }
   beginTrueDuel(b) {
@@ -2294,11 +2295,11 @@ export class Game {
     b.setState('phaseShift');
     this.room.duel = true;
     this.openDialog([
-      { who: '刻守（師）', text: '……覚えている、だと？ あの子が、この夜を何度も？' },
-      { who: '刻守（師）', text: '「朝が来ても、帰ってくる」……あの子は、朝を待っていたのか。' },
-      { who: '刻守（師）', text: 'ならば鐘はもう要らん。構えろ、弟子よ。最後は時の力なしで、お前の朝を見せてみろ。' },
+      { who: tr('刻守（師）'), text: tr('……覚えている、だと？ あの子が、この夜を何度も？') },
+      { who: tr('刻守（師）'), text: tr('「朝が来ても、帰ってくる」……あの子は、朝を待っていたのか。') },
+      { who: tr('刻守（師）'), text: tr('ならば鐘はもう要らん。構えろ、弟子よ。最後は時の力なしで、お前の朝を見せてみろ。') },
     ]);
-    this.fx.setBanner('夜明けの決闘', '', '#ffd38a', 2.0);
+    this.fx.setBanner(tr('夜明けの決闘'), '', '#ffd38a', 2.0);
   }
   onBossDefeated(b) {
     // 最終夜の決闘：一度倒すと、白く大きな第 2 形態「白き刻守」になる
@@ -2313,21 +2314,21 @@ export class Game {
     this.hitstop = 0.2;
     if (b.trueDuel) {
       this.room.finale = 'true';
-      this.fx.setBanner('夜明け', '', '#ffd38a', 3);
+      this.fx.setBanner(tr('夜明け'), '', '#ffd38a', 3);
     } else if (this.run.decisive) {
       // 決着の戦い：鐘は鳴らない。結末は、知ったことで決まる
       this.room.finale = endingFor(this.meta, false);
       this.learnK('boss_bell', true);
-      this.fx.setBanner('鐘が砕ける', '――夜は、もう戻らない', '#ffd38a', 3);
+      this.fx.setBanner(tr('鐘が砕ける'), tr('――夜は、もう戻らない'), '#ffd38a', 3);
     } else if (this.run.badFinal) {
       // 楔の無い勝利：鐘は鳴らないが、夜も明けない（バッドエンド「明けない夜」）
       this.room.finale = 'night';
       this.learnK('boss_bell', true);
-      this.fx.setBanner('鐘が砕ける', '――それでも、夜は明けない', '#9aa0c0', 3);
+      this.fx.setBanner(tr('鐘が砕ける'), tr('――それでも、夜は明けない'), '#9aa0c0', 3);
     } else {
       this.learnK('boss_bell');
       this.sfx.play('bossBell');
-      this.fx.setBanner('鐘が鳴る', '――夜が戻る', '#f2c14e', 3);
+      this.fx.setBanner(tr('鐘が鳴る'), tr('――夜が戻る'), '#f2c14e', 3);
     }
     this.emit('bossDefeated', { trueEnd: !!b.trueDuel });
   }
@@ -2380,12 +2381,12 @@ export class Game {
     this.scene = 'ending';
     const pages = ENDINGS[id].pages.slice();
     // グレンを助けていたら、どの結末にも鍛冶場の朝が添えられる
-    if (this.run.glen === 'saved' || hasWedge(m, 'glen')) pages.splice(pages.length - 1, 0, ['鍛冶場から、槌の音が聞こえる。', 'グレンは今日も、誰かの剣を打っている。']);
+    if (this.run.glen === 'saved' || hasWedge(m, 'glen')) pages.splice(pages.length - 1, 0, [tr('鍛冶場から、槌の音が聞こえる。'), tr('グレンは今日も、誰かの剣を打っている。')]);
     const seen = ENDING_IDS.filter((k) => m.flags.endings[k]).length;
-    if (bad) pages.push(['夜は続く', `結末 ${seen}/${ENDING_IDS.length} を見た`, '鐘楼の歯止めに楔を打った夜の決着の戦いで勝てば、朝が来るかもしれない。']);
+    if (bad) pages.push([tr('夜は続く'), tr`結末 ${seen}/${ENDING_IDS.length} を見た`, tr('鐘楼の歯止めに楔を打った夜の決着の戦いで勝てば、朝が来るかもしれない。')]);
     else {
-      if (gotPersistence) pages.push(['伝説のアーティファクト「記憶の固執」', ARTIFACTS.persistence.desc, 'これからの夜は「記憶の固執の夜」になる。']);
-      pages.push(['クリア', `結末 ${seen}/${ENDING_IDS.length} を見た`, pulled ? `ほかの結末は、歯止めに楔を打ち直して探せる。「${endlessName(m)}」にも挑める。` : seen < ENDING_IDS.length ? `ほかの結末を探すことも、続けて「${endlessName(m)}」に挑むこともできる。` : `すべての結末を見た。続けて「${endlessName(m)}」に挑むこともできる。`]);
+      if (gotPersistence) pages.push([tr('伝説のアーティファクト「記憶の固執」'), ARTIFACTS.persistence.desc, tr('これからの夜は「記憶の固執の夜」になる。')]);
+      pages.push([tr('クリア'), tr`結末 ${seen}/${ENDING_IDS.length} を見た`, pulled ? tr`ほかの結末は、歯止めに楔を打ち直して探せる。「${endlessName(m)}」にも挑める。` : seen < ENDING_IDS.length ? tr`ほかの結末を探すことも、続けて「${endlessName(m)}」に挑むこともできる。` : tr`すべての結末を見た。続けて「${endlessName(m)}」に挑むこともできる。`]);
     }
     this.ending = { t: 0, page: 0, id, pages, tone: ENDINGS[id].tone, bad };
     this.emit('ending', { id });
@@ -2409,24 +2410,24 @@ export class Game {
   rewindOptions() {
     const m = this.meta;
     const rep = this.rewind && this.rewind.report;
-    const opts = [{ id: 'next', label: rep && rep.cause === 'ending' ? 'タイトル画面に戻る' : rep && rep.retry ? '同じ夜をもう一度' : '次の夜へ' }];
-    opts.push({ id: 'upgrade', label: `刻印を刻む（時の欠片 ${m.shards}）` });
+    const opts = [{ id: 'next', label: rep && rep.cause === 'ending' ? tr('タイトル画面に戻る') : rep && rep.retry ? tr('同じ夜をもう一度') : tr('次の夜へ') }];
+    opts.push({ id: 'upgrade', label: tr`刻印を刻む（時の欠片 ${m.shards}）` });
     const lastBoons = (m.lastLoop && m.lastLoop.boons) || [];
     if (this.carryAll()) {
       // めちゃ簡単：選ばなくても、すべての強化に楔が打たれ、すべて継承される（見るだけ。外せない）
       const n = this.autoCarried().length;
       if (n) {
-        opts.push({ id: 'inherit', label: `継承する強化（すべて自動 ${n}/∞）` });
-        opts.push({ id: 'wedgeBoon', label: `強化の楔（すべて自動で打たれている）` });
+        opts.push({ id: 'inherit', label: tr`継承する強化（すべて自動 ${n}/∞）` });
+        opts.push({ id: 'wedgeBoon', label: tr`強化の楔（すべて自動で打たれている）` });
       }
     } else {
-      if (lastBoons.length) opts.push({ id: 'inherit', label: `継承する強化を選ぶ（${(m.inherit || []).length}/${inheritLabel(m)}）` });
+      if (lastBoons.length) opts.push({ id: 'inherit', label: tr`継承する強化を選ぶ（${(m.inherit || []).length}/${inheritLabel(m)}）` });
       const wedgedIds = new Set(m.wedges.filter((w) => w.target === 'boon').map((w) => w.boon.id));
-      if (freeSlots(m) > 0 && lastBoons.some((b) => !wedgedIds.has(b.id))) opts.push({ id: 'wedgeBoon', label: '最後に掴んだ強化に楔を打つ' });
+      if (freeSlots(m) > 0 && lastBoons.some((b) => !wedgedIds.has(b.id))) opts.push({ id: 'wedgeBoon', label: tr('最後に掴んだ強化に楔を打つ') });
     }
-    if (m.wedges.length) opts.push({ id: 'pull', label: '楔を抜く' });
-    opts.push({ id: 'companion', label: `お供を替える（${COMPANIONS[m.companion] ? COMPANIONS[m.companion].name : 'なし'}）` });
-    opts.push({ id: 'journal', label: '記録帳' });
+    if (m.wedges.length) opts.push({ id: 'pull', label: tr('楔を抜く') });
+    opts.push({ id: 'companion', label: tr`お供を替える（${COMPANIONS[m.companion] ? COMPANIONS[m.companion].name : tr('なし')}）` });
+    opts.push({ id: 'journal', label: tr('記録帳') });
     return opts;
   }
   updateRewind(input) {
@@ -2476,13 +2477,13 @@ export class Game {
           const w = removeWedge(this.meta, r.sub);
           r.touched = true;
           this.sfx.play('door');
-          r.report.changed.push({ text: `楔を抜いた：${wedgeLabel(w)}`, tone: 'reset' });
+          r.report.changed.push({ text: tr`楔を抜いた：${wedgeLabel(w)}`, tone: 'reset' });
         } else {
           const b = list[r.sub];
           if (addWedge(this.meta, { target: 'boon', boon: { id: b.id, tier: b.tier } })) {
             r.touched = true;
             this.sfx.play('wedge');
-            r.report.changed.push({ text: `楔を打った：強化「${BOONS[b.id].name}${b.tier > 1 ? ' II' : ''}」を持ったまま夜が始まる`, tone: 'gold' });
+            r.report.changed.push({ text: tr`楔を打った：強化「${BOONS[b.id].name}${b.tier > 1 ? ' II' : ''}」を持ったまま夜が始まる`, tone: 'gold' });
           }
         }
         this.save();
@@ -2515,7 +2516,7 @@ export class Game {
       if (buyUpgrade(m, k)) {
         r.touched = true;
         this.sfx.play('wedge'); r.flash = 0.3;
-        r.report.changed.push({ text: `刻印：${UPGRADES[k].name} Lv${upLv(m, k)}（${UPGRADES[k].desc(upLv(m, k))}）`, tone: 'gold' });
+        r.report.changed.push({ text: tr`刻印：${UPGRADES[k].name} Lv${upLv(m, k)}（${UPGRADES[k].desc(upLv(m, k))}）`, tone: 'gold' });
         if (k === 'inherit') { const prev = m.inherit.slice(); m.inherit = prev; }
       } else this.sfx.play('deny');
     } else {
@@ -2538,18 +2539,21 @@ export class Game {
   // ───────── タイトル ─────────
   titleOptions() {
     const o = [];
-    if (this.meta) o.push({ id: 'continue', label: this.meta.flags.ending ? `${endlessName(this.meta)}へ（第 ${this.meta.loop} 夜）` : `続きから（第 ${this.meta.loop} 夜）` });
-    o.push({ id: 'new', label: this.meta ? 'はじめから（記録を消す）' : 'はじめる' });
-    o.push({ id: 'diff', label: `難易度：${this.difficulty().name}（決定で切り替え）` });
+    if (this.meta) o.push({ id: 'continue', label: this.meta.flags.ending ? tr`${endlessName(this.meta)}へ（第 ${this.meta.loop} 夜）` : tr`続きから（第 ${this.meta.loop} 夜）` });
+    o.push({ id: 'new', label: this.meta ? tr('はじめから（記録を消す）') : tr('はじめる') });
+    o.push({ id: 'diff', label: tr`難易度：${this.difficulty().name}（決定で切り替え）` });
     return o;
   }
   // タイトルの設定（左上の設定ボタンから開く）
   settingsOptions() {
+    // 言語の一覧（設定の中の「言語 / Language」から開く）。名前はそれぞれの言語のまま
+    if (this.titleSettings && this.titleSettings.lang) return LANGS.map((l) => ({ id: 'lang:' + l.id, label: l.name, right: l.id === LANG ? '◆' : '' }));
     return [
-      { id: 'text', label: `文字の大きさ：${{ normal: '標準', large: '大', xlarge: '特大' }[this.settings.textSize || 'normal']}`, right: '決定で切り替え' },
-      { id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}`, right: '決定で切り替え' },
-      { id: 'flash', label: `光の点滅を抑える：${this.settings.calmFlash ? 'あり' : 'なし'}`, right: '決定で切り替え' },
-      { id: 'about', label: 'ゲームについて', right: '' },
+      { id: 'text', label: tr`文字の大きさ：${{ normal: tr('標準'), large: tr('大'), xlarge: tr('特大') }[this.settings.textSize || 'normal']}`, right: tr('決定で切り替え') },
+      { id: 'shake', label: tr`画面揺れ：${this.settings.shake ? tr('あり') : tr('なし')}`, right: tr('決定で切り替え') },
+      { id: 'flash', label: tr`光の点滅を抑える：${this.settings.calmFlash ? tr('あり') : tr('なし')}`, right: tr('決定で切り替え') },
+      { id: 'lang', label: `言語 / Language：${langName()}`, right: '' },
+      { id: 'about', label: tr('ゲームについて'), right: '' },
     ];
   }
   pickSetting(id) {
@@ -2557,6 +2561,12 @@ export class Game {
     else if (id === 'shake') { this.settings.shake = !this.settings.shake; this.saveSettings(); }
     else if (id === 'flash') { this.settings.calmFlash = !this.settings.calmFlash; this.saveSettings(); }
     else if (id === 'about') { this.titleSettings.about = true; this.titleSettings.t = 0; }
+    else if (id === 'lang') { Object.assign(this.titleSettings, { lang: true, sel: Math.max(0, LANGS.findIndex((l) => l.id === LANG)), t: 0 }); }
+    else if (id.startsWith('lang:')) {
+      const lang = id.slice(5), ts = this.titleSettings;
+      if (lang !== LANG) { this.settings.lang = lang; this.saveSettings(); if (this.onLangChange) { this.onLangChange(lang); return; } } // 読み込み直して切り替える
+      ts.lang = false; ts.sel = this.settingsOptions().findIndex((o) => o.id === 'lang');
+    }
   }
   // メニューの方向入力：スティックで斜めに倒れたときは、強く倒れている軸の向きだけを受け付ける
   menuPress(input, dir) {
@@ -2591,6 +2601,7 @@ export class Game {
       const so = this.settingsOptions();
       if (input.pressed('up')) { ts.sel = (ts.sel + so.length - 1) % so.length; this.sfx.play('select'); }
       if (input.pressed('down')) { ts.sel = (ts.sel + 1) % so.length; this.sfx.play('select'); }
+      if (close && ts.lang) { ts.lang = false; this.sfx.play('select'); ts.sel = this.settingsOptions().findIndex((o) => o.id === 'lang'); return; }
       if (close) { this.titleSettings = null; this.sfx.play('select'); return; }
       if (input.pressed('confirm') || input.pressed('jump')) { this.sfx.play('confirm'); this.pickSetting(so[ts.sel].id); }
       return;
@@ -2748,7 +2759,7 @@ export class Game {
   }
   openForge() {
     const tier1 = this.player.boons.filter(canForge);
-    if (!tier1.length) { this.openDialog([{ who: 'グレン', text: '鍛えて伸びるもんが無ぇじゃねえか。数字のある強化を手に入れてから来な。' }]); return; }
+    if (!tier1.length) { this.openDialog([{ who: tr('グレン'), text: tr('鍛えて伸びるもんが無ぇじゃねえか。数字のある強化を手に入れてから来な。') }]); return; }
     this.modal = { type: 'forge', list: tier1, sel: 0, t: 0 };
   }
   openCode() {
@@ -2768,7 +2779,7 @@ export class Game {
         const last = m.idx >= m.lines.length - 1;
         // 回避（戻る）ボタン：カーソルがどこにあっても「立ち去る」「やめる」で会話を終える
         if (m.choices && back) {
-          const leave = m.choices.find((c) => c.cancel || c.label === '立ち去る' || c.label === 'やめる');
+          const leave = m.choices.find((c) => c.cancel || c.label === tr('立ち去る') || c.label === tr('やめる'));
           if (leave) { this.modal = null; this.sfx.play('select'); input.consume('dodge'); input.consume('back'); input.consume('attack'); input.consume('jump'); leave.fn(); return; }
         }
         if (last && m.choices) {
@@ -2802,7 +2813,7 @@ export class Game {
           this.grantBoon(id); // 発動する術は 1 つだけ：別の術なら持ち替える
           this.sfx.play('pickup');
           const threat1 = this.threatStep();
-          if (threat1 > threat0) this.fx.text(cx(this.player), this.player.y - 48, `脅威 ${threat1}：敵が強く・多くなる`, '#ff7a5a', 14);
+          if (threat1 > threat0) this.fx.text(cx(this.player), this.player.y - 48, tr`脅威 ${threat1}：敵が強く・多くなる`, '#ff7a5a', 14);
           input.consume('jump'); input.consume('attack');
           if (m.rare || m.noDoors) { this.modal = null; }
           else if (m.count > 1) { this.modal = null; this.openBoonPick(m.count - 1, m.school); }
@@ -2891,7 +2902,7 @@ export class Game {
             this.run.vaultOpen = true;
             this.meta.flags.archiveOpened = true; this.save();
             this.sfx.play('wedge');
-            this.fx.setBanner('書庫の扉が開いた', '', '#f2c14e', 1.4);
+            this.fx.setBanner(tr('書庫の扉が開いた'), '', '#f2c14e', 1.4);
             this.emit('vaultOpen');
           } else { m.wrong = 0.4; this.sfx.play('deny'); }
         }
@@ -2938,23 +2949,23 @@ export class Game {
   }
   pauseOptions() {
     return [
-      { id: 'resume', label: '再開' },
-      { id: 'journal', label: '記録帳' },
-      { id: 'companion', label: `お供：${COMPANIONS[this.meta.companion] ? COMPANIONS[this.meta.companion].name : 'なし'}（替える）` },
-      { id: 'diff', label: `難易度：${this.difficulty().name}（次の夜から）` },
-      { id: 'shake', label: `画面揺れ：${this.settings.shake ? 'あり' : 'なし'}` },
-      { id: 'flash', label: `光の点滅を抑える：${this.settings.calmFlash ? 'あり' : 'なし'}` },
-      { id: 'vol', label: `音量：${Math.round(this.settings.volume * 10)}` },
-      { id: 'bgm', label: `音楽：${this.settings.bgm > 0 ? Math.round(this.settings.bgm * 10) : 'なし'}` },
-      { id: 'text', label: `文字の大きさ：${{ normal: '標準', large: '大', xlarge: '特大' }[this.settings.textSize || 'normal']}` },
-      { id: 'giveup', label: 'この夜をあきらめる（巻き戻る）' },
+      { id: 'resume', label: tr('再開') },
+      { id: 'journal', label: tr('記録帳') },
+      { id: 'companion', label: tr`お供：${COMPANIONS[this.meta.companion] ? COMPANIONS[this.meta.companion].name : tr('なし')}（替える）` },
+      { id: 'diff', label: tr`難易度：${this.difficulty().name}（次の夜から）` },
+      { id: 'shake', label: tr`画面揺れ：${this.settings.shake ? tr('あり') : tr('なし')}` },
+      { id: 'flash', label: tr`光の点滅を抑える：${this.settings.calmFlash ? tr('あり') : tr('なし')}` },
+      { id: 'vol', label: tr`音量：${Math.round(this.settings.volume * 10)}` },
+      { id: 'bgm', label: tr`音楽：${this.settings.bgm > 0 ? Math.round(this.settings.bgm * 10) : tr('なし')}` },
+      { id: 'text', label: tr`文字の大きさ：${{ normal: tr('標準'), large: tr('大'), xlarge: tr('特大') }[this.settings.textSize || 'normal']}` },
+      { id: 'giveup', label: tr('この夜をあきらめる（巻き戻る）') },
     ];
   }
 
   onKnightDown(e) {
     this.addItem({ kind: 'wreck', x: e.x - 6, y: e.y + e.h - 24, w: 42, h: 24, causal: true, wedged: false, life: 12 });
     this.separateFromDoors();
-    this.fx.setBanner('歯車騎士を倒した', '残骸に楔を打てる（約12秒）', '#f2c14e', 2.0);
+    this.fx.setBanner(tr('歯車騎士を倒した'), tr('残骸に楔を打てる（約12秒）'), '#f2c14e', 2.0);
   }
 }
 
@@ -2962,38 +2973,38 @@ export const BOON_COLORS = { haste: '#5fd18b', stasis: '#5aa9e6', echo: '#b67cf0
 // 大きな数字を読みやすく（1,234 / 12.3万）
 export function fmtNum(n) {
   n = Math.round(n);
-  if (n >= 100000) return (n / 10000).toFixed(n >= 1000000 ? 0 : 1) + '万';
+  if (n >= 100000) return (n / 10000).toFixed(n >= 1000000 ? 0 : 1) + tr('万');
   return n.toLocaleString('en-US');
 }
 
 // 結末（tone は背景の明るさ：1 で夜明けの色、低いほど灰色の朝）
 export const ENDINGS = {
-  true: { name: '夜明けの楔', tone: 1, pages: [
-    ['刻守――師は、剣を下ろした。', '鐘楼の窓の外が、白みはじめている。'],
-    ['師の髪は、すっかり白くなっていた。', 'それでも胸の時計は、まだ静かに動いている。'],
-    ['「リラは覚えている、か」', '「怖かったのは朝ではない。あの子を見送ることだったのだな」'],
-    ['鐘は鳴らなかった。', '夜は戻らず、塔に、はじめての朝が来た。'],
-    ['駅のホームで、少女が手を振っている。見送るのは、父だ。', '――いってきます、お父さん。'],
-    ['結末「夜明けの楔」', '遊んでくれてありがとう。'],
+  true: { name: tr('夜明けの楔'), tone: 1, pages: [
+    [tr('刻守――師は、剣を下ろした。'), tr('鐘楼の窓の外が、白みはじめている。')],
+    [tr('師の髪は、すっかり白くなっていた。'), tr('それでも胸の時計は、まだ静かに動いている。')],
+    [tr('「リラは覚えている、か」'), tr('「怖かったのは朝ではない。あの子を見送ることだったのだな」')],
+    [tr('鐘は鳴らなかった。'), tr('夜は戻らず、塔に、はじめての朝が来た。')],
+    [tr('駅のホームで、少女が手を振っている。見送るのは、父だ。'), tr('――いってきます、お父さん。')],
+    [tr('結末「夜明けの楔」'), tr('遊んでくれてありがとう。')],
   ] },
-  sleep: { name: '師の眠り', tone: 0.6, pages: [
-    ['刻守――師は、膝をついた。', '鐘を鳴らす力は、もう残っていなかった。'],
-    ['「わかっていたのだ。夜を買っても、あの子は朝を待っている」', '師はそう言って、静かに目を閉じた。'],
-    ['鐘は鳴らなかった。', '塔に朝が来た。師は、深い眠りについたまま。'],
-    ['駅のホームで、少女がひとり、塔を見上げている。', '――いってきます。お父さん、起きたら手紙を書くね。'],
-    ['結末「師の眠り」', 'リラの言葉を師に届けていたら、別の朝があったかもしれない。'],
+  sleep: { name: tr('師の眠り'), tone: 0.6, pages: [
+    [tr('刻守――師は、膝をついた。'), tr('鐘を鳴らす力は、もう残っていなかった。')],
+    [tr('「わかっていたのだ。夜を買っても、あの子は朝を待っている」'), tr('師はそう言って、静かに目を閉じた。')],
+    [tr('鐘は鳴らなかった。'), tr('塔に朝が来た。師は、深い眠りについたまま。')],
+    [tr('駅のホームで、少女がひとり、塔を見上げている。'), tr('――いってきます。お父さん、起きたら手紙を書くね。')],
+    [tr('結末「師の眠り」'), tr('リラの言葉を師に届けていたら、別の朝があったかもしれない。')],
   ] },
-  night: { name: '明けない夜', tone: 0.15, pages: [
-    ['刻守――師は、崩れ落ちた。', '掠れた鐘は、もう鳴らなかった。'],
-    ['けれど、窓の外は暗いままだった。', '歯止めは軋みながら回りつづけ、止まった夜を手放さない。'],
-    ['師は何も言わず、塔の闇に消えた。', '町の灯りが、またひとつ暗くなる。'],
-    ['結末「明けない夜」', '夜は、まだ続いている。'],
+  night: { name: tr('明けない夜'), tone: 0.15, pages: [
+    [tr('刻守――師は、崩れ落ちた。'), tr('掠れた鐘は、もう鳴らなかった。')],
+    [tr('けれど、窓の外は暗いままだった。'), tr('歯止めは軋みながら回りつづけ、止まった夜を手放さない。')],
+    [tr('師は何も言わず、塔の闇に消えた。'), tr('町の灯りが、またひとつ暗くなる。')],
+    [tr('結末「明けない夜」'), tr('夜は、まだ続いている。')],
   ] },
-  silence: { name: '鐘の沈黙', tone: 0.35, pages: [
-    ['刻守――師は、崩れ落ちた。', '鐘楼の鐘に、ひびが走る。'],
-    ['あなたは鐘を打ち砕いた。', '師がなぜ夜を戻していたのか、分からないまま。'],
-    ['夜は戻らなかった。', '塔に朝が来た。けれど、師は二度と目を覚まさなかった。'],
-    ['朝の汽車が出ていく。', '窓辺の少女は、誰かを探すように塔を見ていた。'],
-    ['結末「鐘の沈黙」', '師の日誌や、市場の少女のことを調べると、違う朝があるかもしれない。'],
+  silence: { name: tr('鐘の沈黙'), tone: 0.35, pages: [
+    [tr('刻守――師は、崩れ落ちた。'), tr('鐘楼の鐘に、ひびが走る。')],
+    [tr('あなたは鐘を打ち砕いた。'), tr('師がなぜ夜を戻していたのか、分からないまま。')],
+    [tr('夜は戻らなかった。'), tr('塔に朝が来た。けれど、師は二度と目を覚まさなかった。')],
+    [tr('朝の汽車が出ていく。'), tr('窓辺の少女は、誰かを探すように塔を見ていた。')],
+    [tr('結末「鐘の沈黙」'), tr('師の日誌や、市場の少女のことを調べると、違う朝があるかもしれない。')],
   ] },
 };

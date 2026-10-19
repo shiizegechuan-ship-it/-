@@ -1,4 +1,5 @@
 // HUD・メニュー・巻き戻り画面。装飾より可読性を優先する。
+import { tr, FONT_STACK } from './i18n.js';
 import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC, RELEASE } from './config.js';
 import { clamp } from './util.js';
 import { COMPANIONS, allComps, unionReady } from './companion.js';
@@ -12,14 +13,14 @@ import { expToNext, LEVEL } from './level.js';
 import { LB, LB_CLOSE, lbStart, rewindGrid, cardRects, PAUSE, TITLE_MENU, TITLE_GEAR } from './layout.js';
 export { LB, lbRowAt, rewindGrid } from './layout.js';
 
-// ドット文字（DotGothic16）。読み込めない環境では OS の日本語フォントで表示される
-export const FONT = `'DotGothic16', 'Hiragino Sans', 'Yu Gothic', 'IPAGothic', sans-serif`;
+// ドット文字（DotGothic16）。読み込めない環境では OS の日本語フォントで表示される。中国語・韓国語は英数字だけドット文字（i18n.js）
+export const FONT = FONT_STACK;
 const SERIF = FONT;
 
 // 文字の大きさの設定：normal（標準）・large（大）・xlarge（特大）。t は流れる文字の時計
 export const TEXT = { mode: 'normal', t: 0 };
 export const TEXT_MODES = ['normal', 'large', 'xlarge'];
-export const TEXT_MODE_NAMES = { normal: '標準', large: '大', xlarge: '特大' };
+export const TEXT_MODE_NAMES = { normal: tr('標準'), large: tr('大'), xlarge: tr('特大') };
 export function setTextEnv(game) { TEXT.mode = (game.settings && game.settings.textSize) || 'normal'; TEXT.t = game.time || 0; }
 // 実際に描く大きさ。標準でも、小さな文字ほど少し大きくする（収まる範囲で）。大・特大はさらに 1.2・1.4 倍
 export function fontSize(size) {
@@ -126,7 +127,7 @@ export function drawLightbox(ctx, game, { title, right = '', items, sel, color =
   text(ctx, title, x + 28, y + 44, { size: 22, color });
   if (right) text(ctx, right, x + w - 28, y + 44, { size: 16, align: 'right', color: '#cfc8bb' });
   const n = items.length, start = lbStart(n, sel, st);
-  if (!n) text(ctx, '選べるものがない', x + 40, LB.top, { size: 18, color: C.muted });
+  if (!n) text(ctx, tr('選べるものがない'), x + 40, LB.top, { size: 18, color: C.muted });
   for (let k = 0; k < Math.min(LB.rows, n - start); k++) {
     const i = start + k, it = items[i], yy = LB.top + k * LB.rowH, on = i === sel;
     if (on) { ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(x + 16, yy - 26, w - 32, LB.rowH - 4); ctx.fillStyle = color; ctx.fillRect(x + 16, yy - 26, 4, LB.rowH - 4); }
@@ -138,7 +139,7 @@ export function drawLightbox(ctx, game, { title, right = '', items, sel, color =
       ctx.save(); ctx.strokeStyle = gr; ctx.lineWidth = 3; ctx.shadowColor = `hsl(${t % 360},100%,70%)`; ctx.shadowBlur = 10 + 4 * Math.sin((game.time || 0) * 6);
       ctx.strokeRect(rx + 1.5, ry + 1.5, rw - 3, rh - 3); ctx.restore();
     }
-    text(ctx, (on ? '▶ ' : '　') + it.label, x + 34, yy, { size: 19, color: it.rainbow ? `hsl(${((game.time || 0) * 120) % 360},100%,78%)` : on ? '#ffffff' : (it.color || '#d8d0c4') });
+    text(ctx, (on ? '▶ ' : tr('　')) + it.label, x + 34, yy, { size: 19, color: it.rainbow ? `hsl(${((game.time || 0) * 120) % 360},100%,78%)` : on ? '#ffffff' : (it.color || '#d8d0c4') });
     if (it.right) text(ctx, it.right, x + w - 34, yy, { size: 16, align: 'right', color: it.rightColor || C.muted });
   }
   // 上下にまだ項目があるときの印（右端）
@@ -148,7 +149,7 @@ export function drawLightbox(ctx, game, { title, right = '', items, sel, color =
   const dy = LB.top + LB.rows * LB.rowH - 4;
   ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x + 16, dy, w - 32, 1);
   wrap(ctx, desc, w - 64, 16).slice(0, 2).forEach((l, i) => text(ctx, l, x + 32, dy + 26 + i * 22, { size: 16, color: '#cfe0ff' }));
-  text(ctx, hint || (game.touch ? '項目をタップで選択、もう一度タップで決定／枠の外で戻る' : '↑↓ 選ぶ　Z 決定　C 戻る'), x + w / 2, y + h - 12, { size: 13, align: 'center', color: C.muted });
+  text(ctx, hint || (game.touch ? tr('項目をタップで選択、もう一度タップで決定／枠の外で戻る') : tr('↑↓ 選ぶ　Z 決定　C 戻る')), x + w / 2, y + h - 12, { size: 13, align: 'center', color: C.muted });
 }
 
 // ───────── HUD ─────────
@@ -167,13 +168,13 @@ export function drawHud(ctx, game) {
   ctx.fillStyle = '#16202c'; ctx.fillRect(22, 38, hpW, 8);
   ctx.fillStyle = p.gauge >= cost ? '#5aa9e6' : '#3a6a90'; ctx.fillRect(22, 38, hpW * (p.gauge / PC.gaugeMax), 8);
   for (let c = cost; c < PC.gaugeMax; c += cost) { ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillRect(22 + hpW * (c / PC.gaugeMax), 37, 1, 10); }
-  text(ctx, `${art ? BOONS[art.id].name : '時歪'}${p.gauge >= cost ? ' V' : ''}`, 22 + hpW + 4, 47, { size: 10, color: p.gauge >= cost ? (art ? '#ff8ae0' : '#9fd0ff') : C.muted });
+  text(ctx, `${art ? BOONS[art.id].name : tr('時歪')}${p.gauge >= cost ? ' V' : ''}`, 22 + hpW + 4, 47, { size: 10, color: p.gauge >= cost ? (art ? '#ff8ae0' : '#9fd0ff') : C.muted });
   // 仲間技：3 匹そろって全員が最後の姿なら印が出る。ゲージ満タンで光る
   if (unionReady(game)) {
     const full = p.gauge >= PC.gaugeMax && !game.union;
     const pulse = full ? 0.6 + 0.4 * Math.sin(game.time * 8) : 1;
     ctx.globalAlpha = pulse;
-    text(ctx, full ? '仲間技 V！' : '仲間技（満タンで）', 22 + hpW + 74, 47, { size: 10, bold: full, color: full ? '#ffe6a0' : C.muted });
+    text(ctx, full ? tr('仲間技 V！') : tr('仲間技（満タンで）'), 22 + hpW + 74, 47, { size: 10, bold: full, color: full ? '#ffe6a0' : C.muted });
     ctx.globalAlpha = 1;
   }
   if (p.dodgeCd > 0) { ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(22, 50, hpW * clamp(1 - p.dodgeCd / 0.8, 0, 1), 2); }
@@ -185,13 +186,13 @@ export function drawHud(ctx, game) {
   ctx.fillStyle = '#1c2616'; ctx.fillRect(66, 60, hpW - 44, 7);
   ctx.fillStyle = '#7fd85a'; ctx.fillRect(66, 60, (hpW - 44) * clamp((run.exp || 0) / need, 0, 1), 7);
   const toRare = LEVEL.rareEvery - (lv % LEVEL.rareEvery);
-  text(ctx, `稀少まで あと${toRare}`, 22 + hpW + 4, 69, { size: 10, color: '#ffd84a' });
+  text(ctx, tr`稀少まで あと${toRare}`, 22 + hpW + 4, 69, { size: 10, color: '#ffd84a' });
   const threat = game.threatStep ? game.threatStep() : 0;
 
   // 中央：夜の時刻・階層・部屋の進み
   const fi = run.fi;
-  text(ctx, `夜 ${fmtClock(run.clock)}`, VIEW_W / 2, 26, { size: 15, align: 'center', bold: true, color: '#efe6d2' });
-  text(ctx, `${run.diff ? run.diff.name + '　' : ''}第${meta.loop}夜　${FLOOR_NAMES[fi]}　深さLv${run.scale ? run.scale.level : 0}` + (threat ? `　脅威${threat}` : ''), VIEW_W / 2, 42, { size: 11, align: 'center', color: threat ? '#ff9a7a' : C.muted });
+  text(ctx, tr`夜 ${fmtClock(run.clock)}`, VIEW_W / 2, 26, { size: 15, align: 'center', bold: true, color: '#efe6d2' });
+  text(ctx, tr`${run.diff ? run.diff.name + tr('　') : ''}第${meta.loop}夜　${FLOOR_NAMES[fi]}　深さLv${run.scale ? run.scale.level : 0}` + (threat ? tr`　脅威${threat}` : ''), VIEW_W / 2, 42, { size: 11, align: 'center', color: threat ? '#ff9a7a' : C.muted });
   const rooms = run.plan.floors[fi];
   const dotW = 14, sx = VIEW_W / 2 - (rooms.length * dotW) / 2 + dotW / 2;
   rooms.forEach((r, i) => {
@@ -213,8 +214,8 @@ export function drawHud(ctx, game) {
       if (i < used) { ctx.fillStyle = col; ctx.fill(); } else { ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke(); }
     }
   };
-  wedgeRow('人', meta.wedges.filter((w) => w.target !== 'boon').length, meta.personSlots || 2, 10, '#ffb070');
-  wedgeRow('技', meta.wedges.filter((w) => w.target === 'boon').length, meta.slots, 28, C.gold);
+  wedgeRow(tr('人'), meta.wedges.filter((w) => w.target !== 'boon').length, meta.personSlots || 2, 10, '#ffb070');
+  wedgeRow(tr('技'), meta.wedges.filter((w) => w.target === 'boon').length, meta.slots, 28, C.gold);
   meta.wedges.forEach((w, i) => text(ctx, shortWedge(w), VIEW_W - 18, 58 + i * 13, { size: 10, align: 'right', color: w.target === 'boon' ? '#d8b968' : '#ffb070' }));
 
   // 左下：強化
@@ -227,23 +228,23 @@ export function drawHud(ctx, game) {
     text(ctx, (def.fusion ? '★' : '') + def.name + (def.max ? ` ${b.tier}` : b.tier > 1 ? ' II' : ''), x + 14, y, { size: 11, color: wedged ? C.gold : def.fusion ? '#ffd84a' : '#ddd' });
   });
   const res = Object.entries(counts).filter(([s, n]) => RESONANCE[s] && n >= 2).map(([s]) => SCHOOLS[s].name);
-  if (res.length) text(ctx, `共鳴：${res.join('・')}`, 18, VIEW_H - 22 - (Math.ceil(p.boons.length / 8)) * 20, { size: 10, color: '#f2c14e' });
+  if (res.length) text(ctx, tr`共鳴：${res.join(tr('・'))}`, 18, VIEW_H - 22 - (Math.ceil(p.boons.length / 8)) * 20, { size: 10, color: '#f2c14e' });
 
   // 夜の様相の一言（夜のはじめに数秒）
   const nn = game.nightNote;
   if (nn && nn.t > 2.4 && nn.t < 8) { ctx.globalAlpha = clamp(Math.min(nn.t - 2.4, 8 - nn.t) / 0.6, 0, 1); text(ctx, nn.text, VIEW_W / 2, 150, { size: 15, align: 'center', color: '#e8c8b0' }); ctx.globalAlpha = 1; }
   // 時の欠片
-  text(ctx, `◆ 欠片 ${meta.shards + (run.shards || 0)}`, 22, 98, { size: 12, color: '#9fd0ff' });
-  if (run.killStacks > 0) text(ctx, `血の秒針 +${Math.round(run.killStacks * 100)}%`, 120, 98, { size: 11, color: '#ff9a3c' });
+  text(ctx, tr`◆ 欠片 ${meta.shards + (run.shards || 0)}`, 22, 98, { size: 12, color: '#9fd0ff' });
+  if (run.killStacks > 0) text(ctx, tr`血の秒針 +${Math.round(run.killStacks * 100)}%`, 120, 98, { size: 11, color: '#ff9a3c' });
   // 金貨・鍵（その夜だけ）・アーティファクト（持ち越し）
   const gp = game.hudPop ? game.hudPop.gold : 0;
-  text(ctx, `● 金貨 ${run.gold || 0}` + (run.keys ? `　黄金の鍵 ×${run.keys}` : ''), 22, 116, { size: 12 + Math.round(gp * 4), color: gp > 0 ? '#fff6c0' : '#ffd84a' });
+  text(ctx, tr`● 金貨 ${run.gold || 0}` + (run.keys ? tr`　黄金の鍵 ×${run.keys}` : ''), 22, 116, { size: 12 + Math.round(gp * 4), color: gp > 0 ? '#fff6c0' : '#ffd84a' });
   // お供（段階は ★ の数）
   const comps = allComps(game);
-  comps.forEach((comp, i) => { const d = COMPANIONS[comp.id]; text(ctx, `✦ ${d.forms[comp.stage - 1]}　${'★'.repeat(comp.stage)}${'☆'.repeat(3 - comp.stage)}` + (comp.stage < 3 ? `（Lv${[0, 5, 10][comp.stage]}で進化）` : ''), 22, 134 + i * 15, { size: 11, color: d.color }); });
+  comps.forEach((comp, i) => { const d = COMPANIONS[comp.id]; text(ctx, tr`✦ ${d.forms[comp.stage - 1]}　${'★'.repeat(comp.stage)}${'☆'.repeat(3 - comp.stage)}` + (comp.stage < 3 ? tr`（Lv${[0, 5, 10][comp.stage]}で進化）` : ''), 22, 134 + i * 15, { size: 11, color: d.color }); });
   // アーティファクト（持ち越すので多くなったら数だけ）
   const arts = p.artifacts || [], ay = 134 + Math.max(1, comps.length) * 15 + 3;
-  if (arts.length > 4) text(ctx, `◆ アーティファクト ${arts.length} 個`, 22, ay, { size: 11, color: ARTIFACT_COLOR.normal });
+  if (arts.length > 4) text(ctx, tr`◆ アーティファクト ${arts.length} 個`, 22, ay, { size: 11, color: ARTIFACT_COLOR.normal });
   else arts.forEach((id, i) => { const a = ARTIFACTS[id]; text(ctx, '◆ ' + a.name, 22, ay + i * 15, { size: 11, color: ARTIFACT_COLOR[a.rarity] }); });
   // コンボ
   const cb = game.combo;
@@ -253,37 +254,37 @@ export function drawHud(ctx, game) {
     const col = cb.n >= 50 ? '#ff4a2a' : cb.n >= 20 ? '#ff9a3c' : '#ffe14a';
     text(ctx, String(cb.n), xr - 52, 150, { size: big, align: 'right', color: col });
     text(ctx, 'HIT', xr, 150, { size: 18, align: 'right', color: col });
-    text(ctx, `与ダメージ +${Math.round(cb.n * p.stats.comboPer * 100)}%`, xr, 172, { size: 12, align: 'right', color: '#ffd8a0' });
+    text(ctx, tr`与ダメージ +${Math.round(cb.n * p.stats.comboPer * 100)}%`, xr, 172, { size: 12, align: 'right', color: '#ffd8a0' });
     const k = clamp(cb.t / (2.2 + 0.4 * upLv(meta, 'combo')), 0, 1);
     ctx.fillStyle = '#05040a'; ctx.fillRect(xr - 120, 180, 120, 6);
     ctx.fillStyle = col; ctx.fillRect(xr - 119, 181, Math.round(118 * k), 4);
   }
   // 鍛冶屋の危機
   if (game.room.desc.type === 'forge' && run.glen === 'attacked') {
-    text(ctx, 'グレンを守れ ― 近づいて錆兵を引きつけろ', VIEW_W / 2, 78, { size: 13, align: 'center', color: '#ff8a6a', bold: true });
+    text(ctx, tr('グレンを守れ ― 近づいて錆兵を引きつけろ'), VIEW_W / 2, 78, { size: 13, align: 'center', color: '#ff8a6a', bold: true });
   }
   // 刻守のHP
   const b = game.room.boss;
   if (b) {
     const w = 520, x = VIEW_W / 2 - w / 2, y = VIEW_H - 40;
-    text(ctx, b.finalForm ? '白き刻守 ― 第 2 形態' : b.trueDuel ? '刻守 ― 夜明けの決闘' : '刻守', x, y - 6, { size: 13, bold: true, color: b.trueDuel ? '#ffd38a' : '#efe6d2', font: SERIF });
+    text(ctx, b.finalForm ? tr('白き刻守 ― 第 2 形態') : b.trueDuel ? tr('刻守 ― 夜明けの決闘') : tr('刻守'), x, y - 6, { size: 13, bold: true, color: b.trueDuel ? '#ffd38a' : '#efe6d2', font: SERIF });
     if (b.counter) {
-      text(ctx, `対策：${COUNTERS[b.counter].name}`, x + w, y - 6, { size: 11, align: 'right', color: '#ff9a7a' });
-      text(ctx, `崩し方：${COUNTERS[b.counter].weak}`, VIEW_W / 2, y + 26, { size: 11, align: 'center', color: '#c9b0a0' });
+      text(ctx, tr`対策：${COUNTERS[b.counter].name}`, x + w, y - 6, { size: 11, align: 'right', color: '#ff9a7a' });
+      text(ctx, tr`崩し方：${COUNTERS[b.counter].weak}`, VIEW_W / 2, y + 26, { size: 11, align: 'center', color: '#c9b0a0' });
       if (b.counter === 'combo') {
         const sw = 120, sx = x + w - sw;
         ctx.fillStyle = '#05040a'; ctx.fillRect(sx - 1, y - 30, sw + 2, 6);
         ctx.fillStyle = b.shell > 0 ? '#c9a052' : '#3a3242'; ctx.fillRect(sx, y - 29, Math.round(sw * Math.max(0, b.shell) / (b.shellMax || 1)), 4);
-        text(ctx, b.shell > 0 ? '外殻' : `外殻なし ${Math.ceil(b.shellDown)}秒`, sx - 6, y - 23, { size: 10, align: 'right', color: '#c9a052' });
+        text(ctx, b.shell > 0 ? tr('外殻') : tr`外殻なし ${Math.ceil(b.shellDown)}秒`, sx - 6, y - 23, { size: 10, align: 'right', color: '#c9a052' });
       }
     }
-    if (b.brake) text(ctx, b.trueDuel ? '' : '時止め封印', x + w - (b.counter ? 150 : 0), y - 6, { size: 10, align: 'right', color: C.gold });
+    if (b.brake) text(ctx, b.trueDuel ? '' : tr('時止め封印'), x + w - (b.counter ? 150 : 0), y - 6, { size: 10, align: 'right', color: C.gold });
     ctx.fillStyle = '#1a1018'; ctx.fillRect(x, y, w, 10);
     ctx.fillStyle = b.trueDuel ? '#ffd38a' : '#c94a3a'; ctx.fillRect(x, y, w * clamp(b.hp / b.maxHp, 0, 1), 10);
     for (const t of [b.p2At, b.p3At]) { ctx.fillStyle = '#fff'; ctx.fillRect(x + w * t - 1, y - 2, 2, 14); }
   }
   // 楔の溜め
-  if (p.state === 'channel') text(ctx, '楔を打っている……（回避・ジャンプで中断）', VIEW_W / 2, VIEW_H - 70, { size: 12, align: 'center', color: C.gold });
+  if (p.state === 'channel') text(ctx, tr('楔を打っている……（回避・ジャンプで中断）'), VIEW_W / 2, VIEW_H - 70, { size: 12, align: 'center', color: C.gold });
   // 大見出し
   const bn = game.fx.banner;
   if (bn) {
@@ -338,15 +339,15 @@ function drawDialog(ctx, game, m) {
   choices.forEach((c, i) => {
     const cy = top + h - (choices.length - i) * CH - 8;
     if (i === m.sel) { ctx.fillStyle = 'rgba(242,193,78,0.15)'; ctx.fillRect(x + 12, cy - 20, w - 24, CH - 2); }
-    text(ctx, (i === m.sel ? '▶ ' : '　') + c.label, x + 22, cy, { size: 16, color: i === m.sel ? C.gold : '#ddd', maxW: w - 44 });
+    text(ctx, (i === m.sel ? '▶ ' : tr('　')) + c.label, x + 22, cy, { size: 16, color: i === m.sel ? C.gold : '#ddd', maxW: w - 44 });
   });
-  if (!choices.length) text(ctx, game.touch ? (last ? 'タップで閉じる' : 'タップで次へ') : (last ? 'Z：閉じる' : 'Z：次へ'), x + w - 14, top + h - 10, { size: 10, align: 'right', color: C.muted });
+  if (!choices.length) text(ctx, game.touch ? (last ? tr('タップで閉じる') : tr('タップで次へ')) : (last ? tr('Z：閉じる') : tr('Z：次へ')), x + w - 14, top + h - 10, { size: 10, align: 'right', color: C.muted });
 }
 
 function drawBoonPick(ctx, game, m) {
   const p = game.player;
-  text(ctx, m.rare ? `レベル ${game.run.level} ― 稀少の強化を選ぶ` : m.school ? '書庫の祭壇 ―「停滞」の強化' : '強化を選ぶ', VIEW_W / 2, 92, { size: 22, align: 'center', bold: true, font: SERIF, color: C.gold });
-  if (m.count > 1) text(ctx, `あと ${m.count} つ`, VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });
+  text(ctx, m.rare ? tr`レベル ${game.run.level} ― 稀少の強化を選ぶ` : m.school ? tr('書庫の祭壇 ―「停滞」の強化') : tr('強化を選ぶ'), VIEW_W / 2, 92, { size: 22, align: 'center', bold: true, font: SERIF, color: C.gold });
+  if (m.count > 1) text(ctx, tr`あと ${m.count} つ`, VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });
   const lay = cardRects(m.offer.length);
   m.offer.forEach((id, i) => {
     const def = BOONS[id], sc = SCHOOLS[def.school];
@@ -366,20 +367,20 @@ function drawBoonPick(ctx, game, m) {
     text(ctx, def.name, x + 16, y + 56, { size: 20, bold: true, font: SERIF });
     if (def.max) text(ctx, own ? `Lv${own.tier} → ${nt}` : 'Lv1', x + cw - 16, y + 28, { size: 13, align: 'right', color: own ? '#ffe14a' : C.muted });
     const curArt = def.active && !own ? p.boons.find((b) => BOONS[b.id].active) : null;
-    if (curArt) text(ctx, `持ち替え：${BOONS[curArt.id].name} を外す`, x + 16, y + ch - 32, { size: 11, color: '#ff8ae0' });
+    if (curArt) text(ctx, tr`持ち替え：${BOONS[curArt.id].name} を外す`, x + 16, y + ch - 32, { size: 11, color: '#ff8ae0' });
     // 合成の素材なら、カードの下に「合成先・相手の素材・持っているか」を色つきの枠で見せる
     const fus = fusionsFor(id, p.boons);
     // 「◆ 合成素材」の印は、系統名と Lv の間に入る時だけ（文字が大きいと重なるので省く。合成の枠は下に出る）
-    ctx.font = `${fontSize(11)}px ${FONT}`; const fx0 = x + 16 + ctx.measureText(sc.name + '　').width;
-    ctx.font = `${fontSize(10)}px ${FONT}`; const fx1 = fx0 + ctx.measureText('◆ 合成素材').width;
+    ctx.font = `${fontSize(11)}px ${FONT}`; const fx0 = x + 16 + ctx.measureText(sc.name + tr('　')).width;
+    ctx.font = `${fontSize(10)}px ${FONT}`; const fx1 = fx0 + ctx.measureText(tr('◆ 合成素材')).width;
     ctx.font = `${fontSize(13)}px ${FONT}`; const lvX = x + cw - 16 - (def.max ? ctx.measureText(own ? `Lv${own.tier} → ${nt}` : 'Lv1').width + 8 : 0);
-    if (fus.length && fx1 < lvX) text(ctx, '◆ 合成素材', fx0, y + 28, { size: 10, color: fus[0].color, bold: true });
+    if (fus.length && fx1 < lvX) text(ctx, tr('◆ 合成素材'), fx0, y + 28, { size: 10, color: fus[0].color, bold: true });
     const FB = lh(34), boxH = fus.length * FB;
     // 説明（17px）→ 補足（共鳴・相乗）の順に、合成の枠より上へ詰める。文字が大きくて入りきらない時は、
     // 補足を省いて説明を優先し、それでも入らない分は最後の行につなげて横に流す（重ならず、欠けない）
     const L = lh(24), HL = lh(15), top = y + 88, bottom = y + ch - boxH - 12 - (curArt ? lh(18) : 0);
     const lines = wrap(ctx, own ? (forgeDiff(id, own.tier).diff || def.desc(nt)) : def.desc(nt), cw - 28, 17);
-    let hintLines = synergyHints(id, p.boons).filter((h) => !h.startsWith('合成：')).flatMap((h) => wrap(ctx, h, cw - 32, 11));
+    let hintLines = synergyHints(id, p.boons, { fusion: false }).flatMap((h) => wrap(ctx, h, cw - 32, 11));
     const fit = (nh) => Math.max(1, Math.floor((bottom - top - (nh ? lh(8) + nh * HL : 0)) / L) + 1);
     if (lines.length > fit(hintLines.length)) hintLines = hintLines.slice(0, Math.max(0, Math.floor((bottom - top - lines.length * L) / HL)));
     const maxL = fit(hintLines.length);
@@ -392,21 +393,21 @@ function drawBoonPick(ctx, game, m) {
       const by = y + ch - boxH - 6 + j * FB;
       ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(x + 8, by, cw - 16, FB - 4);
       ctx.fillStyle = f.color; ctx.fillRect(x + 8, by, 3, FB - 4);
-      text(ctx, `合成 ▶ ${BOONS[f.to].name}`, x + 18, by + lh(13), { size: 12, bold: true, color: f.color, maxW: cw - 32 });
+      text(ctx, tr`合成 ▶ ${BOONS[f.to].name}`, x + 18, by + lh(13), { size: 12, bold: true, color: f.color, maxW: cw - 32 });
       const have = f.otherLv > 0, ready = f.otherLv >= 2;
-      text(ctx, `＋ ${BOONS[f.other].name}`, x + 18, by + lh(27), { size: 11, color: '#e8e0d0' });
-      text(ctx, ready ? `手持ち Lv${f.otherLv} ✓` : have ? `手持ち Lv${f.otherLv}（Lv2 で）` : '未所持', x + cw - 14, by + lh(27), { size: 10, align: 'right', color: ready ? '#7dff9a' : have ? '#ffe14a' : C.muted });
+      text(ctx, tr`＋ ${BOONS[f.other].name}`, x + 18, by + lh(27), { size: 11, color: '#e8e0d0' });
+      text(ctx, ready ? tr`手持ち Lv${f.otherLv} ✓` : have ? tr`手持ち Lv${f.otherLv}（Lv2 で）` : tr('未所持'), x + cw - 14, by + lh(27), { size: 10, align: 'right', color: ready ? '#7dff9a' : have ? '#ffe14a' : C.muted });
     });
-    if (!fus.length && !hints.length && RESONANCE[def.school] && !schoolCounts(p.boons)[def.school]) text(ctx, `同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted, maxW: cw - 28 });
+    if (!fus.length && !hints.length && RESONANCE[def.school] && !schoolCounts(p.boons)[def.school]) text(ctx, tr`同じ系統をもう1つで共鳴：${RESONANCE[def.school]}`, x + 16, y + ch - 16, { size: 9, color: C.muted, maxW: cw - 28 });
     ctx.globalAlpha = 1;
   });
-  text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定', VIEW_W / 2, 428, { size: 12, align: 'center', color: C.muted });
+  text(ctx, game.touch ? tr('カードをタップで選択、もう一度タップで決定') : tr('← → 選ぶ　Z 決定'), VIEW_W / 2, 428, { size: 12, align: 'center', color: C.muted });
   // 現在の手持ち。選んでいるカードと合成の組になるものは、その合成の色で光らせる
   if (p.boons.length) {
     const pair = new Map(fusionsFor(m.offer[m.sel], p.boons).map((f) => [f.other, f.color]));
     const parts = p.boons.map((b) => ({ s: BOONS[b.id].name + (BOONS[b.id].max ? ` Lv${b.tier}` : b.tier > 1 ? 'II' : ''), c: pair.get(b.id) }));
     ctx.font = `${fontSize(11)}px ${FONT}`; // 実際に描く大きさで幅を測る
-    const label = '手持ち：', sep = '・';
+    const label = tr('手持ち：'), sep = tr('・');
     const widths = parts.map((q) => ctx.measureText(q.s).width), sw = ctx.measureText(sep).width, lw = ctx.measureText(label).width;
     const total = lw + widths.reduce((a, b) => a + b, 0) + sw * (parts.length - 1);
     // 画面に収まらない（文字が大きい・手持ちが多い）ときは、1 行にまとめて横に流す
@@ -418,8 +419,8 @@ function drawBoonPick(ctx, game, m) {
 }
 
 function drawShop(ctx, game, m) {
-  const items = m.stock.map((s) => { const l = game.shopLabel(s); const can = !s.sold && game.run.gold >= s.price; return { label: l.name, color: s.sold ? '#5a5260' : s.tier === 'legend' ? '#ff7ae0' : s.tier === 'rare' ? '#ffd84a' : s.kind === 'key' ? '#ffd84a' : s.kind === 'artifact' ? '#7fe0d0' : s.kind === 'whetstone' ? '#f2c14e' : s.kind === 'reroll' ? '#9fe3ff' : '#d8d0c4', right: s.sold ? '売り切れ' : `${s.price} G`, rightColor: s.sold ? '#5a5260' : can ? '#ffd84a' : '#8a6a7a', desc: l.desc, rainbow: s.tier === 'legend' && !s.sold }; });
-  drawLightbox(ctx, game, { title: '行商人の店', right: `● 金貨 ${game.run.gold}`, items, sel: m.sel, color: '#ffd84a', st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: game.touch ? 'タップで選択、もう一度タップで買う／枠の外で閉じる' : '↑↓ 選ぶ　Z 買う　C 閉じる' });
+  const items = m.stock.map((s) => { const l = game.shopLabel(s); const can = !s.sold && game.run.gold >= s.price; return { label: l.name, color: s.sold ? '#5a5260' : s.tier === 'legend' ? '#ff7ae0' : s.tier === 'rare' ? '#ffd84a' : s.kind === 'key' ? '#ffd84a' : s.kind === 'artifact' ? '#7fe0d0' : s.kind === 'whetstone' ? '#f2c14e' : s.kind === 'reroll' ? '#9fe3ff' : '#d8d0c4', right: s.sold ? tr('売り切れ') : `${s.price} G`, rightColor: s.sold ? '#5a5260' : can ? '#ffd84a' : '#8a6a7a', desc: l.desc, rainbow: s.tier === 'legend' && !s.sold }; });
+  drawLightbox(ctx, game, { title: tr('行商人の店'), right: tr`● 金貨 ${game.run.gold}`, items, sel: m.sel, color: '#ffd84a', st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: game.touch ? tr('タップで選択、もう一度タップで買う／枠の外で閉じる') : tr('↑↓ 選ぶ　Z 買う　C 閉じる') });
 }
 
 // 合成：素材 A ＋ 素材 B → 上位の強化
@@ -427,8 +428,8 @@ function drawFusion(ctx, game, m) {
   const { a, b, to } = m.recipe, p = game.player;
   const lv = (id) => (p.boons.find((x) => x.id === id) || {}).tier || 1;
   const k = clamp(m.t / 0.5, 0, 1);
-  text(ctx, '合成できる！', VIEW_W / 2, 74, { size: 26, align: 'center', color: '#ffd84a' });
-  text(ctx, '素材の 2 つは消え、上位の強化を Lv1 で得る（Lv1 でも素材より強い。さらに Lv5 まで伸びる）', VIEW_W / 2, 100, { size: 13, align: 'center', color: C.muted });
+  text(ctx, tr('合成できる！'), VIEW_W / 2, 74, { size: 26, align: 'center', color: '#ffd84a' });
+  text(ctx, tr('素材の 2 つは消え、上位の強化を Lv1 で得る（Lv1 でも素材より強い。さらに Lv5 まで伸びる）'), VIEW_W / 2, 100, { size: 13, align: 'center', color: C.muted });
   const card = (id, x, y, w, h, tier, big) => {
     const d = BOONS[id], col = SCHOOLS[d.school].color;
     panel(ctx, x, y, w, h, big ? '#ffd84a' : col, 'rgba(18,14,26,0.97)');
@@ -444,21 +445,21 @@ function drawFusion(ctx, game, m) {
   text(ctx, '→', 50 + 480 + 8, 210, { size: 30, color: '#ffd84a' });
   card(to, 50 + 520, 116, 340, 180, 1, true);
   ctx.globalAlpha = 1;
-  const opts = ['合成する', '今はしない'];
+  const opts = [tr('合成する'), tr('今はしない')];
   opts.forEach((o, i) => {
     const x = i === 0 ? VIEW_W / 2 - 230 : VIEW_W / 2 + 30, on = m.sel === i;
     panel(ctx, x, 400, 200, 44, on ? '#ffd84a' : 'rgba(255,255,255,0.2)', on ? 'rgba(60,44,10,0.95)' : 'rgba(14,11,20,0.95)');
     text(ctx, (on ? '▶ ' : '') + o, x + 100, 429, { size: 18, align: 'center', color: on ? '#ffe9a0' : '#bbb' });
   });
-  text(ctx, game.touch ? 'ボタンをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定　C 今はしない', VIEW_W / 2, 470, { size: 12, align: 'center', color: C.muted });
+  text(ctx, game.touch ? tr('ボタンをタップで選択、もう一度タップで決定') : tr('← → 選ぶ　Z 決定　C 今はしない'), VIEW_W / 2, 470, { size: 12, align: 'center', color: C.muted });
 }
 
 // アーティファクトの選択（カード）
 function drawArtifactPick(ctx, game, m) {
   const gold = m.rarity === 'gold';
   const hasLegend = m.offer.some((id) => id.startsWith('boon:'));
-  text(ctx, hasLegend ? '黄金の宝箱 ― 1 つ選ぶ' : gold ? '黄金の宝箱 ― アーティファクトを 1 つ選ぶ' : 'アーティファクトを 1 つ選ぶ', VIEW_W / 2, 92, { size: 22, align: 'center', color: gold ? '#ffd84a' : '#7fe0d0' });
-  text(ctx, hasLegend ? 'アーティファクトは夜が戻っても残る。伝説の強化は楔か継承で持ち越す' : 'アーティファクトは夜が戻っても失われない', VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });
+  text(ctx, hasLegend ? tr('黄金の宝箱 ― 1 つ選ぶ') : gold ? tr('黄金の宝箱 ― アーティファクトを 1 つ選ぶ') : tr('アーティファクトを 1 つ選ぶ'), VIEW_W / 2, 92, { size: 22, align: 'center', color: gold ? '#ffd84a' : '#7fe0d0' });
+  text(ctx, hasLegend ? tr('アーティファクトは夜が戻っても残る。伝説の強化は楔か継承で持ち越す') : tr('アーティファクトは夜が戻っても失われない'), VIEW_W / 2, 114, { size: 12, align: 'center', color: C.muted });
   const cw = 250, ch = 240, gap = 18, total = m.offer.length * cw + (m.offer.length - 1) * gap;
   m.offer.forEach((id, i) => {
     // 黄金の宝箱では、まれに伝説の強化が混ざる（'boon:id'）
@@ -471,29 +472,29 @@ function drawArtifactPick(ctx, game, m) {
     const x = VIEW_W / 2 - total / 2 + i * (cw + gap), y = 140 - (sel ? 8 : 0) + (1 - appear) * 24;
     panel(ctx, x, y, cw, ch, sel ? col : 'rgba(255,255,255,0.15)', sel ? 'rgba(24,18,32,0.98)' : 'rgba(14,11,20,0.95)');
     ctx.fillStyle = col; ctx.fillRect(x, y, cw, 5);
-    text(ctx, boon ? '★伝説の強化' : gold ? '黄金のアーティファクト' : 'アーティファクト', x + 16, y + 28, { size: 11, color: col });
+    text(ctx, boon ? tr('★伝説の強化') : gold ? tr('黄金のアーティファクト') : tr('アーティファクト'), x + 16, y + 28, { size: 11, color: col });
     text(ctx, a.name, x + 16, y + 58, { size: 20 });
     wrap(ctx, a.desc, cw - 28, 15).forEach((l, j) => text(ctx, l, x + 14, y + 90 + j * lh(21), { size: 15, color: '#e8e0d0' }));
     ctx.globalAlpha = 1;
   });
-  text(ctx, game.touch ? 'カードをタップで選択、もう一度タップで決定' : '← → 選ぶ　Z 決定', VIEW_W / 2, 412, { size: 12, align: 'center', color: C.muted });
+  text(ctx, game.touch ? tr('カードをタップで選択、もう一度タップで決定') : tr('← → 選ぶ　Z 決定'), VIEW_W / 2, 412, { size: 12, align: 'center', color: C.muted });
 }
 
 function drawCompanionPick(ctx, game, m) {
-  const items = m.list.map((id) => { const d = COMPANIONS[id]; return { label: `${d.name}（${d.forms.join(' → ')}）`, right: id === game.meta.companion ? '連れている' : '', rightColor: d.color, color: d.color, desc: d.desc + ' 技：' + d.skills.map((s) => s.names.filter(Boolean).join('→')).join('／') + '。手助け：' + d.buff.name }; });
-  drawLightbox(ctx, game, { title: 'お供を選ぶ ― Lv5・Lv10 で進化する', items, sel: m.sel, color: '#7fe0b0', st: m, desc: items[m.sel] ? items[m.sel].desc : '' });
+  const items = m.list.map((id) => { const d = COMPANIONS[id]; return { label: tr`${d.name}（${d.forms.join(' → ')}）`, right: id === game.meta.companion ? tr('連れている') : '', rightColor: d.color, color: d.color, desc: d.desc + tr(' 技：') + d.skills.map((s) => s.names.filter(Boolean).join('→')).join(tr('／')) + tr('。手助け：') + d.buff.name }; });
+  drawLightbox(ctx, game, { title: tr('お供を選ぶ ― Lv5・Lv10 で進化する'), items, sel: m.sel, color: '#7fe0b0', st: m, desc: items[m.sel] ? items[m.sel].desc : '' });
 }
 
 function drawForge(ctx, game, m) {
   // 鍛えると何がどう変わるかを、選ぶ前に数字で見せる（例：35%→50%）
-  const items = m.list.map((b) => { const d = BOONS[b.id], nt = (b.tier || 1) + 1, f = forgeDiff(b.id, b.tier || 1); return { label: d.name, right: d.max ? `Lv${b.tier} → ${nt}` : '→ II', rightColor: '#ffe14a', desc: f.diff ? '鍛えると：' + f.diff : `今：${f.now}／鍛えると：${f.next}` }; });
-  drawLightbox(ctx, game, { title: m.hourglass ? '砂時計 ― 時を進めて、どれを鍛える？' : m.shop ? '砥石 ― どれを鍛える？（やめれば代金を返す）' : 'グレンの鍛冶 ― どれを鍛える？', items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: m.hourglass ? (game.touch ? '項目をタップで選択、もう一度タップで鍛える' : '↑↓ 選ぶ　Z 鍛える') : undefined });
+  const items = m.list.map((b) => { const d = BOONS[b.id], nt = (b.tier || 1) + 1, f = forgeDiff(b.id, b.tier || 1); return { label: d.name, right: d.max ? `Lv${b.tier} → ${nt}` : '→ II', rightColor: '#ffe14a', desc: f.diff ? tr('鍛えると：') + f.diff : tr`今：${f.now}／鍛えると：${f.next}` }; });
+  drawLightbox(ctx, game, { title: m.hourglass ? tr('砂時計 ― 時を進めて、どれを鍛える？') : m.shop ? tr('砥石 ― どれを鍛える？（やめれば代金を返す）') : tr('グレンの鍛冶 ― どれを鍛える？'), items, sel: m.sel, color: C.gold, st: m, desc: items[m.sel] ? items[m.sel].desc : '', hint: m.hourglass ? (game.touch ? tr('項目をタップで選択、もう一度タップで鍛える') : tr('↑↓ 選ぶ　Z 鍛える')) : undefined });
 }
 
 function drawCode(ctx, game, m) {
   const x = VIEW_W / 2 - 170, y = 150, w = 340, h = 220;
   panel(ctx, x, y, w, h, C.gold);
-  text(ctx, '書庫の扉', VIEW_W / 2, y + 34, { size: 18, align: 'center', bold: true, color: C.gold, font: SERIF });
+  text(ctx, tr('書庫の扉'), VIEW_W / 2, y + 34, { size: 18, align: 'center', bold: true, color: C.gold, font: SERIF });
   const shakeX = m.wrong > 0 ? Math.sin(m.wrong * 60) * 6 : 0;
   for (let i = 0; i < 3; i++) {
     const dx = VIEW_W / 2 - 80 + i * 80 + shakeX;
@@ -502,30 +503,30 @@ function drawCode(ctx, game, m) {
     if (i === m.pos) { text(ctx, '▲', dx, y + 62, { size: 11, align: 'center', color: C.gold }); text(ctx, '▼', dx, y + 150, { size: 11, align: 'center', color: C.gold }); }
   }
   const known = game.meta.knowledge.code;
-  text(ctx, known ? `記録帳：「書庫の扉 ${game.meta.code.join('-')}」` : '番号の手がかりはまだない', VIEW_W / 2, y + 180, { size: 12, align: 'center', color: known ? '#7fb8ff' : C.muted });
-  text(ctx, game.touch ? '数字の上半分で＋・下半分で−／この帯をタップで決定' : '←→ 桁　↑↓ 数字　Z 決定　C 戻る', VIEW_W / 2, y + 204, { size: 10, align: 'center', color: C.muted });
+  text(ctx, known ? tr`記録帳：「書庫の扉 ${game.meta.code.join('-')}」` : tr('番号の手がかりはまだない'), VIEW_W / 2, y + 180, { size: 12, align: 'center', color: known ? '#7fb8ff' : C.muted });
+  text(ctx, game.touch ? tr('数字の上半分で＋・下半分で−／この帯をタップで決定') : tr('←→ 桁　↑↓ 数字　Z 決定　C 戻る'), VIEW_W / 2, y + 204, { size: 10, align: 'center', color: C.muted });
 }
 
 function drawPause(ctx, game, m) {
   const opts = game.pauseOptions();
   const x = VIEW_W / 2 - 170, y = PAUSE.y - 74, w = 340, h = 66 + opts.length * PAUSE.step;
   panel(ctx, x, y, w, h);
-  text(ctx, '中断', VIEW_W / 2, y + 36, { size: 20, align: 'center', bold: true, font: SERIF });
+  text(ctx, tr('中断'), VIEW_W / 2, y + 36, { size: 20, align: 'center', bold: true, font: SERIF });
   opts.forEach((o, i) => {
     const yy = PAUSE.y + i * PAUSE.step;
     text(ctx, (i === m.sel ? '▶ ' : '') + o.label, VIEW_W / 2, yy, { size: 14, align: 'center', color: i === m.sel ? C.gold : '#ddd', maxW: w - 24 });
   });
   drawDawnStrip(ctx, game, y + h + 30);
-  if (!game.touch) text(ctx, '移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃・↑↓＋Xで上下）　回避 C　術 V（ゲージ消費／術がなければ時歪）　調べる Z/↑/E（調べられる物の前）', VIEW_W / 2, VIEW_H - 30, { size: 11, align: 'center', color: C.muted });
+  if (!game.touch) text(ctx, tr('移動 ←→　ジャンプ Z　攻撃 X（長押しで重撃・↑↓＋Xで上下）　回避 C　術 V（ゲージ消費／術がなければ時歪）　調べる Z/↑/E（調べられる物の前）'), VIEW_W / 2, VIEW_H - 30, { size: 11, align: 'center', color: C.muted });
 }
 
-const TABS = ['人物', '謎', '敵', '夜明け'];
+const TABS = [tr('人物'), tr('謎'), tr('敵'), tr('夜明け')];
 export function drawJournal(ctx, game, m) {
   const meta = game.meta;
   const x = 90, y = 50, w = VIEW_W - 180, h = VIEW_H - 100;
   panel(ctx, x, y, w, h, 'rgba(127,184,255,0.4)');
-  text(ctx, '記録帳', x + 24, y + 36, { size: 20, bold: true, font: SERIF, color: '#9fd0ff' });
-  text(ctx, '周回をまたいで残る。知っていることが、次の夜の攻略になる。', x + 120, y + 34, { size: 11, color: C.muted });
+  text(ctx, tr('記録帳'), x + 24, y + 36, { size: 20, bold: true, font: SERIF, color: '#9fd0ff' });
+  text(ctx, tr('周回をまたいで残る。知っていることが、次の夜の攻略になる。'), x + 120, y + 34, { size: 11, color: C.muted });
   TABS.forEach((t, i) => {
     const tx = x + 24 + i * 90, ty = y + 62;
     ctx.fillStyle = i === m.tab ? 'rgba(127,184,255,0.25)' : 'rgba(255,255,255,0.04)'; ctx.fillRect(tx, ty, 80, 24);
@@ -548,26 +549,26 @@ export function drawJournal(ctx, game, m) {
       // 登場人物：誰が誰とどういう関係か（知ったぶんだけ詳しくなる）
       const k = (key) => !!meta.knowledge[key];
       const cast = [
-        ['あなた', '刻守の弟子。師に習った「時の楔」で、夜をまたいで覚えていられる唯一の人。'],
-        ['刻守', '時計塔の主で、あなたの師。禁忌の鐘で夜を戻し続け、そのたびに自分の命を削っている。' + (k('master_reason') ? '娘を見送る朝を恐れている。' : '')],
-        k('lira_father') ? ['リラ', '師の娘。朝の汽車で遠くの療養所へ発つ。'] : k('lira_name') ? ['リラ', '市場の少女。師が名を呼んだ。'] : ['市場の少女', '朝を待ちながら、父の見送りを気にしている。'],
-        ['グレン', '鍛冶屋。師の古い友で、塔の歯車を共に作った。' + (k('glen_time') || k('glen_saved') ? '夜の途中で時計人形に襲われる。' : '')],
+        [tr('あなた'), tr('刻守の弟子。師に習った「時の楔」で、夜をまたいで覚えていられる唯一の人。')],
+        [tr('刻守'), tr('時計塔の主で、あなたの師。禁忌の鐘で夜を戻し続け、そのたびに自分の命を削っている。') + (k('master_reason') ? tr('娘を見送る朝を恐れている。') : '')],
+        k('lira_father') ? [tr('リラ'), tr('師の娘。朝の汽車で遠くの療養所へ発つ。')] : k('lira_name') ? [tr('リラ'), tr('市場の少女。師が名を呼んだ。')] : [tr('市場の少女'), tr('朝を待ちながら、父の見送りを気にしている。')],
+        [tr('グレン'), tr('鍛冶屋。師の古い友で、塔の歯車を共に作った。') + (k('glen_time') || k('glen_saved') ? tr('夜の途中で時計人形に襲われる。') : '')],
       ];
       const nameW = Math.round(92 * modeScale());
       for (const [nm, d] of cast) { text(ctx, nm, x + 28, yy, { size: 13, color: C.gold, maxW: nameW - 6 }); for (const l of wrap(ctx, d, w - 58 - nameW, 12)) { text(ctx, l, x + 28 + nameW, yy, { size: 12, color: '#cfc8bb' }); yy += lh(16); } yy += lh(4); }
       yy += lh(8);
     }
-    if (!entries.length) { text(ctx, 'まだ何も知らない。', x + 28, yy, { size: 13, color: C.muted }); yy += lh(24); }
-    for (const [k, v] of entries) draw(v.title, v.text(meta), meta.knowledge[k] === meta.loop && game.scene === 'play', cat === '敵' ? '#ffb0a0' : '#efe6d2');
+    if (!entries.length) { text(ctx, tr('まだ何も知らない。'), x + 28, yy, { size: 13, color: C.muted }); yy += lh(24); }
+    for (const [k, v] of entries) draw(v.title, v.text(meta), meta.knowledge[k] === meta.loop && game.scene === 'play', cat === tr('敵') ? '#ffb0a0' : '#efe6d2');
     if (m.tab === 0) {
       // 楔の状態もここで確認できる
       yy += lh(6);
-      text(ctx, `楔（${wedgeCount(meta)}）`, x + 28, yy, { size: 13, bold: true, color: C.gold }); yy += lh(18);
-      for (const wd of meta.wedges) { text(ctx, `◆ ${wedgeLabel(wd)}：${wd.target === 'boon' ? WEDGE_TARGETS.boon.effect : WEDGE_TARGETS[wd.target].effect}`, x + 40, yy, { size: 12, color: '#d8b968', maxW: w - 70 }); yy += lh(16); }
+      text(ctx, tr`楔（${wedgeCount(meta)}）`, x + 28, yy, { size: 13, bold: true, color: C.gold }); yy += lh(18);
+      for (const wd of meta.wedges) { text(ctx, tr`◆ ${wedgeLabel(wd)}：${wd.target === 'boon' ? WEDGE_TARGETS.boon.effect : WEDGE_TARGETS[wd.target].effect}`, x + 40, yy, { size: 12, color: '#d8b968', maxW: w - 70 }); yy += lh(16); }
     }
   } else {
     const pr = dawnProgress(meta);
-    text(ctx, `夜明けへの道　${pr.done} / ${pr.total}`, x + 28, yy, { size: 15, color: '#ffd38a' }); yy += lh(26);
+    text(ctx, tr`夜明けへの道　${pr.done} / ${pr.total}`, x + 28, yy, { size: 15, color: '#ffd38a' }); yy += lh(26);
     DAWN_STEPS.forEach((st, i) => {
       const ok = st.done(meta), isNext = pr.next === st;
       text(ctx, `${ok ? '■' : '□'} ${i + 1}. ${st.title}`, x + 36, yy, { size: 14, color: ok ? '#9a8fa6' : isNext ? '#ffd38a' : '#efe6d2', maxW: w - 60 });
@@ -575,10 +576,10 @@ export function drawJournal(ctx, game, m) {
       yy += lh(22);
     });
     const c = bossCounter(meta.lastLoop);
-    if (c) draw('刻守の記憶', `前の夜の戦い方を覚えている：${COUNTERS[c].name}――${COUNTERS[c].desc}`, false, '#ff9a7a');
+    if (c) draw(tr('刻守の記憶'), tr`前の夜の戦い方を覚えている：${COUNTERS[c].name}――${COUNTERS[c].desc}`, false, '#ff9a7a');
   }
   vend(ctx, sk, yy, box);
-  text(ctx, game.touch ? 'タブをタップ／枠の外をタップで閉じる' : '←→ タブ　Tab/Esc 閉じる', x + w - 20, y + h - 14, { size: 10, align: 'right', color: C.muted });
+  text(ctx, game.touch ? tr('タブをタップ／枠の外をタップで閉じる') : tr('←→ タブ　Tab/Esc 閉じる'), x + w - 20, y + h - 14, { size: 10, align: 'right', color: C.muted });
 }
 
 // ───────── タイトル ─────────
@@ -587,19 +588,19 @@ export function drawTitle(ctx, game) {
   // 背景（星空の時計塔）は render.js がドット絵で描く
   // 題字は項目（TITLE_MENU）より上に収める。cinema：紹介動画の撮影用（'bare' は背景だけ、ほかは題字だけ）
   if (game.cinema === 'bare') return;
-  text(ctx, '夜明けの楔', VIEW_W / 2, TITLE_MENU.y - 46, { size: 50, align: 'center', bold: true, font: SERIF, color: '#f3e7cf', fixed: true });
+  text(ctx, tr('夜明けの楔'), VIEW_W / 2, TITLE_MENU.y - 46, { size: 50, align: 'center', bold: true, font: SERIF, color: '#f3e7cf', fixed: true });
   text(ctx, 'WEDGE OF DAWN', VIEW_W / 2, TITLE_MENU.y - 26, { size: 12, align: 'center', color: C.gold, fixed: true });
   if (game.cinema) return;
   if (game.titleConfirm) {
     panel(ctx, VIEW_W / 2 - 200, 390, 400, 80, '#e35d5d');
-    text(ctx, '記録をすべて消して、はじめから遊びますか？', VIEW_W / 2, 422, { size: 14, align: 'center' });
-    text(ctx, 'Z：消してはじめる　C：やめる', VIEW_W / 2, 450, { size: 12, align: 'center', color: C.muted });
+    text(ctx, tr('記録をすべて消して、はじめから遊びますか？'), VIEW_W / 2, 422, { size: 14, align: 'center' });
+    text(ctx, tr('Z：消してはじめる　C：やめる'), VIEW_W / 2, 450, { size: 12, align: 'center', color: C.muted });
     return;
   }
   const opts = game.titleOptions();
   opts.forEach((o, i) => text(ctx, (i === game.titleSel ? '▶ ' : '') + o.label, VIEW_W / 2, TITLE_MENU.y + i * TITLE_MENU.step, { size: 16, align: 'center', color: i === game.titleSel ? (o.id === 'diff' ? game.difficulty().color : C.gold) : o.id === 'diff' ? game.difficulty().color : '#bbb' }));
-  text(ctx, game.touch ? 'タップで選ぶ' : '↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　術 V　調べる ↑', VIEW_W / 2, VIEW_H - 14, { size: 11, align: 'center', color: C.muted });
-  if (game.meta && game.meta.flags.ending) { const en = game.meta.flags.endings || {}; text(ctx, `★ クリア済み ― 結末 ${ENDING_IDS.filter((k) => en[k]).length}/${ENDING_IDS.length}（${ENDING_IDS.filter((k) => en[k]).map((k) => ENDINGS[k].name).join('・') || '夜明け'}）`, VIEW_W / 2, 510, { size: 12, align: 'center', color: '#ffd38a' }); }
+  text(ctx, game.touch ? tr('タップで選ぶ') : tr('↑↓ 選ぶ　Z/Enter 決定　｜　移動 ←→　ジャンプ Z　攻撃 X　回避 C　術 V　調べる ↑'), VIEW_W / 2, VIEW_H - 14, { size: 11, align: 'center', color: C.muted });
+  if (game.meta && game.meta.flags.ending) { const en = game.meta.flags.endings || {}; text(ctx, tr`★ クリア済み ― 結末 ${ENDING_IDS.filter((k) => en[k]).length}/${ENDING_IDS.length}（${ENDING_IDS.filter((k) => en[k]).map((k) => ENDINGS[k].name).join(tr('・')) || tr('夜明け')}）`, VIEW_W / 2, 510, { size: 12, align: 'center', color: '#ffd38a' }); }
   else if (game.meta) drawDawnStrip(ctx, game, 510);
   drawGearButton(ctx, game);
   if (game.titleSettings) drawTitleSettings(ctx, game, game.titleSettings);
@@ -614,7 +615,7 @@ function drawGearButton(ctx, game) {
   for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; ctx.fillRect(Math.round(gx + Math.cos(a) * 9 - 2), Math.round(gy + Math.sin(a) * 9 - 2), 4, 4); }
   ctx.beginPath(); ctx.arc(gx, gy, 7, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = on ? 'rgba(40,30,20,1)' : 'rgba(10,8,16,1)'; ctx.beginPath(); ctx.arc(gx, gy, 3, 0, Math.PI * 2); ctx.fill();
-  text(ctx, '設定', x + 44, y + h / 2 + 6, { size: 16, color: col, maxW: w - 50 });
+  text(ctx, tr('設定'), x + 44, y + h / 2 + 6, { size: 16, color: col, maxW: w - 50 });
 }
 // ライトボックスの右上の閉じるボタン（×）
 function drawCloseButton(ctx, color) {
@@ -625,34 +626,34 @@ function drawCloseButton(ctx, color) {
 }
 // 「ゲームについて」の本文
 export const ABOUT_LINES = [
-  { h: '夜明けの楔　WEDGE OF DAWN' },
-  { t: '同じ夜をくり返す時計塔で、「時の楔」を手に夜明けを目指す、2D アクション・ローグライトです。' },
-  { t: '版：' + RELEASE.version },
-  { h: 'つくった人たち' },
-  { t: '原案・監修：当開発元' + (RELEASE.publisher ? `（${RELEASE.publisher}）` : '') },
-  { t: 'シナリオの推敲：ChatGPT（OpenAI の AI）' },
-  { t: '制作（プログラム・ドット絵・音楽・効果音・テキストの実装）：Claude（Anthropic の AI）' },
-  { h: '生成 AI の利用について' },
-  { t: 'この作品のプログラム・絵・音楽・効果音・文章は、生成 AI を使ってつくられています。企画と方針、遊びごこちの確認と取捨選択は人が行いました。' },
-  { h: 'おことわり' },
-  { t: 'この作品はフィクションです。登場する人物・団体・場所・出来事はすべて架空のものであり、実在の人物・団体、ほかのゲームや創作物とは一切関係ありません。' },
-  { h: '権利と素材' },
-  { t: '絵・音楽・効果音はすべてプログラムで生成しており、外部の画像や音源は使っていません。' },
-  { t: '文字：DotGothic16（Copyright 2020 The DotGothic16 Project Authors）。SIL Open Font License 1.1 にもとづいて同梱しています（許諾書は assets/fonts/OFL-DotGothic16.txt）。' },
-  { h: '健康のための注意' },
-  { t: 'ごくまれに、強い光の刺激や点滅を見て、一時的に筋肉のけいれんや意識の喪失などを起こす人がいます。こうした経験のある方は、遊ぶ前に医師に相談してください。遊んでいて異常を感じたら、すぐにやめて医師の診察を受けてください。' },
-  { t: '画面全体が光る演出は「光の点滅を抑える」で、画面の揺れは「画面揺れ」で弱められます（この設定画面）。明るい部屋で画面から離れて遊び、長く遊ぶときは適度に休憩をとってください。' },
-  { h: '記録と個人情報' },
-  { t: '記録（セーブ）と設定は、この端末の中にだけ保存されます。ブラウザや端末のデータを消すと記録も消えます。' },
-  { t: '個人の情報は集めません。通信・広告・課金はありません。' },
-  { h: 'ご利用にあたって' },
-  { t: '動作は端末やブラウザによって異なる場合があります。この作品を遊んだことで生じた損害について、制作者は責任を負いかねます。' },
-  ...(RELEASE.contact ? [{ h: 'お問い合わせ' }, { t: RELEASE.contact }] : []),
+  { h: tr('夜明けの楔　WEDGE OF DAWN') },
+  { t: tr('同じ夜をくり返す時計塔で、「時の楔」を手に夜明けを目指す、2D アクション・ローグライトです。') },
+  { t: tr('版：') + RELEASE.version },
+  { h: tr('つくった人たち') },
+  { t: tr('原案・監修：当開発元') + (RELEASE.publisher ? tr`（${RELEASE.publisher}）` : '') },
+  { t: tr('シナリオの推敲：ChatGPT（OpenAI の AI）') },
+  { t: tr('制作（プログラム・ドット絵・音楽・効果音・テキストの実装）：Claude（Anthropic の AI）') },
+  { h: tr('生成 AI の利用について') },
+  { t: tr('この作品のプログラム・絵・音楽・効果音・文章は、生成 AI を使ってつくられています。企画と方針、遊びごこちの確認と取捨選択は人が行いました。') },
+  { h: tr('おことわり') },
+  { t: tr('この作品はフィクションです。登場する人物・団体・場所・出来事はすべて架空のものであり、実在の人物・団体、ほかのゲームや創作物とは一切関係ありません。') },
+  { h: tr('権利と素材') },
+  { t: tr('絵・音楽・効果音はすべてプログラムで生成しており、外部の画像や音源は使っていません。') },
+  { t: tr('文字：DotGothic16（Copyright 2020 The DotGothic16 Project Authors）。SIL Open Font License 1.1 にもとづいて同梱しています（許諾書は assets/fonts/OFL-DotGothic16.txt）。') },
+  { h: tr('健康のための注意') },
+  { t: tr('ごくまれに、強い光の刺激や点滅を見て、一時的に筋肉のけいれんや意識の喪失などを起こす人がいます。こうした経験のある方は、遊ぶ前に医師に相談してください。遊んでいて異常を感じたら、すぐにやめて医師の診察を受けてください。') },
+  { t: tr('画面全体が光る演出は「光の点滅を抑える」で、画面の揺れは「画面揺れ」で弱められます（この設定画面）。明るい部屋で画面から離れて遊び、長く遊ぶときは適度に休憩をとってください。') },
+  { h: tr('記録と個人情報') },
+  { t: tr('記録（セーブ）と設定は、この端末の中にだけ保存されます。ブラウザや端末のデータを消すと記録も消えます。') },
+  { t: tr('個人の情報は集めません。通信・広告・課金はありません。') },
+  { h: tr('ご利用にあたって') },
+  { t: tr('動作は端末やブラウザによって異なる場合があります。この作品を遊んだことで生じた損害について、制作者は責任を負いかねます。') },
+  ...(RELEASE.contact ? [{ h: tr('お問い合わせ') }, { t: RELEASE.contact }] : []),
 ];
 function drawTitleSettings(ctx, game, ts) {
   if (!ts.about) {
     const items = game.settingsOptions().map((o) => ({ label: o.label, right: o.right, rightColor: C.muted }));
-    drawLightbox(ctx, game, { title: '設定', items, sel: ts.sel, color: C.gold, st: ts, desc: { about: '原案・制作・おことわり・権利表記など', flash: '画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）' }[(game.settingsOptions()[ts.sel] || {}).id] || '', hint: game.touch ? 'タップで選択、もう一度タップで決定／×で閉じる' : '↑↓ 選ぶ　Z 決定　C 閉じる' });
+    drawLightbox(ctx, game, { title: ts.lang ? '言語 / Language' : tr('設定'), items, sel: ts.sel, color: C.gold, st: ts, desc: ts.lang ? tr('選ぶと、その言語で読み込み直します') : { lang: tr('表示する言語を選びます'), about: tr('原案・制作・おことわり・権利表記など'), flash: tr('画面全体が白く光る演出を弱くします（光の点滅が苦手な方に）') }[(game.settingsOptions()[ts.sel] || {}).id] || '', hint: game.touch ? tr('タップで選択、もう一度タップで決定／×で閉じる') : tr('↑↓ 選ぶ　Z 決定　C 閉じる') });
     drawCloseButton(ctx, C.gold);
     return;
   }
@@ -661,7 +662,7 @@ function drawTitleSettings(ctx, game, ts) {
   const { x, y, w, h } = LB, col = '#9fd0ff';
   panel(ctx, x, y, w, h, col, 'rgba(14,11,20,0.98)');
   ctx.fillStyle = col; ctx.fillRect(x, y, w, 4);
-  text(ctx, 'ゲームについて', x + 28, y + 44, { size: 22, color: col });
+  text(ctx, tr('ゲームについて'), x + 28, y + 44, { size: 22, color: col });
   drawCloseButton(ctx, col);
   const box = { x: x + 20, y: y + 64, w: w - 40, h: h - 100 };
   const off = vbegin(ctx, 'about', box);
@@ -672,7 +673,7 @@ function drawTitleSettings(ctx, game, ts) {
     for (const s of wrap(ctx, l.t, (box.w - 30) * 13 / fontSize(13), 13)) { text(ctx, s, box.x + 22, yy, { size: 13, color: '#e8e0d0', maxW: box.w - 26 }); yy += lh(20); }
   }
   vend(ctx, 'about', yy - lh(20) + 8 + off, box);
-  text(ctx, game.touch ? 'どこかをタップで閉じる' : 'Z / C で閉じる', VIEW_W / 2, y + h - 14, { size: 11, align: 'center', color: C.muted });
+  text(ctx, game.touch ? tr('どこかをタップで閉じる') : tr('Z / C で閉じる'), VIEW_W / 2, y + h - 14, { size: 11, align: 'center', color: C.muted });
 }
 
 // ───────── 巻き戻り ─────────
@@ -689,16 +690,16 @@ export function drawRewind(ctx, game) {
   ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(VIEW_W / 2, VIEW_H / 2); ctx.lineTo(VIEW_W / 2 + Math.cos(spin) * 190, VIEW_H / 2 + Math.sin(spin) * 190); ctx.stroke();
   ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(VIEW_W / 2, VIEW_H / 2); ctx.lineTo(VIEW_W / 2 + Math.cos(spin / 12) * 120, VIEW_H / 2 + Math.sin(spin / 12) * 120); ctx.stroke();
   ctx.restore();
-  const causeText = rep.cause === 'ending' ? '決着がついた。塔に朝が来た。' : rep.cause === 'bell' ? '鐘が鳴った。夜が戻る。' : rep.cause === 'badend' ? '刻守を倒した。けれど、夜は明けない。' : 'あなたは倒れた。同じ夜のはじめに戻る。';
-  text(ctx, causeText + (rep.retry ? `　（第 ${rep.loop} 夜をもう一度）` : rep.cause === 'ending' ? `　（次は${endlessName(meta)}・第 ${meta.loop} 夜）` : `　（第 ${rep.loop} 夜 → 第 ${meta.loop} 夜）`), VIEW_W / 2, 50, { size: 19, align: 'center', font: SERIF, color: rep.cause === 'bell' || rep.cause === 'ending' ? C.gold : '#efe6d2' });
+  const causeText = rep.cause === 'ending' ? tr('決着がついた。塔に朝が来た。') : rep.cause === 'bell' ? tr('鐘が鳴った。夜が戻る。') : rep.cause === 'badend' ? tr('刻守を倒した。けれど、夜は明けない。') : tr('あなたは倒れた。同じ夜のはじめに戻る。');
+  text(ctx, causeText + (rep.retry ? tr`　（第 ${rep.loop} 夜をもう一度）` : rep.cause === 'ending' ? tr`　（次は${endlessName(meta)}・第 ${meta.loop} 夜）` : tr`　（第 ${rep.loop} 夜 → 第 ${meta.loop} 夜）`), VIEW_W / 2, 50, { size: 19, align: 'center', font: SERIF, color: rep.cause === 'bell' || rep.cause === 'ending' ? C.gold : '#efe6d2' });
   // 夜ごとに変わる語り（時間の経過と、師の変化）
   if (rep.story) { ctx.globalAlpha = clamp(t / 0.8, 0, 1); text(ctx, rep.story, VIEW_W / 2, 80, { size: 14, align: 'center', font: SERIF, color: '#d9c7a8' }); ctx.globalAlpha = 1; }
   if (game.cinema === 'clock') return; // 紹介動画の撮影用：逆回りの時計と一文だけ
   if (rep.tip && t > 2.2) text(ctx, '◆ ' + rep.tip, VIEW_W / 2, 366, { size: 12, align: 'center', color: '#f2c14e' });
   const cols = [
-    { title: '残ったもの', color: C.gold, items: rep.kept, at: 0.5 },
-    { title: '戻ったもの', color: C.reset, items: rep.reset, at: 1.1 },
-    { title: '変わったこと', color: C.change, items: rep.changed, at: 1.7 },
+    { title: tr('残ったもの'), color: C.gold, items: rep.kept, at: 0.5 },
+    { title: tr('戻ったもの'), color: C.reset, items: rep.reset, at: 1.1 },
+    { title: tr('変わったこと'), color: C.change, items: rep.changed, at: 1.7 },
   ];
   const cw = 280, gap = 22, x0 = VIEW_W / 2 - (cw * 3 + gap * 2) / 2;
   cols.forEach((c, i) => {
@@ -725,7 +726,7 @@ export function drawRewind(ctx, game) {
     ctx.globalAlpha = 1;
   });
   ctx.globalAlpha = 1;
-  if (t < 3.2) { text(ctx, game.touch ? 'タップでとばす' : 'Z：とばす', VIEW_W - 20, VIEW_H - 16, { size: 10, align: 'right', color: C.muted }); return; }
+  if (t < 3.2) { text(ctx, game.touch ? tr('タップでとばす') : tr('Z：とばす'), VIEW_W - 20, VIEW_H - 16, { size: 10, align: 'right', color: C.muted }); return; }
   // 選択肢（2 列のボタン）
   if (r.mode === 'view') {
     const opts = game.rewindOptions();
@@ -734,9 +735,9 @@ export function drawRewind(ctx, game) {
     opts.forEach((o, i) => {
       const bx = g.x + (i % 2) * (g.cw + g.gap), byy = g.y + Math.floor(i / 2) * g.rowH, on = i === r.sel;
       if (on) { ctx.fillStyle = 'rgba(242,193,78,0.16)'; ctx.fillRect(bx - 6, byy - 24, g.cw, g.rowH - 6); }
-      text(ctx, (on ? '▶ ' : '　') + o.label, bx, byy, { size: 17, color: on ? C.gold : '#d8d0c4' });
+      text(ctx, (on ? '▶ ' : tr('　')) + o.label, bx, byy, { size: 17, color: on ? C.gold : '#d8d0c4' });
     });
-    text(ctx, `楔 ${wedgeCount(meta)}`, VIEW_W - 24, VIEW_H - 12, { size: 12, align: 'right', color: C.gold });
+    text(ctx, tr`楔 ${wedgeCount(meta)}`, VIEW_W - 24, VIEW_H - 12, { size: 12, align: 'right', color: C.gold });
     drawDawnStrip(ctx, game, VIEW_H - 12, 'left');
   } else if (r.mode === 'pull' || r.mode === 'wedgeBoon') {
     const pull = r.mode === 'pull';
@@ -744,28 +745,28 @@ export function drawRewind(ctx, game) {
       ? meta.wedges.map((w) => ({ label: wedgeLabel(w), desc: w.target === 'boon' ? WEDGE_TARGETS.boon.effect : WEDGE_TARGETS[w.target].effect }))
       : game.carryAll()
         // めちゃ簡単：すべての強化に、はじめから楔が打たれている（楔の枠は使わない。外せない）
-        ? game.wedgeableBoons().map((b) => { const d = BOONS[b.id]; return { label: '▼ ' + d.name + (d.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: C.gold, right: '楔（自動・外せない）', rightColor: C.gold, desc: d.desc(b.tier || 1) }; })
+        ? game.wedgeableBoons().map((b) => { const d = BOONS[b.id]; return { label: '▼ ' + d.name + (d.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: C.gold, right: tr('楔（自動・外せない）'), rightColor: C.gold, desc: d.desc(b.tier || 1) }; })
         : game.wedgeableBoons().map((b) => { const d = BOONS[b.id]; return { label: d.name + (d.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), right: SCHOOLS[d.school].name, rightColor: SCHOOLS[d.school].color, desc: d.desc(b.tier || 1) }; });
     const autoW = !pull && game.carryAll();
     drawLightbox(ctx, game, {
-      title: pull ? '楔を抜く ― 抜いた対象は次の夜、元に戻る' : autoW ? '強化の楔 ― めちゃ簡単：すべて自動で打たれている' : '強化に楔を打つ ― 次の夜も持ったまま始まる',
-      right: autoW ? `自動 ${items.length}` : `楔 ${wedgeCount(meta)}`,
-      items, sel: r.sub, color: C.gold, desc: autoW && r.lockedT > 0 ? 'めちゃ簡単では、すべての強化に自動で楔が打たれています（外せません。楔の枠は使いません）' : items[r.sub] ? items[r.sub].desc : '', st: r,
-      hint: autoW ? (game.touch ? '枠の外で戻る' : '↑↓ 見る　C 戻る') : undefined,
+      title: pull ? tr('楔を抜く ― 抜いた対象は次の夜、元に戻る') : autoW ? tr('強化の楔 ― めちゃ簡単：すべて自動で打たれている') : tr('強化に楔を打つ ― 次の夜も持ったまま始まる'),
+      right: autoW ? tr`自動 ${items.length}` : tr`楔 ${wedgeCount(meta)}`,
+      items, sel: r.sub, color: C.gold, desc: autoW && r.lockedT > 0 ? tr('めちゃ簡単では、すべての強化に自動で楔が打たれています（外せません。楔の枠は使いません）') : items[r.sub] ? items[r.sub].desc : '', st: r,
+      hint: autoW ? (game.touch ? tr('枠の外で戻る') : tr('↑↓ 見る　C 戻る')) : undefined,
     });
   }
   if (r.mode === 'upgrade' || r.mode === 'inherit') drawRewindShop(ctx, game, r);
   // 決着のあと、何も強化しないままタイトルへ戻ろうとした時の案内
   if (r.mode === 'notice') drawLightbox(ctx, game, {
-    title: 'シナリオは終わっても、夜は続く', color: C.gold, sel: -1, st: r,
+    title: tr('シナリオは終わっても、夜は続く'), color: C.gold, sel: -1, st: r,
     items: [
-      { label: `◆ シナリオが終了しても、「${endlessName(meta)}」としてエンドレスで遊べます`, color: '#efe6d2' },
-      { label: `◆ 次の${endlessName(meta)}のための強化は、この画面で行ってください`, color: '#efe6d2' },
-      { label: '　（刻印を刻む・継承する強化を選ぶ・楔を打つ など）', color: C.muted },
-      hasPersistence(meta) ? { label: '◆ 記憶の固執：Lv と金貨も次の夜へ持ち越し、継承の刻印に上限が無い', color: '#ff9ad8' } : { label: '◆ 真の結末「夜明けの楔」を見ると、Lv と金貨も持ち越す「記憶の固執の夜」になる', color: C.muted },
+      { label: tr`◆ シナリオが終了しても、「${endlessName(meta)}」としてエンドレスで遊べます`, color: '#efe6d2' },
+      { label: tr`◆ 次の${endlessName(meta)}のための強化は、この画面で行ってください`, color: '#efe6d2' },
+      { label: tr('　（刻印を刻む・継承する強化を選ぶ・楔を打つ など）'), color: C.muted },
+      hasPersistence(meta) ? { label: tr('◆ 記憶の固執：Lv と金貨も次の夜へ持ち越し、継承の刻印に上限が無い'), color: '#ff9ad8' } : { label: tr('◆ 真の結末「夜明けの楔」を見ると、Lv と金貨も持ち越す「記憶の固執の夜」になる'), color: C.muted },
     ],
-    desc: 'もう一度「タイトル画面に戻る」を押すと、強化せずにタイトルへ戻ります。',
-    hint: game.touch ? 'タップで閉じる' : 'Z 閉じる',
+    desc: tr('もう一度「タイトル画面に戻る」を押すと、強化せずにタイトルへ戻ります。'),
+    hint: game.touch ? tr('タップで閉じる') : tr('Z 閉じる'),
   });
   // 巻き戻り画面の上に開いた窓（記録帳・お供を選ぶ）も描く
   if (game.modal) { ctx.fillStyle = 'rgba(5,4,8,0.7)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); if (game.modal.type === 'journal') drawJournal(ctx, game, game.modal); else drawModal(ctx, game); }
@@ -773,7 +774,7 @@ export function drawRewind(ctx, game) {
 
 // ───────── 結末 ─────────
 // 楔の数の表示：人 1/2・技 0/3
-const wedgeCount = (meta) => `人 ${meta.wedges.filter((w) => w.target !== 'boon').length}/${meta.personSlots || 2}・技 ${meta.wedges.filter((w) => w.target === 'boon').length}/${meta.slots}`;
+const wedgeCount = (meta) => tr`人 ${meta.wedges.filter((w) => w.target !== 'boon').length}/${meta.personSlots || 2}・技 ${meta.wedges.filter((w) => w.target === 'boon').length}/${meta.slots}`;
 export function drawEnding(ctx, game) {
   const e = game.ending, PAGES = e.pages;
   const k = clamp(e.page / (PAGES.length - 1), 0, 1) * (e.tone ?? 1);
@@ -787,7 +788,7 @@ export function drawEnding(ctx, game) {
   page.forEach((l, i) => text(ctx, l, VIEW_W / 2, VIEW_H / 2 - 10 + i * 34, { size: i === 0 && e.page === PAGES.length - 1 ? 36 : 20, align: 'center', font: SERIF, color: '#fff6e0' }));
   if (e.page === PAGES.length - 1) {
     const m = game.meta;
-    text(ctx, `${m.loop} 夜／倒れた回数 ${m.stats.deaths}／偽りの勝利 ${m.stats.falseWins}`, VIEW_W / 2, VIEW_H / 2 + 90, { size: 12, align: 'center', color: '#fff6e0' });
+    text(ctx, tr`${m.loop} 夜／倒れた回数 ${m.stats.deaths}／偽りの勝利 ${m.stats.falseWins}`, VIEW_W / 2, VIEW_H / 2 + 90, { size: 12, align: 'center', color: '#fff6e0' });
   }
   ctx.globalAlpha = 1;
   if (e.t > 0.8) text(ctx, 'Z', VIEW_W - 24, VIEW_H - 18, { size: 11, align: 'right', color: 'rgba(255,255,255,0.5)' });
@@ -800,31 +801,31 @@ function drawRewindShop(ctx, game, r) {
   if (r.mode === 'upgrade') {
     const items = Object.entries(UPGRADES).map(([k, u]) => {
       // めちゃ簡単：継承は最初から無限（刻印は要らない）
-      if (k === 'inherit' && game.carryAll()) return { label: `${u.name}　∞`, right: '無限', rightColor: C.gold, desc: 'めちゃ簡単：前の夜の強化と術を、すべて Lv ごと持ち越す（刻む必要はない）' };
+      if (k === 'inherit' && game.carryAll()) return { label: tr`${u.name}　∞`, right: tr('無限'), rightColor: C.gold, desc: tr('めちゃ簡単：前の夜の強化と術を、すべて Lv ごと持ち越す（刻む必要はない）') };
       const mx = upMax(m, k), lv = upLv(m, k), maxed = lv >= mx, c = maxed ? 0 : u.cost(lv);
-      return { label: `${u.name}　Lv${lv}/${Number.isFinite(mx) ? mx : '∞'}`, right: maxed ? '最大' : `欠片 ${c}`, rightColor: maxed ? C.muted : m.shards >= c ? '#9fd0ff' : '#8a6a7a', desc: maxed ? u.desc(lv) : `いま：${lv ? u.desc(lv) : 'なし'}　→　次：${u.desc(lv + 1)}` };
+      return { label: tr`${u.name}　Lv${lv}/${Number.isFinite(mx) ? mx : '∞'}`, right: maxed ? tr('最大') : tr`欠片 ${c}`, rightColor: maxed ? C.muted : m.shards >= c ? '#9fd0ff' : '#8a6a7a', desc: maxed ? u.desc(lv) : tr`いま：${lv ? u.desc(lv) : tr('なし')}　→　次：${u.desc(lv + 1)}` };
     });
-    drawLightbox(ctx, game, { title: '刻印 ― 夜を越えて残る力', right: `時の欠片 ${m.shards}`, items, sel: r.sub, color: '#9fd0ff', desc: items[r.sub] ? items[r.sub].desc : '', st: r });
+    drawLightbox(ctx, game, { title: tr('刻印 ― 夜を越えて残る力'), right: tr`時の欠片 ${m.shards}`, items, sel: r.sub, color: '#9fd0ff', desc: items[r.sub] ? items[r.sub].desc : '', st: r });
   } else {
     const list = game.inheritCandidates(), auto = game.carryAll();
     const items = list.map((b) => {
       const def = BOONS[b.id], on = auto || m.inherit.some((x2) => x2.id === b.id);
-      if (auto) return { label: '◆ ' + def.name + (def.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: C.gold, right: '自動で持ち越す', rightColor: C.gold, desc: def.desc(b.tier || 1) };
-      return { label: (on ? '◆ ' : '◇ ') + def.name + (def.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: on ? C.gold : '#bbb', right: on ? '持ち越す' : SCHOOLS[def.school].name, rightColor: on ? C.gold : SCHOOLS[def.school].color, desc: def.desc(b.tier || 1) };
+      if (auto) return { label: '◆ ' + def.name + (def.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: C.gold, right: tr('自動で持ち越す'), rightColor: C.gold, desc: def.desc(b.tier || 1) };
+      return { label: (on ? '◆ ' : '◇ ') + def.name + (def.max ? ` Lv${b.tier}` : b.tier > 1 ? ' II' : ''), color: on ? C.gold : '#bbb', right: on ? tr('持ち越す') : SCHOOLS[def.school].name, rightColor: on ? C.gold : SCHOOLS[def.school].color, desc: def.desc(b.tier || 1) };
     });
-    if (auto) { drawLightbox(ctx, game, { title: '継承 ― めちゃ簡単：すべて自動で持ち越す', right: `${list.length} / ∞`, items, sel: r.sub, color: C.gold, st: r, desc: r.lockedT > 0 ? 'めちゃ簡単では、すべての強化を自動で持ち越します（外せません）' : items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? '枠の外で戻る' : '↑↓ 見る　C 戻る' }); return; }
-    drawLightbox(ctx, game, { title: `継承 ― 次の夜に持ち越す強化`, right: `${m.inherit.length} / ${inheritLabel(m)}`, items, sel: r.sub, color: C.gold, st: r, desc: items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? 'タップで選択、もう一度タップで ◆持ち越す／◇外す　枠の外で戻る' : '↑↓ 選ぶ　Z ◆持ち越す／◇外す　C 戻る' });
+    if (auto) { drawLightbox(ctx, game, { title: tr('継承 ― めちゃ簡単：すべて自動で持ち越す'), right: `${list.length} / ∞`, items, sel: r.sub, color: C.gold, st: r, desc: r.lockedT > 0 ? tr('めちゃ簡単では、すべての強化を自動で持ち越します（外せません）') : items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? tr('枠の外で戻る') : tr('↑↓ 見る　C 戻る') }); return; }
+    drawLightbox(ctx, game, { title: tr`継承 ― 次の夜に持ち越す強化`, right: `${m.inherit.length} / ${inheritLabel(m)}`, items, sel: r.sub, color: C.gold, st: r, desc: items[r.sub] ? items[r.sub].desc : '', hint: game.touch ? tr('タップで選択、もう一度タップで ◆持ち越す／◇外す　枠の外で戻る') : tr('↑↓ 選ぶ　Z ◆持ち越す／◇外す　C 戻る') });
   }
 }
 
 // 刻守の分析：前の夜のあなたの戦い方と、用意された対策
-const HABIT_LABEL = { combo: '連撃', heavy: '重撃', air: '空中', skill: '術', echo: '残響' };
+const HABIT_LABEL = { combo: tr('連撃'), heavy: tr('重撃'), air: tr('空中'), skill: tr('術'), echo: tr('残響') };
 function drawAnalysis(ctx, game, m) {
   const x = 150, y = 60, w = VIEW_W - 300, h = 420;
   const k = clamp(m.t / 0.6, 0, 1);
   panel(ctx, x, y, w, h, '#ff9a7a');
-  text(ctx, '刻守はあなたを見ていた', x + 24, y + 38, { size: 22, color: '#ff9a7a' });
-  text(ctx, '前の夜の戦い方', x + 24, y + 70, { size: 13, color: C.muted });
+  text(ctx, tr('刻守はあなたを見ていた'), x + 24, y + 38, { size: 22, color: '#ff9a7a' });
+  text(ctx, tr('前の夜の戦い方'), x + 24, y + 70, { size: 13, color: C.muted });
   const a = m.a;
   Object.entries(HABIT_LABEL).forEach(([cat, label], i) => {
     const yy = y + 96 + i * 26, share = a ? a.shares[cat] : 0, top = cat === m.counter;
@@ -834,15 +835,15 @@ function drawAnalysis(ctx, game, m) {
     text(ctx, `${Math.round(share * 100)}%`, x + 400, yy, { size: 13, color: top ? '#ff9a7a' : '#999' });
   });
   const dy = y + 96 + 5 * 26;
-  text(ctx, `回避  毎分 ${a ? Math.round(a.dodgeRate) : 0} 回`, x + 24, dy, { size: 14, color: m.counter === 'dodge' ? '#ffffff' : '#bbb' });
+  text(ctx, tr`回避  毎分 ${a ? Math.round(a.dodgeRate) : 0} 回`, x + 24, dy, { size: 14, color: m.counter === 'dodge' ? '#ffffff' : '#bbb' });
   const c = COUNTERS[m.counter];
   if (k >= 1) {
-    text(ctx, `対策：${c.name}`, x + 24, dy + 44, { size: 20, color: '#ff4a2a' });
+    text(ctx, tr`対策：${c.name}`, x + 24, dy + 44, { size: 20, color: '#ff4a2a' });
     const dl = wrap(ctx, c.desc, w - 48, 14);
     dl.forEach((l, i) => text(ctx, l, x + 24, dy + 70 + i * lh(20), { size: 14, color: '#efe6d2' }));
-    wrap(ctx, '崩し方：' + c.weak, w - 48, 14).forEach((l, i) => text(ctx, l, x + 24, dy + 70 + Math.max(46, dl.length * lh(20) + 6) + i * lh(20), { size: 14, color: '#9fd0ff' }));
+    wrap(ctx, tr('崩し方：') + c.weak, w - 48, 14).forEach((l, i) => text(ctx, l, x + 24, dy + 70 + Math.max(46, dl.length * lh(20) + 6) + i * lh(20), { size: 14, color: '#9fd0ff' }));
   }
-  text(ctx, game.touch ? 'タップで続ける' : 'Z で続ける', x + w - 20, y + h - 14, { size: 11, align: 'right', color: C.muted });
+  text(ctx, game.touch ? tr('タップで続ける') : tr('Z で続ける'), x + w - 20, y + h - 14, { size: 11, align: 'right', color: C.muted });
 }
 
 // 夜明けへの道（進み具合と次にすること）を 1 行で
@@ -850,6 +851,6 @@ export function drawDawnStrip(ctx, game, y, align = 'center') {
   const m = game.meta; if (!m) return;
   const pr = dawnProgress(m);
   const x = align === 'center' ? VIEW_W / 2 : 24;
-  if (!pr.next) { text(ctx, '夜明けを迎えた（クリア済み）', x, y, { size: 13, align, color: '#ffd38a' }); return; }
-  text(ctx, `夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}`, x, y, { size: 13, align, color: '#ffd38a' });
+  if (!pr.next) { text(ctx, tr('夜明けを迎えた（クリア済み）'), x, y, { size: 13, align, color: '#ffd38a' }); return; }
+  text(ctx, tr`夜明けへの道 ${pr.done}/${pr.total}　次：${pr.next.title}`, x, y, { size: 13, align, color: '#ffd38a' });
 }

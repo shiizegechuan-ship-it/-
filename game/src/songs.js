@@ -11,13 +11,14 @@
 //           拍の裏の短い音（16 分）には、コードの音どうしを半音でつなぐ経過音を置く（E→D#→D など。切なさを出す）
 //   style：和音の刻み方（下の CHORD_STYLES）
 //   drum：1 小節 16 文字。k キック・s スネア・h ハイハット・o 開いたハイハット・. 休み。order で小節ごとに選ぶ
+import { tr } from './i18n.js';
 
 export const RANGE = { lead: [60, 84], counter: [55, 76], bass: [45, 69], chord: [55, 72] }; // 高すぎ・低すぎを避ける（MIDI 番号。60 = C4）
 
 export const SONGS = {
   // 下層・市場：夜の市場。少し怪しく、軽やか（イ短調）
   market: {
-    name: '夜市の灯', bpm: 132, style: 'offbeat', echo: 3,
+    name: tr('夜市の灯'), bpm: 132, style: 'offbeat', echo: 3,
     // 短調の ii–V（Bm7♭5→E7）、後半の王道進行（Fmaj7→G7→Em7→Am7）、宙づりの Esus4
     chords: 'Am Fmaj7 C G7 Am7 Dm7 Bm7b5 E7 Fmaj7 G7 Em7 Am7 Dm7 G7 Cmaj7|Fmaj7 Esus4|E7',
     lead: [
@@ -30,7 +31,7 @@ export const SONGS = {
   },
   // 中層・歯車回廊：歯車が噛み合うように刻む（ホ短調）
   gears: {
-    name: '歯車の回廊', bpm: 144, style: 'motor', echo: 2,
+    name: tr('歯車の回廊'), bpm: 144, style: 'motor', echo: 2,
     // 7 の和音の陰り、Em→Em/D の下がる低音、D7→G（平行調への寄り道）、最後は Cmaj7 の上で #11 が鳴ってから B7
     chords: 'Em Cmaj7 D Bm7 Em C Am7 B7 Cmaj7 D Bm7 Em|Em/D Am7 D7 G Cmaj7|B7',
     lead: [
@@ -43,7 +44,7 @@ export const SONGS = {
   },
   // 上層・鐘楼：重く、厳かに。長い音と鐘のような高い音（ハ短調）
   belfry: {
-    name: '鐘楼へ', bpm: 116, style: 'pad', echo: 4,
+    name: tr('鐘楼へ'), bpm: 116, style: 'pad', echo: 4,
     // 下がっていく低音（C→C/B♭→A♭maj7）、宙づりの Gsus4、Fm へ向かう C7
     chords: 'Cm Cm/Bb|Abmaj7 Bb G7 Cm7 Fm7 Abmaj7 Gsus4|G7 Abmaj7 Bb7 Gm7 Cm|C7 Fm7 Bb7 Ebmaj7 G7',
     lead: [
@@ -56,7 +57,7 @@ export const SONGS = {
   },
   // 上層・鐘楼の戦闘部屋：鐘を打ち鳴らすように速く刻む（ヘ短調）。「鐘楼へ」の重さは残して、前へ駆ける
   bellfight: {
-    name: '鐘楼の剣戟', bpm: 150, style: 'gallop', echo: 2,
+    name: tr('鐘楼の剣戟'), bpm: 150, style: 'gallop', echo: 2,
     // 下がる低音（Fm→Fm/E♭→D♭maj7）、宙づりの Csus4 から C7、短調の ii–V（Gm7♭5→C7）、平行調の E♭7→A♭maj7
     chords: 'Fm Dbmaj7 Bbm7 C7 Fm Fm/Eb Dbmaj7 Csus4|C7 Bbm7 Eb7 Abmaj7 Dbmaj7 Gm7b5 C7 Fm Csus4|C7',
     lead: [
@@ -69,7 +70,7 @@ export const SONGS = {
   },
   // 刻守：速く、激しく。副旋律が下で支える（ニ短調）
   boss: {
-    name: '刻守', bpm: 160, style: 'drive', echo: 3, boss: true,
+    name: tr('刻守'), bpm: 160, style: 'drive', echo: 3, boss: true,
     // 7 の和音、B♭→Gm7 の半小節の交代、C7（平行調の属七）、下がる低音（Dm→Dm/C）、宙づりの Asus4
     chords: 'Dm Bbmaj7 C A7 Dm Gm7 Bb|Gm7 A7 Bbmaj7 C7 Am7 Dm|Dm/C Gm7 C7 F Asus4|A7',
     lead: [
@@ -86,7 +87,7 @@ export const SONGS = {
   },
   // 白き刻守（最後の形）：悲しく、それでいて前へ進む（ロ短調）
   final: {
-    name: '夜明けの楔', bpm: 150, style: 'anthem', echo: 3, boss: true,
+    name: tr('夜明けの楔'), bpm: 150, style: 'anthem', echo: 3, boss: true,
     // 宙づりの Asus4、ナポリの和音（Cmaj7）から A7→D、下がる低音（D→Dmaj7/C#）、最後に F#sus4→F#7
     chords: 'Bm Gmaj7 D Asus4|A Bm Em7 Gmaj7 F#7 Gmaj7 A7 F#m7 Bm Cmaj7 A7 D|Dmaj7/C# F#sus4|F#7',
     lead: [
@@ -103,7 +104,7 @@ export const SONGS = {
   },
   // タイトル・戦いの無い部屋：夜明けを待つ時計塔。ゆっくり、オルゴールのように（ト短調）
   title: {
-    name: '夜明けを待つ塔', bpm: 80, style: 'arp', echo: 4,
+    name: tr('夜明けを待つ塔'), bpm: 80, style: 'arp', echo: 4,
     // 宙づりの Dsus4 から D7、下がる低音（Gm→Gm/F→E♭maj7）、短調の ii–V（Am7♭5→D7）、平行調の B♭maj7・F7
     chords: 'Gm Ebmaj7 Cm7 Dsus4|D7 Gm Gm/F Ebmaj7 Am7b5|D7 Bbmaj7 F7 Ebmaj7 Cm7|D7 Gm Cm7 Am7b5 D7',
     lead: [
@@ -116,7 +117,7 @@ export const SONGS = {
   },
   // 戦いのあと：部屋を制圧したあとの静けさ。ゆっくり、やわらかく（ヘ長調）
   calm: {
-    name: '静けさの間', bpm: 96, style: 'arp', echo: 4,
+    name: tr('静けさの間'), bpm: 96, style: 'arp', echo: 4,
     // 下がっていくメジャー 7 の連なり（Fmaj7→Em7→Dm7→Cmaj7→B♭maj7…）、Gm7→C7 の ii–V、宙づりの Csus4
     chords: 'Fmaj7 Em7 Dm7 Cmaj7 Bbmaj7 Am7 Gm7 C7 Fmaj7 Am7 Bbmaj7 Gm7|C7 Am7 Dm7 Gm7 Csus4|C7',
     lead: [

@@ -1,5 +1,6 @@
 // 描画（ドット絵）。世界は 320×180 の低解像度バッファに描き、3 倍に拡大して表示する。
 // 文字（ダメージ数値・調べる表示）と HUD は拡大後の画面にドット文字フォントで描く。
+import { tr } from './i18n.js';
 import { nightLook, drawSkyLook, drawWeather, crackAt, drawCrack } from './nightlook.js';
 import { VIEW_W, VIEW_H, COLORS as C, PLAYER as PC } from './config.js';
 import { SOLID, ONEWAY } from './tilemap.js';
@@ -1644,12 +1645,12 @@ function drawWorldLabels(ctx, game) {
   for (const it of game.room.items) {
     if (it.kind === 'door' && !it.reward && it.label) label(ctx, it.label, SX(it.x + it.w / 2), SY(it.y) - 40, it.golden ? '#ffd84a' : it.causal ? '#f2c14e' : it.boss ? '#ff8a6a' : '#efe6d2', 14);
   }
-  if (game.room.quake && game.room.quake.tell) label(ctx, '床が震える――跳べ！', VIEW_W / 2, 200, '#ff6a6a', 22);
+  if (game.room.quake && game.room.quake.tell) label(ctx, tr('床が震える――跳べ！'), VIEW_W / 2, 200, '#ff6a6a', 22);
   for (const e of game.room.enemies) {
-    if (e.guardT > 0 && e.alive) label(ctx, '構', SX(cx(e)), SY(e.y) - 24, '#7fc8ff', 15);
-    if (e.state === 'stagger') label(ctx, '崩れ', SX(cx(e)), SY(e.y) - 22, '#f2c14e', 15);
-    if (e.boss && e.state === 'parry') label(ctx, '受', SX(cx(e)), SY(e.y) - 34, '#5aa9e6', 18);
-    if (e.kind === 'knight' && e.state === 'slamWind' && e.tell > 0.3) label(ctx, '！', SX(cx(e)), SY(e.y) - 44, '#ff4a2a', 20);
+    if (e.guardT > 0 && e.alive) label(ctx, tr('構'), SX(cx(e)), SY(e.y) - 24, '#7fc8ff', 15);
+    if (e.state === 'stagger') label(ctx, tr('崩れ'), SX(cx(e)), SY(e.y) - 22, '#f2c14e', 15);
+    if (e.boss && e.state === 'parry') label(ctx, tr('受'), SX(cx(e)), SY(e.y) - 34, '#5aa9e6', 18);
+    if (e.kind === 'knight' && e.state === 'slamWind' && e.tell > 0.3) label(ctx, tr('！'), SX(cx(e)), SY(e.y) - 44, '#ff4a2a', 20);
   }
 }
 function drawPrompt(ctx, game) {

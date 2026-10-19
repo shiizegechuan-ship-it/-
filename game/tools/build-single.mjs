@@ -15,12 +15,14 @@ execFileSync('npx', ['--yes', 'esbuild@0.24.0', resolve(root, 'src/main.js'), '-
 const js = readFileSync(tmp, 'utf8');
 // フォントは同梱のファイルを 1 ファイルの中へ埋め込む（外部から読み込まない。ライセンスは assets/fonts/OFL-DotGothic16.txt）
 const font = readFileSync(resolve(root, 'assets/fonts/DotGothic16-Regular.ttf')).toString('base64');
+const fontLatin = readFileSync(resolve(root, 'assets/fonts/DotGothic16-Latin.ttf')).toString('base64');
 if (js.includes('</script')) throw new Error('bundle contains </script');
 
 const html = `<title>夜明けの楔</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<style>@font-face { font-family: 'DotGothic16'; src: url(data:font/ttf;base64,${font}) format('truetype'); font-display: swap; }</style>
+<style>@font-face { font-family: 'DotGothic16'; src: url(data:font/ttf;base64,${font}) format('truetype'); font-display: swap; }
+@font-face { font-family: 'DotGothic16 Latin'; src: url(data:font/ttf;base64,${fontLatin}) format('truetype'); font-display: swap; }</style>
 <style>
 /* 1画面のゲーム。夜の時計塔に合わせた暗い単一テーマ */
 :root { --night: #050408; --stage: #0d0b14; --ink: #efe6d2; --gold: #f2c14e; --veil: rgba(5,4,8,0.82); color-scheme: dark; }
