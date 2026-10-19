@@ -7,10 +7,10 @@
 | ファイル | 中身 |
 |---|---|
 | `screenshots/01-title.png` 〜 `08-dawn.png` | 画面写真 8 枚（1920×1080）。タイトル・市場の戦い・刻守戦・強化を選ぶ・精鋭戦・黄金の部屋・歯車回廊・夜明けのタイトル |
-| `trailer.mp4` | 短い紹介動画（約 40 秒・1920×1080・30fps・H.264、BGM 入り） |
+| `trailer.mp4` | 紹介動画（約 72 秒・1920×1080・30fps・H.264。テロップ＋1 文字ごとの電子音・効果音・BGM 入り）。あらすじ → 斬る・かわす・時を止める・強化 → 難易度 → 最後に待ち受けるもの → 題字「近日公開」 |
 | `STORE_PAGE.md` | この文章（紹介文・特徴・サポート情報の日本語版と英語版） |
 
-作り直すとき：`game/` で `python3 -m http.server 8080` を動かしてから `node tools/dev/store.mjs shots`（写真）／`node tools/dev/store.mjs video`（動画）。
+作り直すとき：`game/` で `python3 -m http.server 8080` を動かしてから `node tools/dev/store.mjs shots`（写真）／`node tools/dev/trailer.mjs`（動画。約 3 分）。
 
 **注意（ネタばれ）**：08-dawn（夜明けのタイトル）は真の結末を見たあとの画面です。ストアに載せるかどうかは選んでください。
 

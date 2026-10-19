@@ -20,7 +20,7 @@
   - ページの中の `window.__game`（ゲームの状態）、`window.__music`、`__setManual(true)` と `__step(n)`（1 コマずつ進める）がテストに便利。
 - テスト：`cd game && node --test tests/*.test.mjs`（今 **259 件すべて通る**）。
 - 1 ファイル版（Artifact 用）：`node tools/build-single.mjs <出力先.html>`。外枠の HTML は `index.html` と別に `tools/build-single.mjs` の中にある（iPhone 向けの設定などは両方へ入れる）。
-- Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v60）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
+- Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v61）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
 - コミットの末尾の署名：
   ```
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -43,7 +43,8 @@
 | `mobile-tap.mjs` | タップ移動・ボタンの二度押し・指が離れた時の入力の解放 |
 | `tapinv2.mjs` | タップ移動の連打で無敵にならないか |
 | `embed.mjs` | 全部屋で敵が壁にめり込んで出ないか |
-| `store.mjs` | ストアの画面写真（1920×1080・8 枚）と紹介動画（約 40 秒、BGM 入り）：`node tools/dev/store.mjs shots` / `video`（ボットが戦う。BGM は `render-bgm.mjs` の出力を使う）|
+| `store.mjs` | ストアの画面写真（1920×1080・8 枚）：`node tools/dev/store.mjs shots` |
+| `trailer.mjs` / `trailer-bot.mjs` | 紹介動画（約 72 秒）：`node tools/dev/trailer.mjs [出力.mp4]`（既定は `store/trailer.mp4`。`STILLS=1` で場面ごとに 1 枚だけ撮って確認）。台本（テロップ・場面・音の合図）はファイルの先頭。戦いは「見せる」ボット（攻撃が当たる瞬間に回避＝ジャスト回避）で、種を変えて試し、見栄えの点数がいちばん高い区間を撮る。効果音はゲームが鳴らした音を記録してオフラインで合成、BGM は `render-bgm.mjs` の出力を ffmpeg で重ねる。撮影用に `game.cinema`（HUD・題字の項目を出さない、`'clock'` は巻き戻りの時計だけ） |
 | `avoid.mjs` | 刻守・白き刻守の技（と連続の組み合わせ）ごとに、走る・跳ぶ・回避の動き方を試して無傷で済むものがあるかを見る：`node tools/dev/avoid.mjs nightmare 300`。`canAvoid` はテストからも使う |
 | `trueduel.mjs` | 真の結末の決闘（刻守→白き刻守）を実際の HP で戦わせる：`node tools/dev/trueduel.mjs nightmare '{"atk":15,"hp":15}' 6` |
 | `atkbox.mjs` | 刻守・番人の攻撃の当たる範囲を枠で重ねて撮る |
@@ -191,7 +192,8 @@
 - 文字は同梱のフォント（`assets/fonts/DotGothic16-Regular.ttf`、許諾書 `OFL-DotGothic16.txt`）。外部（Google Fonts）から読み込まない。1 ファイル版は base64 で埋め込む（約 3.1MB になる）。
 - 設定 → ゲームについて：生成 AI の利用・フォントの権利・健康のための注意・記録と個人情報・ご利用にあたって を追記。**販売者名・問い合わせ先・版は `src/config.js` の `RELEASE`**（空なら出さない）。
 - 販売の手順書：`docs/RELEASE_GUIDE.md`（売り場の候補と AI の申告のしかた、売れ行きの調べ、売り場が決まってからやること）。**売り場が決まったら、それに合わせてアプリに包む（Steam は Electron／Tauri、スマホは Capacitor）のは依頼者の確定待ち**。
-- ストアの素材：`store/`（画面写真 8 枚・紹介動画 `trailer.mp4`・紹介文の日英 `STORE_PAGE.md`）。作り直しは `node tools/dev/store.mjs shots|video`。
+- ストアの素材：`store/`（画面写真 8 枚・紹介動画 `trailer.mp4`・紹介文の日英 `STORE_PAGE.md`）。作り直しは `node tools/dev/store.mjs shots` と `node tools/dev/trailer.mjs`。
+- 紹介動画（作り直し）：あらすじ → 斬る・かわす・時を止める・強化 → 難易度（はじめての人も／腕に覚えのある人も／5 段階）→ 倒れても次の夜へ → 「そして――最後に待ち受けるのは。」→ 白き刻守を一瞬だけ → 「夜明けは、来るのか。」→ 題字・近日公開。テロップは 1 文字ずつ、1 文字ごとに同じ高さ（880Hz）の電子音。
 - 依頼者の判断：実機での確認はここではしない。遊んでもらっての調整はしない（難易度 5 段階で合わせる考え）。AI 生成物の権利の侵害は気にしない。
 
 ## 5. 主な仕組みの場所（早見）

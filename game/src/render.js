@@ -227,7 +227,7 @@ function renderPlay(ctx, game) {
   const p = game.player;
   if (p.hp > 0 && p.hp / p.maxHp < 0.3) pixelVignette(ctx, `rgba(150,0,0,${0.18 + Math.sin(game.time * 6) * 0.08})`, 0.8);
   if (fx.flash > 0) { ctx.globalAlpha = fx.flash; ctx.fillStyle = fx.flashColor; ctx.fillRect(0, 0, VIEW_W, VIEW_H); ctx.globalAlpha = 1; }
-  drawHud(ctx, game);
+  if (!game.cinema) drawHud(ctx, game); // cinema：紹介動画の撮影用（HUD を出さない）
   if (game.transition) {
     // 縦じまのワイプ
     const t = game.transition.t;

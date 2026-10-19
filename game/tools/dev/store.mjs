@@ -1,8 +1,7 @@
-// ストアページ用の画面写真（1920×1080）と短い動画。使い方: node tools/dev/store.mjs [shots|video]（game/ で python3 -m http.server 8080 を動かしておく）
+// ストアページ用の画面写真（1920×1080）。使い方: node tools/dev/store.mjs shots（紹介動画は trailer.mjs）（game/ で python3 -m http.server 8080 を動かしておく）
 // ボット（tests/bot.mjs）に操作させて、戦っている場面を撮る
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 const what = process.argv[2] || 'shots';
 const OUT = new URL('../../store/', import.meta.url).pathname;
 const W = 1920, H = 1080;
@@ -70,42 +69,7 @@ if (what === 'shots') {
   }
   await ctx.close();
 } else {
-  // 動画：タイトル → 戦い → 強化を選ぶ → 歯車回廊 → 精鋭 → 刻守 → 夜明けのタイトル（約 40 秒・30fps）
-  // 実時間で録ると重い場面でかくつくので、ゲームを手動で 2 tick ずつ進めて 1 枚ずつ撮る。音は BGM の WAV（render-bgm.mjs の出力）を場面ごとにつなぐ
-  const BGM = process.env.BGM_DIR || '/tmp/wedge-dev/bgm';
-  const dir = OUT + 'video-tmp/';
-  rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true });
-  const [ctx, p] = await page();
-  await p.evaluate(() => window.__setManual(true));
-  const cut = [
-    ["g.newGame(3); g.scene='title'; g.modal=null;", 4, 'title'],
-    [`__prep({ boons: ${BOONS}, level: 5 }); __room('combat', 1); __bot.on = true;`, 7, 'market'],
-    [`__bot.on = false; g.openBoonPick(1, null); g.modal.t = 5;`, 2.5, 'market'],
-    [`__prep({ boons: ${BOONS}, level: 6, seed: 29 }); __room('combat', 4); __bot.on = true;`, 6, 'gears'],
-    [`__prep({ boons: ${BOONS}, level: 7 }); __room('elite'); __bot.on = true;`, 6, 'bellfight'],
-    [`__prep({ boons: ${BOONS}, level: 9, upg: { atk: 10, hp: 10 } }); __room('boss'); __bot.on = true;`, 10, 'boss'],
-    ["__bot.on = false; g.newGame(5); g.meta.flags.ending = true; g.meta.flags.endings = { true: true }; g.scene='title'; g.modal=null;", 5, 'title'],
-  ];
-  let n = 0;
-  for (const [js, sec] of cut) {
-    await p.evaluate((js) => { window.__bot.f = 0; const g = window.__game; eval(js); }, js);
-    for (let i = 0; i < sec * 30; i++) {
-      await p.evaluate(() => { window.__step(2); const g = window.__game; if (g.fx) g.fx.banner = null; });
-      await p.screenshot({ path: `${dir}${String(n++).padStart(5, '0')}.jpg`, type: 'jpeg', quality: 92 });
-    }
-  }
-  await ctx.close();
-  const args = ['-y', '-loglevel', 'error', '-framerate', '30', '-i', dir + '%05d.jpg'];
-  const parts = [];
-  if (existsSync(BGM)) {
-    cut.forEach(([, sec, song], i) => { args.push('-stream_loop', '-1', '-i', `${BGM}/${song}.wav`); parts.push(`[${i + 1}:a]atrim=0:${sec},asetpts=PTS-STARTPTS,afade=t=in:d=0.25,afade=t=out:st=${sec - 0.4}:d=0.4[a${i}]`); });
-    args.push('-filter_complex', parts.join(';') + ';' + cut.map((_, i) => `[a${i}]`).join('') + `concat=n=${cut.length}:v=0:a=1[aout]`, '-map', '0:v', '-map', '[aout]', '-c:a', 'aac', '-b:a', '160k');
-  }
-  args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-shortest', OUT + 'trailer.mp4');
-  execFileSync('ffmpeg', args);
-  rmSync(dir, { recursive: true, force: true });
-  rmSync(OUT + 'trailer.webm', { force: true });
-  console.log('frames', n);
+  console.log('紹介動画は tools/dev/trailer.mjs で作る');
 }
 console.log('errors', errs);
 await b.close();

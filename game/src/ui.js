@@ -585,9 +585,11 @@ export function drawJournal(ctx, game, m) {
 export function drawTitle(ctx, game) {
   const t = game.time;
   // 背景（星空の時計塔）は render.js がドット絵で描く
-  // 題字は項目（TITLE_MENU）より上に収める
+  // 題字は項目（TITLE_MENU）より上に収める。cinema：紹介動画の撮影用（'bare' は背景だけ、ほかは題字だけ）
+  if (game.cinema === 'bare') return;
   text(ctx, '夜明けの楔', VIEW_W / 2, TITLE_MENU.y - 46, { size: 50, align: 'center', bold: true, font: SERIF, color: '#f3e7cf', fixed: true });
   text(ctx, 'WEDGE OF DAWN', VIEW_W / 2, TITLE_MENU.y - 26, { size: 12, align: 'center', color: C.gold, fixed: true });
+  if (game.cinema) return;
   if (game.titleConfirm) {
     panel(ctx, VIEW_W / 2 - 200, 390, 400, 80, '#e35d5d');
     text(ctx, '記録をすべて消して、はじめから遊びますか？', VIEW_W / 2, 422, { size: 14, align: 'center' });
@@ -691,6 +693,7 @@ export function drawRewind(ctx, game) {
   text(ctx, causeText + (rep.retry ? `　（第 ${rep.loop} 夜をもう一度）` : rep.cause === 'ending' ? `　（次は${endlessName(meta)}・第 ${meta.loop} 夜）` : `　（第 ${rep.loop} 夜 → 第 ${meta.loop} 夜）`), VIEW_W / 2, 50, { size: 19, align: 'center', font: SERIF, color: rep.cause === 'bell' || rep.cause === 'ending' ? C.gold : '#efe6d2' });
   // 夜ごとに変わる語り（時間の経過と、師の変化）
   if (rep.story) { ctx.globalAlpha = clamp(t / 0.8, 0, 1); text(ctx, rep.story, VIEW_W / 2, 80, { size: 14, align: 'center', font: SERIF, color: '#d9c7a8' }); ctx.globalAlpha = 1; }
+  if (game.cinema === 'clock') return; // 紹介動画の撮影用：逆回りの時計と一文だけ
   if (rep.tip && t > 2.2) text(ctx, '◆ ' + rep.tip, VIEW_W / 2, 366, { size: 12, align: 'center', color: '#f2c14e' });
   const cols = [
     { title: '残ったもの', color: C.gold, items: rep.kept, at: 0.5 },
