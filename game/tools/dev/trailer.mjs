@@ -17,12 +17,16 @@ const FPS = 30, W = 1920, H = 1080;
 
 // ───────── 場面の台本 ─────────
 const BOONS = "[{id:'edge',tier:2},{id:'orbit',tier:2},{id:'crit',tier:2},{id:'satellites',tier:1}]";
+const ARTS = "[{id:'gearwaltz',tier:3},{id:'starblade',tier:3},{id:'thundergod',tier:3},{id:'inferno',tier:3},{id:'galaxy',tier:3},{id:'celestial',tier:3},{id:'clockhand',tier:3},{id:'icejail',tier:3},{id:'earthpulse',tier:3},{id:'swordsaint',tier:3},{id:'prismbeam',tier:3},{id:'chronarch',tier:1},{id:'stareater',tier:1}]";
+// 敵が減ったら、ゲームの増援のしくみで呼び足す（術で一掃し続ける絵にする）
+const HORDE = "B.each = (g) => { const r = g.room; if (r && r.enemies.filter((e) => e.alive).length + (r.incoming || []).length < 9 && B.tick % 6 === 0) g.queueReinforcement(); };";
 const BUILD = "[{id:'edge',tier:2},{id:'orbit',tier:2},{id:'crit',tier:2},{id:'satellites',tier:2},{id:'starfall',tier:2}]";
 // 見栄えの点数（区間の中の効果音の数から）
 const sc = {
   fight: (c) => c.kill * 5 + c.hit * 1 + c.heavyHit * 2 + c.perfect * 4 - c.hurt * 25,
   dodge: (c, first) => c.perfect * 12 + c.hit + c.kill * 3 - c.hurt * 30 + (first >= 40 && first <= 110 ? 40 : -40),
   art: (c, first) => c.kill * 6 + c.hit - c.hurt * 30 + (first >= 15 && first <= 75 ? 60 : -100),
+  mega: (c) => c.kill * 5 + c.hit * 0.3 + c.skill * 6 - c.hurt * 20,
   easy: (c) => c.kill * 5 + c.hit - c.hurt * 40,
   boss: (c) => c.perfect * 10 + c.hit * 2 + c.heavyHit * 3 + c.tellBig * 3 - c.hurt * 25,
   white: (c) => c.perfect * 8 + c.tellBig * 6 + c.bossBell * 8 + c.heavySwing * 4 + c.hit - c.hurt * 10,
@@ -44,6 +48,7 @@ foot(3.6, `__prep({ level: 9, boons: ${BOONS} }); __room('elite'); g.reflex = tr
 foot(3.6, "__prep({ level: 9, boons: [{id:'edge',tier:2},{id:'crit',tier:2},{id:'orbit',tier:1}] }); __roomN('combat'); g.player.gauge = 100; B.opts = { artMin: 3 }; B.on = true; g.reflex = true;", { pick: 'art', zoom: 1.3, seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], telop: { text: '時を、止める。', style: 'big', at: 0.15, cps: 20 } });
 foot(1.3, `__prep({ level: 6, boons: ${BOONS} }); __room('combat', 2); g.openBoonPick(1, null); g.modal.t = 0;`, { bars: false, telop: { text: '100 種類を超える強化。', at: 0.1, cps: 22 } });
 foot(3.4, `__prep({ level: 11, boons: ${BUILD} }); __roomN('combat'); g.reflex = true; B.on = true;`, { pick: 'fight', zoom: 1.35, seeds: [11, 12, 13, 14, 15, 16], telop: { text: '100 種類を超える強化。\n組み合わせで、戦い方は無限に。', at: 0, cps: 22, pre: [...'100 種類を超える強化。'].length } });
+foot(5.0, `__prep({ level: 15, boons: ${ARTS}, upg: { atk: 12, hp: 12 } }); __roomN('combat'); g.reflex = true; B.on = true; ${HORDE}`, { pick: 'mega', zoom: 1.12, seeds: [21, 22, 23, 24, 25, 26], simSec: 20, telop: { text: '重ねた術が、夜を埋めつくす。', at: 0.6, cps: 14 } });
 // 第 3 幕：難易度
 foot(3.2, `__prep({ level: 4, diff: 'veryeasy', boons: [{id:'edge',tier:1}] }); __roomN('combat'); B.on = true;`, { pick: 'easy', zoom: 1.4, seeds: [1, 2, 3, 4, 5, 6], telop: { text: 'はじめての人も――', at: 0.3 }, act: 'difficulty' });
 foot(3.6, `__prep({ level: 12, diff: 'nightmare', boons: ${BOONS}, upg: { atk: 12, hp: 12 } }); __room('boss'); g.reflex = true; B.on = true;`, { pick: 'boss', zoom: 1.3, seeds: [1, 2, 3, 4, 5, 6], simSec: 24, telop: { text: '腕に覚えのある人も。', at: 0.3 } });
