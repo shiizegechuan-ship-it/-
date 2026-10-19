@@ -233,7 +233,7 @@ node tools/build-single.mjs          # dist/wedge-of-dawn.html を作る（esbui
 cd game
 npm test            # node --test：物理・戦闘・ループ状態・部屋の到達可能性・1周の通し
 ```
-今 259 件、すべて通ります。
+今 263 件、すべて通ります。
 
 ## ファイル構成
 ```

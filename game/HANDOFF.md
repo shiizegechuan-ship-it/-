@@ -18,9 +18,9 @@
 - リポジトリ：`shiizegechuan-ship-it/-`、作業ブランチ：`feature/wedge-of-dawn`。ゲームは `game/` の下。
 - 起動（開発）：`cd game && python3 -m http.server 8080` → `http://localhost:8080/index.html`
   - ページの中の `window.__game`（ゲームの状態）、`window.__music`、`__setManual(true)` と `__step(n)`（1 コマずつ進める）がテストに便利。
-- テスト：`cd game && node --test tests/*.test.mjs`（今 **259 件すべて通る**）。
+- テスト：`cd game && node --test tests/*.test.mjs`（今 **263 件すべて通る**）。
 - 1 ファイル版（Artifact 用）：`node tools/build-single.mjs <出力先.html>`。外枠の HTML は `index.html` と別に `tools/build-single.mjs` の中にある（iPhone 向けの設定などは両方へ入れる）。
-- Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v61）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
+- Artifact：https://claude.ai/artifact/EYbjZnzx4i2oupwSNY1Lhw （今 v62）。更新は Artifact ツールで、この URL を `url` に渡して publish（最初に `action: read` が要る場合がある）。
 - コミットの末尾の署名：
   ```
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
