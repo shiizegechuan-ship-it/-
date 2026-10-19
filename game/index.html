@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>夜明けの楔</title>
+<!-- 文字は同梱のフォント（DotGothic16・SIL Open Font License 1.1。assets/fonts/OFL-DotGothic16.txt）。外部から読み込まない -->
+<style>@font-face { font-family: 'DotGothic16'; src: url('assets/fonts/DotGothic16-Regular.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'DotGothic16 Latin'; src: url('assets/fonts/DotGothic16-Latin.ttf') format('truetype'); font-display: swap; } /* 中国語・韓国語の英数字用（同じ書体の英数字だけを抜き出したもの） */</style>
+<style>
+  html, body { margin: 0; height: 100%; background: #050408; overflow: hidden; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+  /* 長押しでの選択・虫めがね・メニューを出さない（指を置いたままでも操作と音が止まらないように） */
+  html, body, canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  html.touch, body.touch { touch-action: none; user-select: none; -webkit-user-select: none; }
+  body.touch-portrait #stage { bottom: 280px; align-items: flex-end; padding-bottom: 12px; box-sizing: border-box; }
+  canvas { display: block; image-rendering: pixelated; background: #0d0b14; outline: none; touch-action: none; }
+  #err { position: fixed; left: 8px; bottom: 8px; color: #ff8a6a; font: 12px monospace; white-space: pre-wrap; max-width: 90vw; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="game" width="960" height="540" tabindex="0"></canvas></div>
+<div id="err"></div>
+<script>
+  window.addEventListener('error', (e) => { document.getElementById('err').textContent += (e.message || e) + '\n'; });
+  if (location.protocol === 'file:') {
+    document.getElementById('err').textContent = 'ファイルを直接開くと ES モジュールが読み込めません。README の「起動方法」を参照してください（npx serve game など）。';
+  }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
