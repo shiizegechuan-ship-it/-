@@ -10,7 +10,7 @@ export function playChapter(id: ChapterId, progress?: Partial<Progress>, skill =
   let exit: string | null = null;
   const deaths: number[] = [];
   let f = 0;
-  for (; f < maxSec * 60 && !exit; f++) {
+  for (; f < maxSec * 60 && !exit && !(id === 'finale' && sim.flag('read:fin_stele')); f++) {
     sim.step(bot.next());
     for (const e of sim.drain()) {
       if (e.t === 'exit') exit = e.to;
@@ -76,5 +76,14 @@ describe('道しるべボットで章を通す', () => {
     expect(exit).toBe('finale');
     expect(sim.has('dash')).toBe(true);
     expect(hits).toBeLessThanOrEqual(2);
+  });
+
+  it('終章：夜守を鎮め、碑の足元を読む', () => {
+    const r = playChapter('finale', { ledger: { zeni: 30, debt: 0, pawned: [] } }, 1, 600);
+    console.log('終章', r.sec.toFixed(0), '秒 倒れた回数', r.deaths.length);
+    const done = () => r.sim.flag('read:fin_stele');
+    if (!done()) console.log(r.bot.log.join('\n'), r.sim.player.body, r.deaths, r.sim.boss?.hp, r.sim.boss?.mode, r.sim.progress.flags);
+    expect(r.sim.flag('boss_done')).toBe(true);
+    expect(r.sim.flag('read:fin_stele')).toBe(true);
   });
 });

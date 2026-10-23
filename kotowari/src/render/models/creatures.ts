@@ -302,8 +302,99 @@ function mizuko(): CreatureRig {
   return { root, body, eyes, flash: flashable(root) };
 }
 
+/** 夜守の面（黒地に金の三日月の目、短い角）。モーフィングの始まりの形 */
+export function yomoriMaskVox(): Vox {
+  const m = new Vox();
+  m.ellipsoid(0, 3, 0, 4.2, 5.0, 3.6, (_x, _y, z) => (z < 1 ? null : C.sumi));
+  m.box(-4, 8, 1, -3, 10, 2, C.kin);
+  m.box(3, 8, 1, 4, 10, 2, C.kin);
+  m.box(-3, 4, 3, -1, 4, 4, C.ukon);
+  m.box(1, 4, 3, 3, 4, 4, C.ukon);
+  m.set(-3, 5, 3, C.ukon);
+  m.set(3, 5, 3, C.ukon);
+  m.box(-2, 0, 3, 2, 0, 4, C.beni);
+  return m;
+}
+/** 千鶴の顔（白髪、皺、やさしい目）。モーフィングの終わりの形 */
+export function chizuruFaceVox(): Vox {
+  const f = new Vox();
+  f.ellipsoid(0, 3, 0, 4.0, 4.8, 3.4, (_x, _y, z) => (z < 1 ? null : '#f1d2b4'));
+  f.box(-4, 7, -1, 4, 9, 3, C.ginnezu); // 白髪
+  f.box(-5, 2, -1, -4, 8, 2, C.ginnezu);
+  f.box(4, 2, -1, 5, 8, 2, C.ginnezu);
+  f.box(-3, 5, 3, -1, 5, 4, C.sumi); // 閉じた目
+  f.box(1, 5, 3, 3, 5, 4, C.sumi);
+  f.set(-3, 4, 4, '#d9a98e');
+  f.set(3, 4, 4, '#d9a98e');
+  f.box(-1, 1, 4, 1, 1, 4, C.kuri);
+  return f;
+}
+
+/** 夜守（千鶴）：白衣に紫の袴、長い白髪、黒い面、大きな扇。背が高い */
+function yomori(): CreatureRig {
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(body);
+  const v = new Vox();
+  // 袴（裾広がり）と白衣
+  for (let y = 0; y <= 12; y++) v.cylinder(0, 0, y, y, 5.5 - y * 0.12, (x, yy, z) => (yy % 4 === 0 && (x + z) % 2 === 0 ? '#4a2f62' : C.murasaki));
+  v.box(-5, 13, -3, 5, 22, 3, C.gofun);
+  v.box(-5, 13, -3, 5, 13, 3, C.kin); // 帯
+  for (let y = 15; y <= 22; y++) {
+    const w = 22 - y;
+    v.set(-w, y, 3, C.geppaku);
+    v.set(w, y, 3, C.geppaku);
+  }
+  // 千早（透ける羽織：藤の線）
+  v.box(-7, 12, -4, -6, 22, 2, C.fuji);
+  v.box(6, 12, -4, 7, 22, 2, C.fuji);
+  // 長い白髪（背中）
+  v.box(-4, 8, -5, 4, 26, -4, C.ginnezu);
+  v.box(-3, 4, -5, 3, 8, -5, C.ginnezu);
+  body.add(voxMesh(v, V16, [-0.5, 0, -0.5]));
+  // 頭（面）
+  const head = part('head', [0, 23 * V16, 0.2 * V16]);
+  const skull = new Vox();
+  skull.ellipsoid(0, 3, -1, 4.4, 5.2, 3.6, (_x, _y, z) => (z > 1 ? null : C.ginnezu));
+  head.add(voxMesh(skull, V16, [-0.5, 0, -0.5]));
+  const mask = voxMesh(yomoriMaskVox(), V16, [-0.5, 0, -0.5]);
+  mask.name = 'mask';
+  head.add(mask);
+  const face = voxMesh(chizuruFaceVox(), V16, [-0.5, 0, -0.5]);
+  face.name = 'face';
+  face.visible = false;
+  head.add(face);
+  body.add(head);
+  const ev = new Vox();
+  ev.box(-3, 4, 4, -1, 4, 4, '#ffffff');
+  ev.box(1, 4, 4, 3, 4, 4, '#ffffff');
+  const eyes = voxMesh(ev, V16, [-0.5, 0, -0.4], 'glow');
+  eyes.material = (eyes.material as THREE.MeshBasicMaterial).clone();
+  head.add(eyes);
+  // 腕と大きな扇（右手）
+  const arm = (s: number) => {
+    const a = new Vox();
+    a.box(0, -9, -2, 3 * s, 0, 3, C.gofun);
+    a.box(s > 0 ? 1 : -2, -10, 1, s > 0 ? 2 : -1, -10, 2, '#f1d2b4');
+    if (s < 0) {
+      for (let k = 0; k <= 12; k++) {
+        const ang = (-80 + k * 13) * (Math.PI / 180);
+        for (let r = 2; r <= 11; r++) a.set(-2 + Math.round(Math.sin(ang) * r), -10 + Math.round(Math.cos(ang) * r), 2, r <= 3 ? C.kuri : r === 11 ? C.kin : k % 2 ? C.sumi : C.beni);
+      }
+    }
+    return part(s > 0 ? 'armL' : 'armR', [s * 5.5 * V16, 22 * V16, 0], voxMesh(a, V16, [s > 0 ? 0 : -1, 0, -0.5]));
+  };
+  const armL = arm(1);
+  const armR = arm(-1);
+  body.add(armL, armR);
+  root.scale.setScalar(1.25);
+  return { root, body, eyes, armL, armR, flash: flashable(root) };
+}
+
 export function buildCreature(type: EnemyType, id = ''): CreatureRig {
   switch (type) {
+    case 'yomori':
+      return yomori();
     case 'mizuko':
       return mizuko();
     case 'kageboshi':

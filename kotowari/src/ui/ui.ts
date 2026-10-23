@@ -1,5 +1,5 @@
 import { ABILITIES, ABILITY_ORDER, type AbilityId } from '../core/data/abilities';
-import { DASH, PLAYER } from '../core/data/tuning';
+import { BOSS, DASH, PLAYER } from '../core/data/tuning';
 import { redeemPrice } from '../core/economy';
 import type { Sim } from '../core/sim';
 import { SPEAKER_NAME, type Script } from '../core/story';
@@ -21,6 +21,8 @@ export class UI {
   private hintEl = el('div', 'hint');
   private promptEl = el('div', 'prompt');
   private toastEl = el('div', 'toast');
+  private bossEl = el('div', 'bossbar');
+  private bossFill = el('div', 'fill');
   private toastT = 0;
   private overlay = el('div', 'layer');
   private lastHp = -1;
@@ -49,7 +51,9 @@ export class UI {
       this.slots.set(id, s);
     }
     tr.append(slotWrap, this.lawsEl);
-    this.hud.append(tl, tr, this.goalEl, this.hintEl, this.promptEl, this.toastEl);
+    this.bossEl.append(el('span', 'name', '夜守　千鶴'), el('div', 'track'));
+    this.bossEl.querySelector('.track')!.append(this.bossFill);
+    this.hud.append(tl, tr, this.goalEl, this.hintEl, this.promptEl, this.toastEl, this.bossEl);
     root.append(this.hud, this.overlay);
     this.showHud(false);
   }
@@ -107,6 +111,10 @@ export class UI {
       this.promptEl.replaceChildren(el('b', '', 'E'), document.createTextNode(it.kind === 'shrine' ? 'おこんと話す（質屋）' : it.label));
     }
     this.promptEl.classList.toggle('hidden', !it);
+    const boss = sim.boss;
+    const showBoss = !!boss && sim.flag('boss_fighting');
+    this.bossEl.classList.toggle('hidden', !showBoss);
+    if (showBoss && boss) this.bossFill.style.width = `${Math.max(0, (boss.hp / BOSS.hp) * 100)}%`;
     this.toastT -= dt;
     this.toastEl.classList.toggle('hidden', this.toastT <= 0);
   }

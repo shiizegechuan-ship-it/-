@@ -1,6 +1,6 @@
 import { ABILITIES, type AbilityId } from './data/abilities';
 import { ENEMIES, type EnemyDef } from './data/enemies';
-import { ATTACK, DASH, DT, LANTERN, PLAYER, WORLD } from './data/tuning';
+import { ATTACK, BOSS, DASH, DT, LANTERN, PLAYER, WORLD } from './data/tuning';
 import { canPawn, canRedeem, earn, isPawned, newLedger, pawn, redeem, type Ledger, type TradeResult } from './economy';
 import type { SimEvent } from './events';
 import type { InputFrame } from './input';
@@ -41,7 +41,20 @@ export interface PlayerState {
   runAmt: number;
 }
 
-export type EnemyMode = 'idle' | 'chase' | 'windup' | 'attack' | 'recover' | 'stagger' | 'float' | 'flee' | 'dead';
+export type EnemyMode = 'idle' | 'chase' | 'windup' | 'attack' | 'recover' | 'stagger' | 'float' | 'flee' | 'dead' | 'kneel' | 'transition';
+
+export interface Projectile {
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vz: number;
+  life: number;
+  radius: number;
+  spin: number;
+}
+
+export type BossMove = 'lunge' | 'slam' | 'fans';
 
 export interface EnemyState {
   spawn: EnemySpawn;
@@ -60,6 +73,10 @@ export interface EnemyState {
   deadT: number;
   /** 描画用 */
   anim: number;
+  /** ボスだけ：今の技と段階 */
+  move?: BossMove;
+  phase?: number;
+  moveCount?: number;
 }
 
 export interface Progress {
@@ -88,6 +105,7 @@ export class Sim {
   player!: PlayerState;
   enemies: EnemyState[] = [];
   pickups: { def: PickupDef; taken: boolean }[] = [];
+  projectiles: Projectile[] = [];
   events: SimEvent[] = [];
   time = 0;
   frame = 0;
@@ -199,18 +217,20 @@ export class Sim {
 
   resetEnemies(): void {
     this.enemies = [];
+    this.projectiles = [];
     for (const s of this.level.enemies) if (!s.needFlag || this.flag(s.needFlag)) this.addEnemy(s);
   }
 
   private addEnemy(s: EnemySpawn): void {
     const def = ENEMIES[s.type];
+    const isBoss = s.type === 'yomori';
     this.enemies.push({
       spawn: s,
       id: s.id,
       def,
       body: newBody(s.x, s.y, s.z, def.halfW, def.height),
       yaw: s.yaw ?? 0,
-      hp: def.hp,
+      hp: isBoss ? BOSS.hp : def.hp,
       mode: 'idle',
       t: 0,
       kx: 0,
@@ -220,6 +240,8 @@ export class Sim {
       floatOff: 0,
       deadT: 0,
       anim: 0,
+      phase: isBoss ? 1 : undefined,
+      moveCount: 0,
     });
   }
 
@@ -318,7 +340,11 @@ export class Sim {
     const edt = this.ledger.pawned.includes('dash') ? dt * WORLD.slowLawTimeScale : dt;
     this.hazardClock += edt;
     this.updateHazards();
-    for (const e of this.enemies) this.updateEnemy(e, edt);
+    for (const e of this.enemies) {
+      if (e.spawn.type === 'yomori') this.updateBoss(e, edt);
+      else this.updateEnemy(e, edt);
+    }
+    this.updateProjectiles(edt);
     this.enemies = this.enemies.filter((e) => !(e.mode === 'dead' && e.deadT > 1.2));
     this.updatePickups();
     this.updateTriggers();
@@ -534,7 +560,7 @@ export class Sim {
     let best: EnemyState | null = null;
     let bd = range;
     for (const e of this.enemies) {
-      if (e.mode === 'dead') continue;
+      if (e.mode === 'dead' || e.mode === 'kneel') continue;
       const dx = e.body.x - p.body.x;
       const dz = e.body.z - p.body.z;
       const d = Math.hypot(dx, dz);
@@ -571,7 +597,7 @@ export class Sim {
     const p = this.player;
     const shadowLaw = this.ledger.pawned.includes('lantern');
     for (const e of this.enemies) {
-      if (e.mode === 'dead' || p.swingHits.has(e.id)) continue;
+      if (e.mode === 'dead' || e.mode === 'kneel' || p.swingHits.has(e.id)) continue;
       const dx = e.body.x - p.body.x;
       const dz = e.body.z - p.body.z;
       const d = Math.hypot(dx, dz);
@@ -579,7 +605,7 @@ export class Sim {
       if (e.body.y > p.body.y + p.body.h + 0.3 || e.body.y + e.body.h < p.body.y - 0.3) continue;
       if (d > 0.3 && Math.abs(wrapAngle(Math.atan2(dx, dz) - p.yaw)) > halfArc) continue;
       p.swingHits.add(e.id);
-      const immune = e.def.fanImmune || (e.def.needsShadowLaw && !shadowLaw);
+      const immune = e.def.fanImmune || (e.def.needsShadowLaw && !shadowLaw) || e.mode === 'transition' || (e.spawn.type === 'yomori' && e.mode === 'idle');
       const nx = d > 0.01 ? dx / d : Math.sin(p.yaw);
       const nz = d > 0.01 ? dz / d : Math.cos(p.yaw);
       if (immune) {
@@ -596,6 +622,12 @@ export class Sim {
       }
       e.hp -= dmg;
       e.flash = 0.12;
+      if (e.spawn.type === 'yomori') {
+        this.bossDamaged(e);
+        this.hitstop = heavy ? ATTACK.hitstopHeavy : ATTACK.hitstop;
+        this.emit({ t: 'hit', enemy: e.id, type: e.spawn.type, x: e.body.x, y: e.body.y + e.body.h * 0.6, z: e.body.z, heavy, immune: false });
+        continue;
+      }
       const km = e.mode === 'float' ? 0.3 : 1 - Math.min(0.8, e.def.hp / 60);
       e.kx += nx * knock * km;
       e.kz += nz * knock * km;
@@ -649,6 +681,7 @@ export class Sim {
 
   respawn(): void {
     this.spawnPlayer();
+    if (!this.flag('boss_done')) this.setFlag('boss_fighting', false);
     this.resetEnemies();
     this.emit({ t: 'respawn' });
   }
@@ -704,7 +737,11 @@ export class Sim {
       if (e.floatOff > 0) e.floatOff = Math.max(0, e.floatOff - dt * 3);
       switch (e.mode) {
         case 'idle':
-          if (dist < def.aggro && Math.abs(dy) < 3 && !playerSafe) { e.mode = 'chase'; e.t = 0; }
+          // 気づくまでの反応に少し揺らぎ（種で変わる）
+          if (dist < def.aggro && Math.abs(dy) < 3 && !playerSafe) {
+            e.mode = 'chase';
+            e.t = -this.rng.range(0, 0.3);
+          }
           break;
         case 'flee':
         case 'chase': {
@@ -721,9 +758,9 @@ export class Sim {
             break;
           }
           e.yaw += wrapAngle(Math.atan2(dx, dz) - e.yaw) * Math.min(1, 8 * dt);
-          if (dist <= def.range && Math.abs(dy) < 1.5) {
+          if (dist <= def.range && Math.abs(dy) < 1.5 && e.t >= 0) {
             e.mode = 'windup';
-            e.t = 0;
+            e.t = -this.rng.range(0, 0.12);
             this.emit({ t: 'telegraph', enemy: e.id, type: e.spawn.type });
           } else {
             moveX = dx / (dist || 1);
@@ -757,7 +794,10 @@ export class Sim {
           break;
         }
         case 'recover':
-          if (e.t >= def.recover) { e.mode = 'chase'; e.t = 0; }
+          if (e.t >= def.recover) {
+            e.mode = 'chase';
+            e.t = -this.rng.range(0, 0.25);
+          }
           break;
         case 'stagger':
           if (e.t >= def.staggerTime) { e.mode = 'chase'; e.t = 0; }
@@ -831,6 +871,209 @@ export class Sim {
     this.damagePlayer(def.damage, e.body.x, e.body.z);
   }
 
+  // ───────────────────────── 夜守（ボス）
+  get boss(): EnemyState | undefined {
+    return this.enemies.find((e) => e.spawn.type === 'yomori');
+  }
+
+  private bossDamaged(e: EnemyState): void {
+    const frac = e.hp / BOSS.hp;
+    if (e.hp <= 0) {
+      e.hp = 0;
+      e.mode = 'kneel';
+      e.t = 0;
+      this.projectiles = [];
+      // 呼んだ面の妖も眠る
+      for (const o of this.enemies) if (o !== e && o.mode !== 'dead') this.killEnemy(o);
+      this.setFlag('boss_done');
+      this.setFlag('boss_fighting', false);
+      this.emit({ t: 'bossDown' });
+      return;
+    }
+    const want = frac <= BOSS.phase3 ? 3 : frac <= BOSS.phase2 ? 2 : 1;
+    if (want > (e.phase ?? 1)) {
+      e.phase = want;
+      e.mode = 'transition';
+      e.t = 0;
+      this.projectiles = [];
+      this.emit({ t: 'bossPhase', phase: want });
+      if (want === 2) {
+        // 面を呼ぶ（里の人が、千鶴を守りに来る）
+        for (const [i, dx] of [-3, 3].entries()) {
+          const id = 'fin_call' + i + '_' + this.frame;
+          this.addEnemy({ id, type: 'menyo', x: e.body.x + dx, y: e.body.y, z: e.body.z - 2, yaw: Math.PI });
+          const ne = this.enemies[this.enemies.length - 1];
+          ne.mode = 'chase';
+        }
+      }
+    } else if (e.mode !== 'attack' && e.mode !== 'transition') {
+      e.mode = 'stagger';
+      e.t = 0;
+    }
+  }
+
+  private updateBoss(e: EnemyState, dt: number): void {
+    const b = e.body;
+    const pb = this.player.body;
+    e.t += dt;
+    e.anim += dt;
+    e.flash = Math.max(0, e.flash - dt);
+    const fighting = this.flag('boss_fighting');
+    const ph = e.phase ?? 1;
+    const spd = ph >= 3 ? BOSS.phase3SpeedMul : 1;
+    const dx = pb.x - b.x;
+    const dz = pb.z - b.z;
+    const dist = Math.hypot(dx, dz);
+    let mvx = 0;
+    let mvz = 0;
+    const face = (k: number) => {
+      e.yaw += wrapAngle(Math.atan2(dx, dz) - e.yaw) * Math.min(1, k * dt);
+    };
+    switch (e.mode) {
+      case 'kneel':
+      case 'dead':
+        return;
+      case 'idle':
+        if (fighting) {
+          e.mode = 'chase';
+          e.t = 0;
+        }
+        break;
+      case 'transition':
+        if (e.t > BOSS.transitionTime) {
+          e.mode = 'chase';
+          e.t = 0;
+        }
+        break;
+      case 'stagger':
+        if (e.t > 0.18) {
+          e.mode = 'chase';
+          e.t = 0;
+        }
+        break;
+      case 'chase': {
+        if (!fighting || this.player.mode === 'dead') break;
+        face(6);
+        // 技を選ぶ（同じ技を 3 回続けない）
+        const mc = e.moveCount ?? 0;
+        let next: BossMove;
+        if (ph >= 2 && (mc % 3 === 2 || this.rng.next() < 0.15)) next = 'fans';
+        else if (dist < 3.2) next = this.rng.next() < 0.8 ? 'slam' : 'lunge';
+        else next = 'lunge';
+        if (dist > 7 && next !== 'fans') {
+          mvx = (dx / dist) * BOSS.speed * spd;
+          mvz = (dz / dist) * BOSS.speed * spd;
+          if (e.t > 2.2 && ph >= 2) next = 'fans';
+          else break;
+        }
+        if (e.t < 0.35 / spd) break;
+        e.move = next;
+        e.moveCount = mc + 1;
+        e.mode = 'windup';
+        e.t = 0;
+        this.emit({ t: 'telegraph', enemy: e.id, type: 'yomori' });
+        break;
+      }
+      case 'windup': {
+        const mv = BOSS[e.move ?? 'lunge'];
+        if (e.move !== 'slam') face(e.move === 'fans' ? 4 : 3);
+        if (e.t >= mv.windup / spd) {
+          e.mode = 'attack';
+          e.t = 0;
+          e.attackHit = false;
+          this.emit({ t: 'enemyAttack', enemy: e.id, type: 'yomori' });
+          if (e.move === 'fans') {
+            const f = BOSS.fans;
+            const n = ph >= 3 ? f.count + 2 : f.count;
+            for (let i = 0; i < n; i++) {
+              const a = e.yaw + (i - (n - 1) / 2) * f.spread;
+              this.projectiles.push({ x: b.x + Math.sin(a) * 0.8, y: b.y + 1.2, z: b.z + Math.cos(a) * 0.8, vx: Math.sin(a) * f.speed * spd, vz: Math.cos(a) * f.speed * spd, life: f.life, radius: f.radius, spin: 0 });
+            }
+          }
+        }
+        break;
+      }
+      case 'attack': {
+        const mv = e.move ?? 'lunge';
+        if (mv === 'lunge') {
+          const l = BOSS.lunge;
+          mvx = Math.sin(e.yaw) * l.speed * spd;
+          mvz = Math.cos(e.yaw) * l.speed * spd;
+          if (!e.attackHit) this.bossHit(e, b.x + Math.sin(e.yaw) * l.reach, b.z + Math.cos(e.yaw) * l.reach, l.radius);
+          if (e.t >= l.active) {
+            e.mode = 'recover';
+            e.t = 0;
+          }
+        } else if (mv === 'slam') {
+          if (!e.attackHit) this.bossHit(e, b.x, b.z, BOSS.slam.radius);
+          if (e.t >= BOSS.slam.active) {
+            e.mode = 'recover';
+            e.t = 0;
+          }
+        } else {
+          e.mode = 'recover';
+          e.t = 0;
+        }
+        break;
+      }
+      case 'recover': {
+        const mv = BOSS[e.move ?? 'lunge'];
+        if (e.t >= mv.recover / spd) {
+          e.mode = 'chase';
+          e.t = 0;
+        }
+        break;
+      }
+    }
+    b.vy = Math.max(-PLAYER.maxFall, b.vy - PLAYER.gravity * dt);
+    this.world.phys.moveBody(b, (mvx + e.kx * 0.3) * dt, b.vy * dt, (mvz + e.kz * 0.3) * dt, 0.3);
+    e.kx = approach(e.kx, 0, 30 * dt);
+    e.kz = approach(e.kz, 0, 30 * dt);
+  }
+
+  private bossHit(e: EnemyState, cx: number, cz: number, r: number): void {
+    const p = this.player;
+    const pb = p.body;
+    if (p.mode === 'dead') return;
+    if (Math.hypot(pb.x - cx, pb.z - cz) > r + pb.hw) return;
+    if (pb.y > e.body.y + 2.2) return;
+    e.attackHit = true;
+    if (p.mode === 'dash' && p.modeT <= DASH.iframes) {
+      if (p.modeT <= DASH.perfectWindow && p.perfectCd <= 0) {
+        p.perfectCd = DASH.perfectCooldown;
+        p.perfectBonus = true;
+        this.emit({ t: 'perfect', x: pb.x, y: pb.y, z: pb.z });
+      }
+      return;
+    }
+    if (p.invulnT > 0) return;
+    this.damagePlayer(1, e.body.x, e.body.z);
+  }
+
+  private updateProjectiles(dt: number): void {
+    const p = this.player;
+    const pb = p.body;
+    for (const pr of this.projectiles) {
+      pr.x += pr.vx * dt;
+      pr.z += pr.vz * dt;
+      pr.life -= dt;
+      pr.spin += dt * 14;
+      if (p.mode === 'dead') continue;
+      if (Math.hypot(pb.x - pr.x, pb.z - pr.z) < pr.radius + pb.hw && pr.y > pb.y - 0.2 && pr.y < pb.y + pb.h + 0.3) {
+        if (p.mode === 'dash' && p.modeT <= DASH.iframes) {
+          if (p.modeT <= DASH.perfectWindow && p.perfectCd <= 0) {
+            p.perfectCd = DASH.perfectCooldown;
+            p.perfectBonus = true;
+            this.emit({ t: 'perfect', x: pb.x, y: pb.y, z: pb.z });
+          }
+          continue;
+        }
+        if (p.invulnT <= 0 && this.damagePlayer(1, pr.x - pr.vx, pr.z - pr.vz)) pr.life = 0;
+      }
+    }
+    this.projectiles = this.projectiles.filter((q) => q.life > 0);
+  }
+
   // ───────────────────────── 仕掛け
   /** blade の腕の角度（rad） */
   bladeAngle(h: HazardDef): number {
@@ -889,6 +1132,11 @@ export class Sim {
 
   private updateTriggers(): void {
     const b = this.player.body;
+    const ar = this.level.arena;
+    if (ar && !this.flag('boss_done') && !this.flag('boss_fighting') && this.flag(ar.afterFlag) && inBox(b.x, b.y + 0.5, b.z, ar.box)) {
+      this.setFlag('boss_fighting');
+      this.emit({ t: 'bossStart' });
+    }
     for (const t of this.level.triggers) {
       const key = 'trig:' + t.id;
       if (this.flag(key)) continue;

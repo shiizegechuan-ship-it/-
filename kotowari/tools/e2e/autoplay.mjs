@@ -8,14 +8,20 @@ let ok = false;
 try {
   await page.goto(srv.url);
   await page.waitForFunction(() => window.__k, null, { timeout: 20000 });
-  await page.evaluate(() => {
-    window.__k.app.manual = true;
-    window.__k.app.newGame();
-    window.__k.auto(Number(new URLSearchParams(location.search).get('skill') ?? 1));
-  });
+  const ending = process.env.ENDING ?? 'dawn';
+  const startCh = process.env.START ?? '';
+  await page.evaluate(
+    ([ending, startCh]) => {
+      window.__k.app.manual = true;
+      if (startCh) window.__k.startAt(startCh, { ledger: { zeni: 120, debt: 0, pawned: [] } });
+      else window.__k.app.newGame();
+      window.__k.auto(1, ending);
+    },
+    [ending, startCh],
+  );
   const t0 = Date.now();
   let last = '';
-  for (let i = 0; i < 1200; i++) {
+  for (let i = 0; i < 4000; i++) {
     const st = await page.evaluate(() => {
       window.__k.step(30);
       const s = window.__k.sim();
@@ -27,9 +33,13 @@ try {
       last = key;
     }
     if (st.state === 'end') {
-      ok = true;
+      const endings = await page.evaluate(() => window.__k.endings());
+      ok = endings.includes(ending);
+      console.log('結末', endings.join(','));
+      await page.screenshot({ path: path.join(OUT, `auto-ending-${ending}.png`), timeout: 120000 });
       break;
     }
+    if (process.env.SHOTS && i % 20 === 0) await page.screenshot({ path: path.join(OUT, `auto-${String(i).padStart(4, '0')}.png`), timeout: 120000 });
   }
   await page.screenshot({ path: path.join(OUT, 'auto-end.png'), timeout: 120000 });
   console.log((await page.evaluate(() => window.__k.autoLog())).join('\n'));
@@ -45,5 +55,5 @@ try {
   await browser.close();
   srv.stop();
 }
-console.log(ok ? '通しプレイ：つづく まで到達' : '通しプレイ：失敗');
+console.log(ok ? '通しプレイ：結末まで到達' : '通しプレイ：失敗');
 process.exit(ok ? 0 : 1);

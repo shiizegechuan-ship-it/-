@@ -20,7 +20,14 @@ import { UI, type NavKey } from './ui/ui';
 
 export const VERSION = '0.2.0';
 
-type State = 'title' | 'play' | 'dialog' | 'shop' | 'menu' | 'card' | 'slice' | 'cine' | 'end';
+type State = 'title' | 'play' | 'dialog' | 'shop' | 'menu' | 'card' | 'slice' | 'cine' | 'end' | 'ending';
+
+interface Beat {
+  dur: number;
+  t?: number;
+  on?: () => void;
+  tick?: (u: number, dt: number) => void;
+}
 
 const SONG_FOR: Record<string, string> = { prologue: 'festival', ch1: 'cedar', ch2: 'bamboo', ch3: 'town', ch4: 'falls', finale: 'summit' };
 /** 章で初めて質屋を開いたときのおこんの話 */
@@ -51,8 +58,11 @@ export class App {
   manual = false;
   private titleOrbit = 0;
   frames = 0;
+  /** 結末の演出の段取り */
+  private beats: Beat[] = [];
+  private endOrbit = 0;
   /** 自動プレイ（検査用）。道しるべをたどり、会話は送り、店は閉じる */
-  private auto: { bot: RouteBot; sim: Sim; skill: number; t: number } | null = null;
+  private auto: { bot: RouteBot; sim: Sim; skill: number; t: number; ending: 'dawn' | 'night' } | null = null;
   autoLog: string[] = [];
 
   constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
@@ -258,6 +268,10 @@ export class App {
     }
     this.playScript(script, () => {
       for (const f of script.setFlags ?? []) this.sim.setFlag(f);
+      if (id === 'fin_stele') {
+        this.say('fin_okon', () => this.finalChoice());
+        return;
+      }
       then?.();
     });
   }
@@ -317,6 +331,13 @@ export class App {
         this.view.splatOkon(true, this.sim, this.pipe.height);
         this.sfx('perfect');
         break;
+      case 'morphMask': {
+        this.view.morphBossMask();
+        const bs = this.sim.boss;
+        if (bs) this.cam.focus = new THREE.Vector3(bs.body.x, bs.body.y + 2.4, bs.body.z);
+        this.sfx('perfect');
+        break;
+      }
       case 'cinemaDiary':
         // 日記を読む間は、景色を止めて灯の火だけを揺らす（シネマグラフ）
         this.pipe.snapshot();
@@ -420,6 +441,149 @@ export class App {
         this.say(firstScript, reopen);
       } else reopen();
     });
+  }
+
+  // ───────────────────────── 最後の選択と結末
+  private preEnding: Progress | null = null;
+  private finalChoice(): void {
+    this.preEnding = structuredClone(this.sim.progress);
+    this.state = 'menu';
+    this.input.exitLock();
+    this.input.clearPressed();
+    const confirm = (q: string, go: () => void) =>
+      this.ui.confirm(q, go, () => this.finalChoice());
+    this.ui.menu(
+      '朝を、どうする',
+      [
+        { label: 'すべての舞を納める（朝を請け出す）', act: () => confirm('跳・払・灯・駆を、すべて質に入れます。\nもう戻れません。よろしいですか？', () => this.endingDawn()) },
+        { label: '舞を手放さない（夜に残る）', act: () => confirm('舞を手放さず、夜に残ります。\nよろしいですか？', () => this.endingNight()) },
+      ],
+      null,
+    );
+  }
+
+  private runBeats(beats: Beat[]): void {
+    this.beats = beats;
+    this.state = 'ending';
+    this.ui.clearOverlay();
+    this.ui.showHud(false);
+  }
+
+  private endingDawn(): void {
+    this.say('end_dawn', () => {
+      const held = (['jump', 'fan', 'lantern', 'dash'] as AbilityId[]).filter((id) => this.sim.has(id));
+      const beats: Beat[] = [];
+      for (const id of held)
+        beats.push({
+          dur: 0.75,
+          on: () => {
+            this.sim.doPawn(id);
+            this.sfx('pawn');
+            this.fx.datamosh(0.7, 0.8);
+            this.view.lawFx(this.sim);
+            this.ui.toast(`${ABILITIES[id].name}を納めた　${ABILITIES[id].law.name}`, false, 1.2);
+          },
+        });
+      beats.push({
+        dur: 4.5,
+        on: () => {
+          this.audio.playSong('dawn');
+          this.view.floatFx();
+          this.endOrbit = this.cam.yaw;
+        },
+        tick: (u) => this.orbitCam(u, 6.5, 2.2),
+      });
+      beats.push({
+        dur: 5.0,
+        on: () => this.sfx('bell'),
+        tick: (u) => {
+          this.orbitCam(1 + u * 0.4, 6.5 + u * 2, 2.2 + u * 1.5);
+          this.view.setBend(Math.min(1, u * 1.15), this.sim, this.cam.cam);
+          if (u > 0.55) {
+            this.pipe.params.fadeColor.set('#fff6e0');
+            this.pipe.params.fade = (u - 0.55) / 0.45;
+          }
+        },
+      });
+      beats.push({
+        dur: 0.1,
+        on: () => {
+          this.view.setBend(0, this.sim, this.cam.cam);
+          this.recordEnding('dawn');
+          this.ui.ending(
+            '明けの舞',
+            [
+              '夜が、明けた。四つの理が重なって世が舞い終えたとき、朧山の稜線から、久しく見なかった朝日が差した。',
+              '里の人々は面を外し、寝ぼけ眼で互いの顔を見て笑った。千鶴は神楽殿の欄干にもたれて、声を上げずに泣いた。',
+              '鈴は、もう跳べない。扇も振れない。けれど朝の光の中で、里の子らが見よう見まねで舞う神楽を、いちばん前で見ていた。',
+              'ひと月後。狐の質屋の店先で、鈴は帳面をつけている。「跳」の請け出しまで、あと十二銭。',
+              '「請け出しは、少しばかり高くつきますよ」「知ってる。だから、働いてるの」',
+            ],
+            () => this.afterEnding(),
+          );
+          this.state = 'end';
+        },
+      });
+      this.runBeats(beats);
+    });
+  }
+
+  private endingNight(): void {
+    this.say('end_night', () => {
+      this.audio.playSong('still');
+      this.runBeats([
+        {
+          dur: 6,
+          on: () => (this.endOrbit = this.cam.yaw),
+          tick: (u) => {
+            this.orbitCam(u * 0.6, 5.5, 2.0);
+            this.fx.acid = Math.min(1, u * 1.3);
+            this.pipe.params.fadeColor.set('#0d0c18');
+            if (u > 0.7) this.pipe.params.fade = (u - 0.7) / 0.3;
+          },
+        },
+        {
+          dur: 0.1,
+          on: () => {
+            this.fx.acid = 0;
+            this.recordEnding('night');
+            this.ui.ending(
+              '常夜',
+              [
+                '夜は明けなかった。朧山の神楽殿では、面をかぶった二人の舞手が、終わらない夜の神楽を舞い続けている。',
+                '里の人々は面をかぶったまま、灯を絶やさずに暮らしている。誰も失われない。誰も、先へ進まない。',
+                '質屋の帳面には、請け出されない朝が、今も一つ預かってある。',
+                '（つづきから選ぶと、山頂の碑の前からもう一度選び直せます）',
+              ],
+              () => this.afterEnding(),
+            );
+            this.state = 'end';
+          },
+        },
+      ]);
+    });
+  }
+
+  private orbitCam(u: number, dist: number, h: number): void {
+    const b = this.sim.player.body;
+    const a = this.endOrbit + Math.PI + u * Math.PI * 0.8;
+    const c = this.cam.cam;
+    c.position.set(b.x + Math.sin(a) * dist, b.y + h, b.z + Math.cos(a) * dist);
+    c.lookAt(b.x, b.y + 1.2, b.z);
+  }
+
+  private recordEnding(id: string): void {
+    if (!this.endings.includes(id)) this.endings.push(id);
+    // 碑の前から選び直せるように、選ぶ前の状態で残す
+    const p = this.preEnding ?? structuredClone(this.sim.progress);
+    writeSave(this.store, p, this.playTime, this.endings);
+  }
+
+  private afterEnding(): void {
+    this.pipe.params.fade = 0;
+    this.fx.acid = 0;
+    this.ui.credits(() => this.toTitle(), VERSION);
+    this.state = 'end';
   }
 
   /** 操作を止めて演出を見せる（Sim は空の入力で進める） */
@@ -557,6 +721,27 @@ export class App {
         }
         this.input.clearPressed();
         break;
+      case 'ending': {
+        frozen = false;
+        // 世界は空の入力で進む（理が働く様子を見せる）
+        this.acc += dt;
+        while (this.acc >= DT) {
+          this.sim.step(emptyInput(this.cam.yaw));
+          this.sim.drain();
+          this.acc -= DT;
+        }
+        const bt = this.beats[0];
+        if (!bt) break;
+        if (bt.t === undefined) {
+          bt.t = 0;
+          bt.on?.();
+        }
+        bt.t += dt;
+        bt.tick?.(Math.min(1, bt.t / bt.dur), dt);
+        if (bt.t >= bt.dur) this.beats.shift();
+        this.input.clearPressed();
+        break;
+      }
       case 'end':
         nav();
         break;
@@ -572,8 +757,8 @@ export class App {
     this.pipe.render(this.view.scene, this.cam.cam, performance.now() / 1000);
   }
 
-  startAuto(skill = 1): void {
-    this.auto = { bot: this.newBot(skill), sim: this.sim, skill, t: 0 };
+  startAuto(skill = 1, ending: 'dawn' | 'night' = 'dawn'): void {
+    this.auto = { bot: this.newBot(skill), sim: this.sim, skill, t: 0, ending };
   }
 
   private newBot(skill: number): RouteBot {
@@ -596,6 +781,11 @@ export class App {
     if (this.state === 'dialog' && a.t % 4 === 0) this.ui.advanceDialog();
     if (this.state === 'card' && this.stateT > 0.3) this.endCard();
     if (this.state === 'shop' && a.t % 3 === 0) this.closeShop();
+    if (this.state === 'menu' && this.preEnding && a.t % 5 === 0) {
+      this.autoLog.push('choice ' + a.ending);
+      if (a.ending === 'dawn') this.endingDawn();
+      else this.endingNight();
+    }
   }
 
   private makeInput(): InputFrame {
@@ -718,6 +908,24 @@ export class App {
           return;
         case 'windBlown':
           break;
+        case 'bossStart':
+          this.audio.playSong('summit');
+          this.ui.toast('夜守　千鶴', true, 2);
+          this.cam.shake(0.2, 0.4);
+          break;
+        case 'bossPhase':
+          this.fx.textureFlash(0.35);
+          this.fx.datamosh(0.5, 0.6);
+          this.cam.shake(0.3, 0.5);
+          this.sfx('bell');
+          this.queue.push(() => this.say(e.phase === 2 ? 'fin_phase2' : 'fin_phase3'));
+          break;
+        case 'bossDown':
+          this.audio.playSong('still');
+          this.fx.textureFlash(0.2);
+          this.sfx('dead');
+          this.cam.shake(0.3, 0.6);
+          break;
         case 'hazardHit':
           this.sfx(e.kind === 'rock' ? 'slam' : 'hurt');
           this.cam.shake(0.25, 0.25);
@@ -757,7 +965,8 @@ export class App {
       },
       frameMs: () => [...this.pipe.frameMs],
       startAt: (chapter: ChapterId, progress?: Partial<Progress>) => this.startChapter({ ...newProgress(chapter), ...progress }),
-      auto: (skill = 1) => this.startAuto(skill),
+      auto: (skill = 1, ending: 'dawn' | 'night' = 'dawn') => this.startAuto(skill, ending),
+      endings: () => [...this.endings],
       autoLog: () => [...this.autoLog],
       skipCard: () => this.state === 'card' && this.endCard(),
     };

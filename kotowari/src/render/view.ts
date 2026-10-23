@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ATTACK } from '../core/data/tuning';
+import { ATTACK, BOSS } from '../core/data/tuning';
 import { Sim, type EnemyState } from '../core/sim';
 import type { HazardDef } from '../core/levels/types';
 import type { Solid } from '../core/physics';
@@ -9,6 +9,9 @@ import { buildSuzu, type SuzuRig } from './models/suzu';
 import { GLOW, PALETTE as C } from './palette';
 import { Particles } from './particles';
 import { SplatCloud } from './splat';
+import { BEND, makeSceneBendable } from './bend';
+import { VoxelMorph } from './morph';
+import { chizuruFaceVox, yomoriMaskVox } from './models/creatures';
 import { boxesGeometry } from './terrain';
 import { terrainTexture } from './textures';
 import { THEMES, type Theme } from './themes';
@@ -19,13 +22,70 @@ const SUZU_SCALE = 0.83;
 const OCCLUDER_KINDS = new Set(['torii', 'cedar', 'bigLantern', 'bamboo', 'willow', 'kazaguruma', 'bell', 'stall']);
 const MAX_LAMPS = 6;
 
+interface BossTele {
+  lane: THREE.Group;
+  ring: THREE.Group;
+  fans: THREE.Group;
+}
+
 interface EnemyView {
+  boss?: BossTele;
   rig: CreatureRig;
   mats: Map<THREE.Mesh, THREE.Material | THREE.Material[]>;
   lastFlash: boolean;
   /** 地面に描く攻撃の予兆（外枠と、溜まり具合で伸びる中身） */
   tele: THREE.Group;
   teleFill: THREE.Mesh;
+}
+
+function laneShape(w: number, len: number): THREE.Group {
+  const g = new THREE.Group();
+  const shape = new THREE.Shape();
+  shape.moveTo(-w / 2, 0);
+  shape.lineTo(w / 2, 0);
+  shape.lineTo(w / 2, len);
+  shape.lineTo(0, len + 0.5);
+  shape.lineTo(-w / 2, len);
+  shape.closePath();
+  const hole = new THREE.Path();
+  hole.moveTo(-w / 2 + 0.08, 0.08);
+  hole.lineTo(-w / 2 + 0.08, len - 0.05);
+  hole.lineTo(0, len + 0.38);
+  hole.lineTo(w / 2 - 0.08, len - 0.05);
+  hole.lineTo(w / 2 - 0.08, 0.08);
+  hole.closePath();
+  shape.holes.push(hole);
+  const om = new THREE.Mesh(new THREE.ShapeGeometry(shape), teleMat());
+  om.rotation.x = -Math.PI / 2;
+  om.scale.set(1, -1, 1);
+  const fm = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.16, len).translate(0, len / 2, 0), new THREE.MeshBasicMaterial({ color: GLOW.telegraph, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  fm.rotation.x = -Math.PI / 2;
+  fm.scale.set(1, -1, 1);
+  fm.name = 'fill';
+  g.add(om, fm);
+  return g;
+}
+
+function buildBossTele(): BossTele {
+  const lane = laneShape(2.0, 5.6);
+  const ring = new THREE.Group();
+  const rm = new THREE.Mesh(new THREE.RingGeometry(BOSS.slam.radius - 0.12, BOSS.slam.radius, 40), teleMat());
+  rm.rotation.x = -Math.PI / 2;
+  const rf = new THREE.Mesh(new THREE.CircleGeometry(BOSS.slam.radius - 0.14, 40), new THREE.MeshBasicMaterial({ color: GLOW.telegraph, transparent: true, opacity: 0.25, depthWrite: false, fog: false }));
+  rf.rotation.x = -Math.PI / 2;
+  rf.name = 'fill';
+  ring.add(rm, rf);
+  const fans = new THREE.Group();
+  for (let i = 0; i < 5; i++) {
+    const l = laneShape(0.5, 7);
+    l.name = 'line' + i;
+    fans.add(l);
+  }
+  for (const g of [lane, ring, fans]) {
+    g.visible = false;
+    g.renderOrder = 3;
+  }
+  return { lane, ring, fans };
 }
 
 const teleMat = () => markerMaterial({ color: GLOW.telegraph, side: THREE.DoubleSide, depthWrite: false }, 0.5);
@@ -216,7 +276,10 @@ export class GameView {
     this.occluders = [];
     this.lampSpots = [];
     this.water = [];
-    for (const v of this.enemies.values()) this.actors.remove(v.rig.root, v.tele);
+    for (const v of this.enemies.values()) {
+      this.actors.remove(v.rig.root, v.tele);
+      if (v.boss) this.actors.remove(v.boss.lane, v.boss.ring, v.boss.fans);
+    }
     this.enemies.clear();
     this.sparks.clear();
     this.dust.clear();
@@ -369,6 +432,10 @@ export class GameView {
       for (const m of rig.flash) mats.set(m, m.material);
       const t = buildTelegraph(e);
       v = { rig, mats, lastFlash: false, tele: t.g, teleFill: t.fill };
+      if (e.spawn.type === 'yomori') {
+        v.boss = buildBossTele();
+        this.actors.add(v.boss.lane, v.boss.ring, v.boss.fans);
+      }
       this.enemies.set(e.id, v);
       this.actors.add(rig.root, t.g);
     }
@@ -414,9 +481,11 @@ export class GameView {
     for (const [id, v] of this.enemies)
       if (!seen.has(id)) {
         this.actors.remove(v.rig.root, v.tele);
+        if (v.boss) this.actors.remove(v.boss.lane, v.boss.ring, v.boss.fans);
         this.enemies.delete(id);
       }
 
+    this.updateProjectiles(sim);
     // 動く足場・門・幽かな橋・影
     for (const f of this.floats) f.mesh.position.set(f.solid.minX, f.solid.minY, f.solid.minZ);
     for (const g of this.gates) {
@@ -566,6 +635,16 @@ export class GameView {
     if (!frozen) {
       this.sparks.update(dt);
       this.dust.update(dt);
+    }
+    if (this.morph) {
+      this.morph.m.update(dt);
+      if (this.morph.m.done) {
+        const face = this.morph.head.getObjectByName('face');
+        if (face) face.visible = true;
+        this.scene.remove(this.morph.m.mesh);
+        this.morph.m.dispose();
+        this.morph = null;
+      }
     }
     if (this.splat) {
       this.splat.t += dt;
@@ -725,6 +804,10 @@ export class GameView {
       }
     }
     if (eyeMat) eyeMat.color.set(eye);
+    if (v.boss) {
+      this.updateBossView(e, v, v.boss);
+      return;
+    }
     // 地面の予兆：溜めの間だけ。中身が溜まり具合で満ちる
     const showTele = e.mode === 'windup' || (e.mode === 'attack' && e.t < e.def.active);
     v.tele.visible = showTele;
@@ -742,6 +825,106 @@ export class GameView {
       for (const [m, orig] of v.mats) m.material = flash ? glowMaterial('#ffffff') : orig;
       v.lastFlash = flash;
     }
+  }
+
+  private updateBossView(e: EnemyState, v: EnemyView, bt: BossTele): void {
+    const b = e.body;
+    const r = v.rig;
+    v.tele.visible = false;
+    bt.lane.visible = bt.ring.visible = bt.fans.visible = false;
+    const eyeMat = (r.eyes as THREE.Mesh).material as THREE.MeshBasicMaterial;
+    eyeMat.color.set('#c99a45');
+    r.body.position.y = Math.sin(e.anim * 2) * 0.03;
+    if (r.armR) r.armR.rotation.set(-0.3 + Math.sin(e.anim * 1.5) * 0.1, 0, -0.2);
+    if (r.armL) r.armL.rotation.set(0.1, 0, 0.2);
+    const ph = e.phase ?? 1;
+    const spd = ph >= 3 ? BOSS.phase3SpeedMul : 1;
+    if (e.mode === 'windup' || (e.mode === 'attack' && e.move !== 'fans')) {
+      const mv = e.move ?? 'lunge';
+      const wu = BOSS[mv].windup / spd;
+      const k = e.mode === 'attack' ? 1 : Math.min(1, e.t / wu);
+      eyeMat.color.set(Math.floor(e.t * 16) % 2 ? GLOW.telegraph : '#ffd0d8');
+      const fillOp = e.mode === 'attack' ? 0.55 : 0.15 + k * 0.25;
+      if (mv === 'lunge') {
+        bt.lane.visible = true;
+        bt.lane.position.set(b.x, b.y + 0.05, b.z);
+        bt.lane.rotation.y = e.yaw;
+        const f = bt.lane.getObjectByName('fill') as THREE.Mesh;
+        f.scale.set(1, -k, 1);
+        (f.material as THREE.MeshBasicMaterial).opacity = fillOp;
+        if (r.armR) r.armR.rotation.set(-2.4 * k, 0.5, -0.2);
+      } else if (mv === 'slam') {
+        bt.ring.visible = true;
+        bt.ring.position.set(b.x, b.y + 0.05, b.z);
+        const f = bt.ring.getObjectByName('fill') as THREE.Mesh;
+        f.scale.setScalar(Math.max(0.01, k));
+        (f.material as THREE.MeshBasicMaterial).opacity = fillOp;
+        if (r.armR && r.armL) {
+          r.armR.rotation.set(-2.8 * k, 0, -0.3);
+          r.armL.rotation.set(-2.8 * k, 0, 0.3);
+        }
+        r.body.position.y = 0.25 * k;
+      } else {
+        bt.fans.visible = true;
+        bt.fans.position.set(b.x, b.y + 0.05, b.z);
+        const n = ph >= 3 ? BOSS.fans.count + 2 : BOSS.fans.count;
+        bt.fans.children.forEach((c, i) => {
+          c.visible = i < n;
+          c.rotation.y = e.yaw + (i - (n - 1) / 2) * BOSS.fans.spread;
+          const f = c.getObjectByName('fill') as THREE.Mesh;
+          f.scale.set(1, -k, 1);
+          (f.material as THREE.MeshBasicMaterial).opacity = fillOp;
+        });
+        if (r.armR) r.armR.rotation.set(-1.6, 1.4 * k, -0.2);
+      }
+      if (mv === 'slam' && e.mode === 'attack' && e.t < 0.05) this.shockwave(b.x, b.y, b.z, BOSS.slam.radius);
+    }
+    if (e.mode === 'transition') {
+      r.body.rotation.z = Math.sin(e.t * 30) * 0.05;
+      eyeMat.color.set('#ffffff');
+    } else r.body.rotation.z = 0;
+    if (e.mode === 'kneel') {
+      r.body.position.y = -0.35;
+      r.body.rotation.x = 0.35;
+      if (r.armR && r.armL) {
+        r.armR.rotation.set(0.4, 0, -0.1);
+        r.armL.rotation.set(0.4, 0, 0.1);
+      }
+      eyeMat.color.set('#3a2a3a');
+    }
+    // 被弾の白
+    const flash = e.flash > 0;
+    if (flash !== v.lastFlash) {
+      for (const [m, orig] of v.mats) m.material = flash ? glowMaterial('#ffffff') : orig;
+      v.lastFlash = flash;
+    }
+  }
+
+  private fanPool: THREE.Object3D[] = [];
+  private fanProto: THREE.Object3D | null = null;
+  /** 投げられた扇 */
+  private updateProjectiles(sim: Sim): void {
+    if (!this.fanProto) {
+      const fv = new Vox();
+      for (let k = 0; k <= 8; k++) {
+        const ang = (-70 + k * 17.5) * (Math.PI / 180);
+        for (let r = 1; r <= 6; r++) fv.set(Math.round(Math.sin(ang) * r), 0, Math.round(Math.cos(ang) * r), r === 6 ? '#ffe36b' : k % 2 ? '#ff3b5c' : '#15111c');
+      }
+      this.fanProto = voxMesh(fv, 1 / 12, [0, 0, 0], 'glow', 0);
+    }
+    while (this.fanPool.length < sim.projectiles.length) {
+      const f = this.fanProto.clone();
+      this.fanPool.push(f);
+      this.actors.add(f);
+    }
+    this.fanPool.forEach((f, i) => {
+      const pr = sim.projectiles[i];
+      f.visible = !!pr;
+      if (pr) {
+        f.position.set(pr.x, pr.y, pr.z);
+        f.rotation.set(0, pr.spin, 0);
+      }
+    });
   }
 
   private shockwave(x: number, y: number, z: number, r: number): void {
@@ -780,6 +963,40 @@ export class GameView {
     best.root.visible = false;
     this.scene.add(cloud.points);
     this.splat = { cloud, rig: best, t: 0 };
+  }
+
+  // ───────────── 結末の演出
+  /** スカイ・ポータル：鈴の前方を空へ巻き上げる（0..1） */
+  setBend(amount: number, sim: Sim, cam: THREE.Camera): void {
+    BEND.uBend.value = amount;
+    if (amount > 0) {
+      const b = sim.player.body;
+      const f = new THREE.Vector3();
+      cam.getWorldDirection(f);
+      const d = new THREE.Vector2(f.x, f.z).normalize();
+      BEND.uBendDir.value.copy(d);
+      BEND.uBendPivot.value.set(b.x + d.x * 3, b.y, b.z + d.y * 3);
+      makeSceneBendable(this.scene);
+    }
+  }
+
+  private morph: { m: VoxelMorph; head: THREE.Object3D } | null = null;
+  /** 夜守の面が千鶴の顔へ変わる（コンポーズド・モーフィング） */
+  morphBossMask(): void {
+    for (const v of this.enemies.values()) {
+      const head = v.rig.body.getObjectByName('head');
+      const mask = head?.getObjectByName('mask');
+      if (!head || !mask) continue;
+      const m = new VoxelMorph(yomoriMaskVox(), chizuruFaceVox(), (1 / 16) * 1.25, 2.6);
+      head.updateMatrixWorld(true);
+      m.mesh.position.setFromMatrixPosition(head.matrixWorld);
+      m.mesh.quaternion.setFromRotationMatrix(head.matrixWorld);
+      m.mesh.position.y += 0.02;
+      mask.visible = false;
+      this.scene.add(m.mesh);
+      this.morph = { m, head };
+      return;
+    }
   }
 
   /** 落石が着地したとき（音・揺れ） */

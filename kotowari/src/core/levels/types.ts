@@ -15,7 +15,7 @@ export interface GateDef {
   id: string;
   box: BoxSpec;
   /** 開く条件：風の理が働いている／旗が立っている */
-  opensWhen: { law: 'fan' } | { flag: string };
+  opensWhen: { law: 'fan' } | { flag: string } | { notFlag: string };
 }
 
 export interface ShrineDef {
@@ -118,6 +118,8 @@ export interface LevelDef {
   hazards: HazardDef[];
   exit: { box: BoxSpec; to: ChapterId | 'ending' } | null;
   props: PropDef[];
+  /** ボスと戦う場所（入ると戦いが始まる。きっかけの会話の後） */
+  arena?: { box: BoxSpec; afterFlag: string };
   /** 章題の画面で見せる景色（カメラの位置と注目点） */
   establish?: { from: [number, number, number]; to: [number, number, number] };
   /** ボットと到達可能性テスト用の道しるべ（順に通る点と、そこで要る行動） */

@@ -89,3 +89,18 @@ export const WORLD = {
   interactRadius: 1.6,
   pickupRadius: 0.9,
 };
+
+/** 夜守（終章のボス）の行動。段階は HP の割合で変わる */
+export const BOSS = {
+  hp: 44,
+  phase2: 0.6, // これ以下で第 2 段階（扇を投げる・面を呼ぶ）
+  phase3: 0.28, // これ以下で第 3 段階（速くなる）
+  lunge: { windup: 0.75, active: 0.38, recover: 0.75, speed: 10, radius: 1.0, reach: 0.8 },
+  slam: { windup: 0.95, active: 0.14, recover: 0.95, radius: 3.4 },
+  fans: { windup: 0.85, count: 3, spread: 0.42, speed: 7.5, radius: 0.45, life: 2.6, recover: 0.8 },
+  summonAt: 0.6,
+  speed: 3.0,
+  phase3SpeedMul: 1.3,
+  /** 段階の切り替わりで少しの間、攻撃を受けない */
+  transitionTime: 1.4,
+};

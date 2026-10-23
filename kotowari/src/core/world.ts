@@ -89,7 +89,8 @@ export class LevelWorld {
       s.enabled = !shadowLaw && lantern.on && Math.hypot(dx, dz) <= lantern.radius;
     }
     for (const g of this.gates) {
-      const want = 'law' in g.def.opensWhen ? pawned.includes(g.def.opensWhen.law) : !!flags[g.def.opensWhen.flag];
+      const ow = g.def.opensWhen;
+      const want = 'law' in ow ? pawned.includes(ow.law) : 'flag' in ow ? !!flags[ow.flag] : !flags[ow.notFlag];
       g.open = Math.max(0, Math.min(1, g.open + (want ? dt : -dt) * 0.8));
       // 門は開いたら当たりを消す（半分以上開いたら通れる）
       g.solid.enabled = g.open < 0.6;

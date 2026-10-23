@@ -15,7 +15,7 @@ export interface Line {
   text: string;
 }
 
-export type ScriptFx = 'dollyOkon' | 'dollyFloat' | 'dollyGate' | 'dollyShadow' | 'dollyFalls' | 'splatOkon' | 'cinemaDiary' | 'sortLedger' | 'bell' | 'none';
+export type ScriptFx = 'dollyOkon' | 'dollyFloat' | 'dollyGate' | 'dollyShadow' | 'dollyFalls' | 'splatOkon' | 'morphMask' | 'cinemaDiary' | 'sortLedger' | 'bell' | 'none';
 
 export interface Script {
   lines: Line[];
@@ -315,5 +315,79 @@ export const SCRIPTS: Record<string, Script> = {
   },
   c4_end: {
     lines: [s('suzu', 'この上が山頂。神楽殿の太鼓の音が、かすかに聞こえる。'), s('suzu', 'ばあちゃんは、あそこにいる。')],
+  },
+
+  // ───────── 終章
+  fin_intro: {
+    lines: [
+      s('suzu', '山頂。……太鼓が鳴ってる。私が稽古してた、三つ目の拍。'),
+      s('okon', '請人様。戦いの前に、型を整えておかれますか。お代は、いつもどおりで。'),
+    ],
+  },
+  fin_meet: {
+    weighty: true,
+    lines: [
+      s('chizuru', '来たのかい、鈴。……来るなと、あれほど皆に頼んだのに。'),
+      s('suzu', 'ばあちゃん……その面。'),
+      s('chizuru', '夜を守る面さ。朝が来れば、お前は山に納められる。碑にそう書いてある。'),
+      s('suzu', '日記を読んだよ。「納める、とは、何を？」って。ばあちゃんだって、迷ってたんでしょ。'),
+      s('chizuru', '迷いながらでも、止めておけば失わずに済む。'),
+      s('chizuru', '退かぬなら、力ずくで山を下ろすまで。……構えな、鈴。稽古の続きだよ。'),
+    ],
+  },
+  fin_phase2: {
+    lines: [s('chizuru', '皆、来ておくれ。この子を、朝に渡すんじゃないよ。'), s('suzu', '里の人たちが……！')],
+  },
+  fin_phase3: {
+    lines: [s('chizuru', 'なぜ退かない……！　お前を失くすくらいなら、夜のままでいい！')],
+  },
+  fin_after: {
+    fx: 'morphMask',
+    weighty: true,
+    lines: [
+      s('note', '夜守の面に、ひびが走る。黒い面の下から、見慣れた顔が現れる。'),
+      s('chizuru', '……強くなったね。三つ目の拍、もう遅れない。'),
+      s('suzu', 'ばあちゃん。碑の足元、苔の下を見よう。ばあちゃんの口癖だよ。'),
+      s('chizuru', '「迷ったら足元を見な」……そうだったね。'),
+    ],
+  },
+  fin_stele: {
+    fx: 'sortLedger',
+    weighty: true,
+    lines: [
+      s('note', '苔を払うと、碑の続きが現れた。'),
+      s('note', '「理替えの暁、舞手を山に納めよ。さすれば世は新たに巡る。——納むるは舞手が舞なり。舞を世に返し、世をして舞わしめよ」'),
+      s('suzu', '納めるのは、命じゃない。……舞だ。'),
+      s('chizuru', '舞を、世に返す……。私は、続きを読まずに……。'),
+      s('okon', 'ようやく、帳面が揃いました。'),
+    ],
+    setFlags: ['stele_read'],
+  },
+  fin_okon: {
+    fx: 'splatOkon',
+    weighty: true,
+    lines: [
+      s('okon', '請人様。朝の請け出しは、いかがなさいます。'),
+      s('okon', 'お代は百八十。お嬢さんの舞——跳・払・灯・駆の、すべての値でございます。'),
+      s('okon', '質に入れた舞は、世の理になる。四つの理がそろえば、世そのものが舞います。それが、山の神さまの求める神楽。'),
+      s('suzu', '全部手放したら、私はもう舞えない。'),
+      s('okon', 'ええ。請け出しは、いつでも。……ただし、少しばかり高くつきます。'),
+      s('chizuru', '鈴。お前が決めな。私は、もう止めないよ。'),
+    ],
+  },
+  end_dawn: {
+    weighty: true,
+    lines: [
+      s('suzu', '跳も、払も、灯も、駆も。……全部、世に返す。'),
+      s('note', '石が浮き、風が吹き、影が立ち、時が緩む。四つの理が重なって、山が、町が、夜空が、ゆっくりと舞い始めた。'),
+    ],
+  },
+  end_night: {
+    weighty: true,
+    lines: [
+      s('suzu', '……ごめん。手放せない。ばあちゃんに習った舞だもの。'),
+      s('chizuru', 'それでいい。止めておけば、失わない。'),
+      s('note', '鈴は、千鶴の差し出した面を受け取った。'),
+    ],
   },
 };

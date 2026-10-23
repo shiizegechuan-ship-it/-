@@ -29,4 +29,7 @@ export type SimEvent =
   | { t: 'floatRise' }
   | { t: 'gateOpen'; id: string }
   | { t: 'windBlown'; enemy: string }
-  | { t: 'hazardHit'; id: string; kind: 'blade' | 'rock' };
+  | { t: 'hazardHit'; id: string; kind: 'blade' | 'rock' }
+  | { t: 'bossPhase'; phase: number }
+  | { t: 'bossDown' }
+  | { t: 'bossStart' };

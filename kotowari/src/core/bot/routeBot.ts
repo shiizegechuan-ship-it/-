@@ -1,7 +1,7 @@
 import type { AbilityId } from '../data/abilities';
 import { PLAYER, WORLD } from '../data/tuning';
 import { wrapAngle } from '../math';
-import { Sim } from '../sim';
+import { Sim, type EnemyState } from '../sim';
 import { emptyInput, type InputFrame } from '../input';
 import type { RouteNode } from '../levels/types';
 
@@ -44,6 +44,10 @@ export class RouteBot {
     const b = p.body;
     if (p.mode === 'dead') return inp;
 
+    // 夜守との戦い
+    const boss = sim.boss;
+    if (boss && sim.flag('boss_fighting') && boss.mode !== 'kneel') return this.fightBoss(inp, boss);
+
     // 近くの妖と戦う（fight の点の前後・襲われたとき）
     const foe = this.closestFoe(node.act === 'fight' ? 9 : 3.2);
     if (foe) {
@@ -76,13 +80,22 @@ export class RouteBot {
       this.toggled = true;
     }
 
-    if (dist < r && Math.abs(node.y - b.y) < 1.2) {
+    const bossPending = node.act === 'fight' && !!sim.boss && !sim.flag('boss_done');
+    if (dist < r && Math.abs(node.y - b.y) < 1.2 && !bossPending) {
       if (node.act === 'wait' && this.waitT < (node.wait ?? 1)) {
         this.waitT += 1 / 60;
         return inp;
       }
       if (node.act === 'shop') this.shop(node);
-      if (node.act === 'read') inp.interactPressed = true;
+      if (node.act === 'read') {
+        // 調べられる所まで寄ってから押す
+        if (sim.interactable()?.kind !== 'read') {
+          const rd = sim.level.readables.reduce((a, c) => (Math.hypot(c.x - b.x, c.z - b.z) < Math.hypot(a.x - b.x, a.z - b.z) ? c : a));
+          this.steer(inp, rd.x - b.x, rd.z - b.z);
+          return inp;
+        }
+        inp.interactPressed = true;
+      }
       this.log.push(`node ${this.idx} @${sim.frame}`);
       this.idx++;
       this.waitT = 0;
@@ -104,6 +117,58 @@ export class RouteBot {
       inp.jumpPressed = true;
       this.stuckT = 0.6;
     }
+    return inp;
+  }
+
+  /** 夜守：予兆を見て避け、隙に払う。skill 0 は避けが遅い */
+  private fightBoss(inp: InputFrame, boss: EnemyState): InputFrame {
+    const sim = this.sim;
+    const b = sim.player.body;
+    const dx = boss.body.x - b.x;
+    const dz = boss.body.z - b.z;
+    const d = Math.hypot(dx, dz) || 1;
+    // 呼ばれた面の妖が近ければ先に払う
+    const minion = this.closestFoe(2.2);
+    if (minion && minion !== boss && sim.has('fan')) {
+      this.steer(inp, minion.body.x - b.x, minion.body.z - b.z);
+      if (this.frame % 6 === 0) inp.attackPressed = true;
+      return inp;
+    }
+    // 飛んでくる扇
+    for (const pr of sim.projectiles) {
+      const rx = b.x - pr.x;
+      const rz = b.z - pr.z;
+      const along = (rx * pr.vx + rz * pr.vz) / Math.hypot(pr.vx, pr.vz);
+      const side = Math.abs(rx * pr.vz - rz * pr.vx) / Math.hypot(pr.vx, pr.vz);
+      if (along > 0 && along < 3.5 && side < 1.0) {
+        this.steer(inp, pr.vz, -pr.vx);
+        if (this.skill > 0 && along < 1.4 && sim.has('dash')) inp.dashPressed = true;
+        return inp;
+      }
+    }
+    const react = this.skill > 0 ? 1 : 0.55; // 下手なボットは予兆の後半にならないと動かない
+    if (boss.mode === 'windup') {
+      const wu = boss.move === 'slam' ? 0.95 : boss.move === 'fans' ? 0.85 : 0.75;
+      if (boss.t > wu * (1 - react)) {
+        if (boss.move === 'slam') this.steer(inp, -dx, -dz);
+        else {
+          // 向きに対して横へ
+          const fx = Math.sin(boss.yaw);
+          const fz = Math.cos(boss.yaw);
+          const sgn = (b.x - boss.body.x) * fz - (b.z - boss.body.z) * fx >= 0 ? 1 : -1;
+          this.steer(inp, fz * sgn, -fx * sgn);
+        }
+        if (this.skill > 0 && boss.t > wu - 0.12 && sim.has('dash') && (boss.move !== 'slam' || d < 3.6)) inp.dashPressed = true;
+        return inp;
+      }
+    }
+    if (boss.mode === 'attack' && boss.move === 'slam' && d < 4) {
+      this.steer(inp, -dx, -dz);
+      return inp;
+    }
+    // 近づいて払う
+    if (d > 1.7) this.steer(inp, dx, dz);
+    if (d < 2.3 && sim.has('fan') && this.frame % (this.skill > 0 ? 6 : 12) === 0) inp.attackPressed = true;
     return inp;
   }
 
@@ -165,7 +230,7 @@ export class RouteBot {
     let best = null;
     let bd = range;
     for (const e of this.sim.enemies) {
-      if (e.mode === 'dead' || e.mode === 'float' || e.mode === 'flee') continue;
+      if (e.mode === 'dead' || e.mode === 'float' || e.mode === 'flee' || e.mode === 'kneel') continue;
       const d = Math.hypot(e.body.x - b.x, e.body.z - b.z);
       if (d < bd && Math.abs(e.body.y - b.y) < 1.5) { bd = d; best = e; }
     }
