@@ -8,6 +8,7 @@ import { getLevel, hasLevel } from './core/levels';
 import type { ChapterId } from './core/levels/types';
 import { clearSave, readSave, safeStorage, writeSave } from './core/save';
 import { Sim, newProgress, type Progress } from './core/sim';
+import { RouteBot } from './core/bot/routeBot';
 import { SCRIPTS, type Script } from './core/story';
 import { Input, type Action } from './input/input';
 import { FollowCamera } from './render/camera';
@@ -21,7 +22,9 @@ export const VERSION = '0.2.0';
 
 type State = 'title' | 'play' | 'dialog' | 'shop' | 'menu' | 'card' | 'slice' | 'cine' | 'end';
 
-const SONG_FOR: Record<string, string> = { prologue: 'festival', ch1: 'cedar' };
+const SONG_FOR: Record<string, string> = { prologue: 'festival', ch1: 'cedar', ch2: 'bamboo' };
+/** 章で初めて質屋を開いたときのおこんの話 */
+const FIRST_SHOP: Partial<Record<ChapterId, string>> = { ch1: 'okon_first_shop', ch2: 'okon_ch2_first' };
 
 export class App {
   readonly pipe: PixelPipeline;
@@ -48,6 +51,9 @@ export class App {
   manual = false;
   private titleOrbit = 0;
   frames = 0;
+  /** 自動プレイ（検査用）。道しるべをたどり、会話は送り、店は閉じる */
+  private auto: { bot: RouteBot; sim: Sim; skill: number; t: number } | null = null;
+  autoLog: string[] = [];
 
   constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement) {
     this.settings = loadSettings(this.store);
@@ -280,6 +286,11 @@ export class App {
         if (c) this.cam.dollyZoom(c, 26, 2.0);
         break;
       }
+      case 'dollyGate': {
+        const g = this.sim.world.gates[0]?.solid;
+        if (g) this.cam.dollyZoom(new THREE.Vector3((g.minX + g.maxX) / 2, g.minY + 1.5, (g.minZ + g.maxZ) / 2), 24, 2.0);
+        break;
+      }
       case 'sortLedger':
         this.fx.pixelSort(1.6, 1);
         this.sfx('pawn');
@@ -309,10 +320,12 @@ export class App {
   private openShop(shrineId: string, sel = 0): void {
     const def = this.sim.level.shrines.find((s) => s.id === shrineId);
     if (!def) return;
-    // 一の章で初めて店を開くときは、おこんの説明から
-    if (this.sim.progress.chapter === 'ch1' && !this.sim.flag('met_shop_ch1')) {
-      this.sim.setFlag('met_shop_ch1');
-      this.say('okon_first_shop', () => this.openShop(shrineId));
+    // 章で初めて店を開くときは、おこんの説明から
+    const first = FIRST_SHOP[this.sim.progress.chapter];
+    const ch = this.sim.progress.chapter;
+    if (first && !this.sim.flag('met_shop_' + ch)) {
+      this.sim.setFlag('met_shop_' + ch);
+      this.say(first, () => this.openShop(shrineId));
       return;
     }
     this.shopShrine = shrineId;
@@ -350,7 +363,13 @@ export class App {
     this.ui.flashSlot(id);
     const a = ABILITIES[id];
     this.ui.toast(kind === 'pawn' ? `「${a.name}」を質に入れた　${a.law.name}が働く` : `「${a.name}」を請け出した`, false, 2.2);
-    const firstFloat = kind === 'pawn' && id === 'jump' && !this.sim.flag('seen_firstpawn') && this.sim.world.floats.length > 0;
+    const firstScript =
+      kind === 'pawn' && id === 'jump' && !this.sim.flag('seen_firstpawn') && this.sim.world.floats.length > 0
+        ? 'c1_firstpawn'
+        : kind === 'pawn' && id === 'fan' && !this.sim.flag('seen_firstwind') && !!this.sim.level.wind
+          ? 'c2_firstwind'
+          : null;
+    const firstFloat = !!firstScript;
     if (kind === 'pawn' && id === 'jump') {
       this.sfx('float');
       this.view.floatFx();
@@ -359,9 +378,9 @@ export class App {
     }
     const reopen = () => this.openShop(this.shopShrine, ['jump', 'fan', 'lantern', 'dash'].indexOf(id));
     this.cine(firstFloat ? 0.6 : 1.4, () => {
-      if (firstFloat) {
-        this.sim.setFlag('seen_firstpawn');
-        this.say('c1_firstpawn', reopen);
+      if (firstScript) {
+        this.sim.setFlag(firstScript === 'c1_firstpawn' ? 'seen_firstpawn' : 'seen_firstwind');
+        this.say(firstScript, reopen);
       } else reopen();
     });
   }
@@ -397,6 +416,7 @@ export class App {
 
   tick(dt: number): void {
     this.frames++;
+    this.autoStep();
     this.input.pollPad();
     // 画面が切り替わったら、前の画面で押した入力を持ち越さない
     if (this.state !== this.prevState) {
@@ -515,7 +535,34 @@ export class App {
     this.pipe.render(this.view.scene, this.cam.cam, performance.now() / 1000);
   }
 
+  startAuto(skill = 1): void {
+    this.auto = { bot: this.newBot(skill), sim: this.sim, skill, t: 0 };
+  }
+
+  private newBot(skill: number): RouteBot {
+    return new RouteBot(this.sim, skill, undefined, (kind, id) => {
+      this.autoLog.push(`${this.sim.progress.chapter} ${kind} ${id}`);
+      this.trade(kind, id);
+    });
+  }
+
+  /** 自動プレイの 1 フレーム：状態ごとに人の代わりに操作する */
+  private autoStep(): void {
+    const a = this.auto;
+    if (!a) return;
+    if (a.sim !== this.sim) {
+      a.sim = this.sim;
+      a.bot = this.newBot(a.skill);
+      this.autoLog.push('chapter ' + this.sim.progress.chapter);
+    }
+    a.t++;
+    if (this.state === 'dialog' && a.t % 4 === 0) this.ui.advanceDialog();
+    if (this.state === 'card' && this.stateT > 0.3) this.endCard();
+    if (this.state === 'shop' && a.t % 3 === 0) this.closeShop();
+  }
+
   private makeInput(): InputFrame {
+    if (this.auto && this.auto.sim === this.sim) return this.auto.bot.next();
     const mv = this.input.moveVector();
     return {
       moveX: mv.x,
@@ -669,6 +716,8 @@ export class App {
       },
       frameMs: () => [...this.pipe.frameMs],
       startAt: (chapter: ChapterId, progress?: Partial<Progress>) => this.startChapter({ ...newProgress(chapter), ...progress }),
+      auto: (skill = 1) => this.startAuto(skill),
+      autoLog: () => [...this.autoLog],
       skipCard: () => this.state === 'card' && this.endCard(),
     };
   }

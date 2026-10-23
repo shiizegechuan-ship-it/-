@@ -46,6 +46,12 @@ function build(kind: string, variant: number): PropBuild {
       return jizo();
     case 'okonStall':
       return okonStall();
+    case 'bamboo':
+      return bamboo(variant);
+    case 'kazaguruma':
+      return kazaguruma();
+    case 'yasuke':
+      return yasuke();
     default:
       return { obj: new THREE.Group(), lights: [], flames: [] };
   }
@@ -359,13 +365,12 @@ function okonStall(): PropBuild {
   const v = new Vox();
   v.box(-8, 0, -4, 8, 8, 4, C.kuri);
   v.box(-9, 8, -5, 9, 9, 5, C.hiwada);
-  // 暖簾（「質」の紋の代わりに丸に一つ引き）
-  v.box(-8, 14, 5, 8, 22, 5, (x) => (x % 4 === 0 ? null : C.ai));
-  for (let a = 0; a < 24; a++) {
-    const ang = (a / 24) * Math.PI * 2;
-    v.set(Math.round(Math.sin(ang) * 3), 18 + Math.round(Math.cos(ang) * 3), 6, C.gofun);
-  }
-  v.box(-2, 18, 6, 2, 18, 6, C.gofun);
+  // 暖簾（稲荷の宝珠の紋：玉ねぎ形の珠に炎の先）
+  v.box(-8, 13, 5, 8, 22, 5, (x) => (x % 4 === 0 ? null : C.ai));
+  const jewel: [number, number][] = [[0, 21], [0, 20], [-1, 19], [1, 19], [-2, 18], [2, 18], [-2, 17], [2, 17], [-2, 16], [2, 16], [-1, 15], [1, 15], [0, 15]];
+  for (const [x, y] of jewel) v.set(x, y, 6, C.gofun);
+  v.set(1, 21, 6, C.gofun);
+  v.box(-1, 16, 6, 1, 18, 6, C.ukon);
   for (const x of [-9, 9]) v.box(x, 0, 5, x, 24, 5, C.kuri);
   v.box(-10, 24, 4, 10, 25, 6, C.kuri);
   // 算盤と帳面
@@ -379,6 +384,104 @@ function okonStall(): PropBuild {
   const ff = flame(fv, V16, [8, 26, 5]);
   obj.add(ff);
   return { obj, lights: [new THREE.Vector3(0.5, 1.6, 0.3)], flames: [] };
+}
+
+/** 竹の群れ：細い幹が数本、上の方に葉。風でしなる（userData.anim = 'sway'） */
+function bamboo(variant: number): PropBuild {
+  const v = new Vox();
+  const stalks: [number, number, number][] = [
+    [0, 0, 64],
+    [5, 3, 58],
+    [-4, 4, 70],
+    [3, -5, 52],
+    [-5, -3, 61],
+  ];
+  stalks.slice(0, 3 + variant).forEach(([sx, sz, H], i) => {
+    for (let y = 0; y <= H; y++) {
+      const lean = Math.round((y / H) ** 2 * (i % 2 ? 3 : -2));
+      const c = y % 12 === 0 ? C.koke : (sx + y) % 7 === 0 ? C.matsuba : C.wakatake;
+      v.box(sx + lean, y, sz, sx + lean + 1, y, sz + 1, c);
+      // 葉
+      if (y > H * 0.55 && y % 6 === 3) {
+        const dir = (y / 6 + i) % 4;
+        const dx = dir === 0 ? 1 : dir === 1 ? -1 : 0;
+        const dz = dir === 2 ? 1 : dir === 3 ? -1 : 0;
+        for (let k = 1; k <= 6; k++) v.set(sx + lean + dx * k, y - Math.floor(k / 2), sz + dz * k, k > 4 ? C.tokiwa : C.matsuba);
+      }
+    }
+  });
+  const obj = new THREE.Group();
+  obj.add(voxMesh(v, V8 * 0.8, [-0.5, 0, -0.5], 'toon', 0.08));
+  obj.userData.anim = 'sway';
+  return { obj, lights: [], flames: [] };
+}
+
+/** 風車（大きな風車の櫓）。羽根は userData.anim = 'windmill' で回す */
+function kazaguruma(): PropBuild {
+  const v = new Vox();
+  // 櫓
+  for (const x of [-4, 4]) v.box(x, 0, -1, x + 1, 30, 0, C.kuri);
+  for (let y = 4; y <= 28; y += 8) v.box(-4, y, -1, 5, y, 0, C.hiwada);
+  v.box(-2, 30, -2, 3, 33, 1, C.kogecha); // 軸受け
+  const obj = new THREE.Group();
+  obj.add(voxMesh(v, V8, [-0.5, 0, -0.5]));
+  // 羽根（4 枚、紅白の紙）
+  const b = new Vox();
+  const dirs: [number, number][] = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+  dirs.forEach(([dx, dy], k) => {
+    for (let r = 2; r <= 16; r++) {
+      const w = r < 5 ? 0 : 2;
+      for (let t = -w; t <= w; t++) {
+        // 羽根は軸から片側へだけ広がる（風車らしい非対称）
+        if (t < 0 && r >= 5) continue;
+        const x = dx * r + -dy * t;
+        const y = dy * r + dx * t;
+        b.set(x, y, 0, r < 5 ? C.kuri : (r + k) % 2 ? C.shu : C.gofun);
+      }
+    }
+  });
+  b.box(-1, -1, 0, 1, 1, 1, C.kin);
+  const blades = voxMesh(b, V8, [-0.5, -0.5, 0]);
+  blades.position.set(0, 31.5 * V8, 0.25);
+  blades.name = 'blades';
+  obj.add(blades);
+  obj.userData.anim = 'windmill';
+  return { obj, lights: [], flames: [] };
+}
+
+/** 弥助：ひょっとこの面を頭に上げた里の少年 */
+function yasuke(): PropBuild {
+  const v = new Vox();
+  const skin = '#f1d2b4';
+  // 足と着物（藍に白い格子）
+  v.box(-2, 0, -1, -1, 5, 1, C.kuri);
+  v.box(1, 0, -1, 2, 5, 1, C.kuri);
+  v.box(-3, 5, -2, 3, 12, 2, (x, y) => ((x + y) % 4 === 0 ? C.hanada : C.ai));
+  v.box(-3, 8, -2, 3, 8, 2, C.kuchiba); // 帯
+  v.box(-5, 7, -1, -4, 12, 1, C.ai);
+  v.box(4, 7, -1, 5, 12, 1, C.ai);
+  v.box(-5, 6, 0, -4, 6, 1, skin);
+  v.box(4, 6, 0, 5, 6, 1, skin);
+  // 頭
+  v.box(-3, 13, -3, 3, 18, 3, skin);
+  v.box(-3, 17, -3, 3, 19, 3, C.sumi);
+  v.box(-3, 13, -3, 3, 16, -3, C.sumi);
+  v.box(-2, 15, 3, -1, 15, 3, C.sumi);
+  v.box(1, 15, 3, 2, 15, 3, C.sumi);
+  v.set(0, 14, 3, '#d9a98e');
+  // 頭に上げたひょっとこの面
+  v.box(-2, 19, 0, 2, 22, 2, C.suna);
+  v.box(-1, 20, 3, 0, 20, 3, C.sumi);
+  v.box(0, 19, 3, 1, 19, 4, C.suna);
+  const obj = new THREE.Group();
+  obj.add(voxMesh(v, V16, [-0.5, 0, -0.5]));
+  obj.userData.anim = 'npc';
+  return { obj, lights: [], flames: [] };
 }
 
 export { V16 };

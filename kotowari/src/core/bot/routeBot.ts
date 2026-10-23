@@ -1,4 +1,5 @@
 import type { AbilityId } from '../data/abilities';
+import { PLAYER } from '../data/tuning';
 import { emptyInput, type InputFrame } from '../input';
 import type { RouteNode } from '../levels/types';
 import type { Sim } from '../sim';
@@ -20,6 +21,11 @@ export class RouteBot {
     private skill = 1,
     /** 店での売買を上書き（分岐を試す） */
     private shopPlan?: (node: RouteNode, sim: Sim) => { pawn?: AbilityId[]; redeem?: AbilityId[] } | null,
+    /** 売買の実行（既定は Sim を直接。アプリでは演出つきの取引に差し替える） */
+    private trade: (kind: 'pawn' | 'redeem', id: AbilityId) => void = (k, id) => {
+      if (k === 'pawn') this.sim.doPawn(id);
+      else this.sim.doRedeem(id);
+    },
   ) {}
 
   get done(): boolean {
@@ -99,8 +105,16 @@ export class RouteBot {
   private shop(node: RouteNode): void {
     const plan = this.shopPlan ? this.shopPlan(node, this.sim) : { pawn: node.pawn as AbilityId[] | undefined, redeem: node.redeem as AbilityId[] | undefined };
     if (!plan) return;
-    for (const id of plan.pawn ?? []) if (this.sim.has(id)) this.log.push(`pawn ${id} ${JSON.stringify(this.sim.doPawn(id))}`);
-    for (const id of plan.redeem ?? []) if (!this.sim.has(id)) this.log.push(`redeem ${id} ${JSON.stringify(this.sim.doRedeem(id))}`);
+    for (const id of plan.pawn ?? [])
+      if (this.sim.has(id)) {
+        this.trade('pawn', id);
+        this.log.push(`pawn ${id} zeni=${this.sim.ledger.zeni}`);
+      }
+    for (const id of plan.redeem ?? [])
+      if (!this.sim.has(id)) {
+        this.trade('redeem', id);
+        this.log.push(`redeem ${id} zeni=${this.sim.ledger.zeni}`);
+      }
   }
 
   private closestFoe(range: number) {
@@ -115,10 +129,15 @@ export class RouteBot {
     return best;
   }
 
-  /** 世界の向き (wx,wz) へ進む入力（camYaw=0 のとき：wx=-moveX, wz=moveY） */
+  /** 世界の向き (wx,wz) へ進む入力（camYaw=0 のとき：wx=-moveX, wz=moveY）。風があれば風上へ向けて打ち消す */
   private steer(inp: InputFrame, wx: number, wz: number): void {
     const l = Math.hypot(wx, wz) || 1;
-    inp.moveX = -wx / l;
-    inp.moveY = wz / l;
+    let dx = (wx / l) * PLAYER.runSpeed - this.sim.wind.x;
+    let dz = (wz / l) * PLAYER.runSpeed - this.sim.wind.z;
+    const m = Math.hypot(dx, dz) || 1;
+    dx /= m;
+    dz /= m;
+    inp.moveX = -dx;
+    inp.moveY = dz;
   }
 }

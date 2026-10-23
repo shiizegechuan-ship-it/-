@@ -83,6 +83,8 @@ export const CAMERA = {
 
 export const WORLD = {
   slowLawTimeScale: 0.5,
+  /** 風の中で立ち止まったときに受ける風の割合（踏ん張る） */
+  windBrace: 0.25,
   shrineRadius: 2.6, // 妖はこの内側へ入らない（伏線 F7）
   interactRadius: 1.6,
   pickupRadius: 0.9,

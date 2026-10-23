@@ -168,10 +168,10 @@ export function buildSuzu(): SuzuRig {
   armL.add(lantern);
 
   // 払の軌跡（扇の弧）：発光の扇形
-  const trailGeo = new THREE.RingGeometry(0.45, 1.5, 12, 1, -Math.PI * 0.62, Math.PI * 1.24);
+  const trailGeo = new THREE.RingGeometry(1.25, 1.62, 14, 1, -Math.PI * 0.62, Math.PI * 1.24);
   trailGeo.rotateX(-Math.PI / 2);
   trailGeo.rotateY(Math.PI / 2);
-  const trailMat = new THREE.MeshBasicMaterial({ color: '#fff1c4', transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  const trailMat = new THREE.MeshBasicMaterial({ color: '#ffe9a8', transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide, fog: false });
   const trail = new THREE.Mesh(trailGeo, trailMat);
   trail.position.y = 0.9;
   trail.renderOrder = 5;

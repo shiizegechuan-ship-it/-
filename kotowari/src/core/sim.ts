@@ -449,10 +449,11 @@ export class Sim {
       b.vy = Math.max(-PLAYER.maxFall, b.vy - g * dt);
     }
 
-    // 移動（風は外から押す）
+    // 移動（風は外から押す。地面に立って入力が無いときは踏ん張る）
     const vyBefore = b.vy;
     const wasGround = b.onGround;
-    phys.moveBody(b, (b.vx + this.wind.x) * dt, b.vy * dt, (b.vz + this.wind.z) * dt, PLAYER.stepUp);
+    const brace = b.onGround && wl < 0.05 && p.mode === 'normal' ? WORLD.windBrace : 1;
+    phys.moveBody(b, (b.vx + this.wind.x * brace) * dt, b.vy * dt, (b.vz + this.wind.z * brace) * dt, PLAYER.stepUp);
     if (b.onGround && !wasGround) {
       this.emit({ t: 'land', speed: -vyBefore });
       p.airT = 0;
@@ -689,7 +690,7 @@ export class Sim {
         e.mode = 'idle';
         e.t = 0;
       } else {
-        const targetOff = 1.7 + Math.sin(e.anim * 1.6) * 0.15;
+        const targetOff = 1.05 + Math.sin(e.anim * 1.6) * 0.12;
         const up = Math.min(1.8 * dt, targetOff - e.floatOff);
         e.floatOff += up;
         b.vy = up / dt;
@@ -771,8 +772,8 @@ export class Sim {
     let mvz = (b.vz + e.kz) * dt;
     e.kx = approach(e.kx, 0, 30 * dt);
     e.kz = approach(e.kz, 0, 30 * dt);
-    // 風
-    if (def.windMul > 0 && (this.wind.x || this.wind.z)) {
+    // 風（気づいて動き出した妖だけが流される。じっとしている妖は根を張っている）
+    if (def.windMul > 0 && (this.wind.x || this.wind.z) && e.mode !== 'idle') {
       const m = def.windMul * (e.mode === 'float' ? 1.5 : 1);
       mvx += this.wind.x * m * dt;
       mvz += this.wind.z * m * dt;

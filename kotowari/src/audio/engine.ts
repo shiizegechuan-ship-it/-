@@ -29,6 +29,28 @@ export type Sfx =
   | 'fall'
   | 'text';
 
+/** 効果音ごとの音量の補正（書き出して最大値をそろえた値。tools/e2e/audio.mjs） */
+const SFX_GAIN: Partial<Record<Sfx, number>> = {
+  swing: 3.2,
+  swing3: 2.2,
+  hit: 2.0,
+  immune: 2.5,
+  jump: 2.0,
+  land: 5,
+  dash: 3.5,
+  telegraph: 7,
+  ui: 3,
+  uiMove: 3.5,
+  lantern: 3.5,
+  fall: 2.5,
+  text: 5,
+  deny: 2,
+  enemyDown: 1.8,
+  hurt: 2.2,
+  pickup: 1.6,
+  bell: 0.8,
+};
+
 /** 都節音階（D Eb G A Bb）の度数 → 半音 */
 const MIYAKO = [0, 1, 5, 7, 8];
 export const degreeToSemis = (deg: number): number => {
@@ -41,7 +63,7 @@ export const freqOf = (deg: number, oct = 0): number => ROOT * Math.pow(2, (degr
 
 /** 音。最初のユーザー操作まで AudioContext を作らない（ブラウザの決まり） */
 export class AudioEngine {
-  ctx: AudioContext | null = null;
+  ctx: BaseAudioContext | null = null;
   private master!: GainNode;
   private bgmGain!: GainNode;
   private seGain!: GainNode;
@@ -60,12 +82,20 @@ export class AudioEngine {
 
   unlock(): void {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') void this.ctx.resume();
+      if (this.ctx.state === 'suspended' && this.ctx instanceof AudioContext) void this.ctx.resume();
       return;
     }
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
-    const ctx = new AC();
+    this.init(new AC());
+    if (this.songName) {
+      const n = this.songName;
+      this.songName = '';
+      this.playSong(n);
+    }
+  }
+
+  private init(ctx: BaseAudioContext): void {
     this.ctx = ctx;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14;
@@ -89,11 +119,6 @@ export class AudioEngine {
       d[i] = (s / 0x7fffffff) * 2 - 1;
     }
     this.applyVolumes();
-    if (this.songName) {
-      const n = this.songName;
-      this.songName = '';
-      this.playSong(n);
-    }
   }
 
   setVolumes(master: number, bgm: number, se: number): void {
@@ -211,7 +236,14 @@ export class AudioEngine {
     this.lastPlay.set(name, now);
     this.active.set(name, act + 1);
     window.setTimeout(() => this.active.set(name, Math.max(0, (this.active.get(name) ?? 1) - 1)), 400);
-    const o = this.seGain;
+    let o: AudioNode = this.seGain;
+    const gm = SFX_GAIN[name];
+    if (gm) {
+      const g = ctx.createGain();
+      g.gain.value = gm;
+      g.connect(this.seGain);
+      o = g;
+    }
     const t = now + 0.001;
     const p = opts.pitch ?? 1;
     switch (name) {
@@ -342,12 +374,13 @@ export class AudioEngine {
   }
 
   /** 先読み 0.25 秒で次の拍を予約（ループの継ぎ目が出ない） */
-  private schedule(): void {
+  private schedule(until?: number): void {
     const ctx = this.ctx;
     const song = this.song;
     if (!ctx || !song) return;
     const spb = 60 / song.bpm / 4; // 16 分
-    while (this.nextStep < ctx.currentTime + 0.25) {
+    const limit = until ?? ctx.currentTime + 0.25;
+    while (this.nextStep < limit) {
       const i = this.step % song.length;
       for (const tr of song.tracks) {
         for (const n of tr.notes) {
@@ -379,4 +412,31 @@ export class AudioEngine {
       this.step++;
     }
   }
+}
+
+/** 検査用：曲または効果音をオフラインで書き出し、最大値・平均の強さを返す */
+export async function renderOffline(kind: 'song' | 'sfx', name: string, seconds: number): Promise<{ peak: number; rms: number; samples: Float32Array; rate: number }> {
+  const rate = 22050;
+  const ctx = new OfflineAudioContext(1, Math.ceil(seconds * rate), rate);
+  const eng = new AudioEngine();
+  (eng as unknown as { init(c: BaseAudioContext): void }).init(ctx);
+  eng.setVolumes(10, 10, 10);
+  if (kind === 'song') {
+    const e = eng as unknown as { song: Song | null; songName: string; nextStep: number; step: number; schedule(u: number): void };
+    e.song = SONGS[name];
+    e.songName = name;
+    e.nextStep = 0.05;
+    e.step = 0;
+    e.schedule(seconds - 0.1);
+  } else eng.sfx(name as Sfx);
+  const buf = await ctx.startRendering();
+  const d = buf.getChannelData(0);
+  let peak = 0;
+  let sum = 0;
+  for (let i = 0; i < d.length; i++) {
+    const v = Math.abs(d[i]);
+    if (v > peak) peak = v;
+    sum += d[i] * d[i];
+  }
+  return { peak, rms: Math.sqrt(sum / d.length), samples: d, rate };
 }

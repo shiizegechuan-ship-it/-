@@ -22,7 +22,7 @@ export const ROOT = path.resolve(new URL('../..', import.meta.url).pathname);
 export const OUT = process.env.OUT ?? path.join(ROOT, 'out');
 fs.mkdirSync(OUT, { recursive: true });
 
-export async function startServer(port = 4173) {
+export async function startServer(port = Number(process.env.PORT ?? 4173)) {
   const proc = spawn('npx', ['vite', 'preview', '--port', String(port), '--strictPort'], { cwd: ROOT, stdio: 'pipe' });
   const url = `http://localhost:${port}/`;
   for (let i = 0; i < 80; i++) {

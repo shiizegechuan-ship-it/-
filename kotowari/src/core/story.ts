@@ -15,7 +15,7 @@ export interface Line {
   text: string;
 }
 
-export type ScriptFx = 'dollyOkon' | 'dollyFloat' | 'sortLedger' | 'bell' | 'none';
+export type ScriptFx = 'dollyOkon' | 'dollyFloat' | 'dollyGate' | 'sortLedger' | 'bell' | 'none';
 
 export interface Script {
   lines: Line[];
@@ -141,5 +141,68 @@ export const SCRIPTS: Record<string, Script> = {
       s('suzu', '上へ行く。ばあちゃんに会って、確かめる。'),
     ],
     setFlags: ['c1_ledger_read'],
+  },
+
+  // ───────── 二の章
+  c2_intro: {
+    lines: [
+      s('suzu', '竹が鳴いてる。風なんて、ちっとも吹いてないのに。'),
+      s('suzu', '宿場へ下りる近道。……ばあちゃんは、山の上じゃなくて宿場に寄ったのかな。'),
+    ],
+  },
+  c2_sign: {
+    lines: [s('note', '立て札。「風車門　風なき夜は開かず」'), s('suzu', '風なき夜……今夜みたいな夜のことだ。')],
+  },
+  c2_gate: {
+    lines: [s('suzu', '風車門。羽根がぴくりとも回らない。'), s('suzu', '風さえ吹けば開くのに。')],
+  },
+  okon_ch2_first: {
+    lines: [
+      s('okon', '扇でございますね。扇とは、風を起こすもの。'),
+      s('okon', 'お預かりすれば、扇の起こす風は世に吹きます。止まずに、ずっと。'),
+      s('suzu', '扇が無かったら、妖と戦えない。'),
+      s('okon', '戦わずに済む道も、世にはございますよ。風は、敵にも等しく吹きますから。'),
+    ],
+  },
+  c2_firstwind: {
+    fx: 'dollyGate',
+    weighty: true,
+    lines: [s('suzu', '風が……！　竹が、みんな同じ方へしなっていく。'), s('suzu', '風車が回る。門が、開いた。')],
+  },
+  c2_ridge: {
+    lines: [
+      s('suzu', '鎧の面……。あれには、扇が通らなかった。'),
+      s('suzu', 'でも、この風なら。谷のほうへ押し出してやればいい。'),
+    ],
+  },
+  c2_armor: {
+    lines: [
+      s('note', '谷底へ落ちていった鎧の面。風に剥がされた面頬の裏に「権三」と彫ってある。'),
+      s('suzu', '鍛冶屋の権三さん……。面の妖は、やっぱり里の人なんだ。'),
+      s('suzu', '倒したんじゃない。……眠ってるだけ。そうだよね。'),
+    ],
+  },
+  c2_jizo: {
+    lines: [s('note', 'お地蔵さまの足元に、真新しい草鞋が供えてある。子どもの大きさ。'), s('suzu', '弥助の草鞋……？')],
+  },
+  c2_yasuke: {
+    weighty: true,
+    lines: [
+      s('yasuke', '鈴ねえ！　……あ。'),
+      s('suzu', '弥助！　その面……あんたも妖に？'),
+      s('yasuke', 'ちがうよ、かぶってるだけ。みんなかぶってる。千鶴ばあちゃんに頼まれたんだ。'),
+      s('yasuke', '鈴ねえを山の上に行かせるなって。朝が来たら、鈴ねえは……'),
+      s('suzu', '私が、何？'),
+      s('yasuke', '……言えない。約束したもん。'),
+      s('yasuke', 'でも鈴ねえ、どうせ行くんでしょ。だったら宿場の「灯屋」に寄って。ばあちゃん、あそこに何か置いてった。'),
+      s('suzu', 'ありがとう、弥助。……面、似合ってないよ。'),
+      s('yasuke', 'うるさいな。'),
+    ],
+  },
+  c2_bridge: {
+    lines: [s('suzu', '吊り橋。手すりは杭だけ……。'), s('suzu', '風に持っていかれないように、風上へ体を向けて歩こう。')],
+  },
+  c2_end: {
+    lines: [s('suzu', '宿場の灯が見える。……灯籠が、全部ついてる。'), s('suzu', '誰もいないはずの町なのに。')],
   },
 };

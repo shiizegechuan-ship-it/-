@@ -20,6 +20,60 @@ interface EnemyView {
   rig: CreatureRig;
   mats: Map<THREE.Mesh, THREE.Material | THREE.Material[]>;
   lastFlash: boolean;
+  /** 地面に描く攻撃の予兆（外枠と、溜まり具合で伸びる中身） */
+  tele: THREE.Group;
+  teleFill: THREE.Mesh;
+}
+
+const teleMat = () => markerMaterial({ color: GLOW.telegraph, side: THREE.DoubleSide, depthWrite: false }, 0.5);
+/** 突進：前方の帯。叩きつけ：周りの円 */
+function buildTelegraph(e: EnemyState): { g: THREE.Group; fill: THREE.Mesh } {
+  const g = new THREE.Group();
+  const d = e.def;
+  let outline: THREE.BufferGeometry;
+  let fill: THREE.BufferGeometry;
+  if (d.aoe) {
+    outline = new THREE.RingGeometry(d.hitRadius - 0.1, d.hitRadius, 32);
+    fill = new THREE.CircleGeometry(d.hitRadius - 0.12, 32);
+  } else {
+    const len = d.lunge * d.active + d.hitReach + d.hitRadius;
+    const w = d.hitRadius * 2;
+    const shape = new THREE.Shape();
+    shape.moveTo(-w / 2, 0);
+    shape.lineTo(w / 2, 0);
+    shape.lineTo(w / 2, len);
+    shape.lineTo(-w / 2, len);
+    shape.closePath();
+    const hole = new THREE.Path();
+    hole.moveTo(-w / 2 + 0.08, 0.08);
+    hole.lineTo(-w / 2 + 0.08, len - 0.08);
+    hole.lineTo(w / 2 - 0.08, len - 0.08);
+    hole.lineTo(w / 2 - 0.08, 0.08);
+    hole.closePath();
+    shape.holes.push(hole);
+    outline = new THREE.ShapeGeometry(shape);
+    fill = new THREE.PlaneGeometry(w - 0.2, len - 0.2).translate(0, len / 2, 0);
+    // 先端の三角（向き）
+    const tri = new THREE.Shape();
+    tri.moveTo(-w / 2, len + 0.05);
+    tri.lineTo(w / 2, len + 0.05);
+    tri.lineTo(0, len + 0.45);
+    tri.closePath();
+    const tm = new THREE.Mesh(new THREE.ShapeGeometry(tri), teleMat());
+    tm.rotation.x = -Math.PI / 2;
+    tm.scale.set(1, -1, 1);
+    g.add(tm);
+  }
+  const om = new THREE.Mesh(outline, teleMat());
+  om.rotation.x = -Math.PI / 2;
+  if (!d.aoe) om.scale.set(1, -1, 1);
+  const fm = new THREE.Mesh(fill, new THREE.MeshBasicMaterial({ color: GLOW.telegraph, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  fm.rotation.x = -Math.PI / 2;
+  if (!d.aoe) fm.scale.set(1, -1, 1);
+  g.add(om, fm);
+  g.visible = false;
+  g.renderOrder = 3;
+  return { g, fill: fm };
 }
 
 /** 場面（Three.js）。Sim の状態を読んで模型を動かす。Sim は書き換えない。 */
@@ -36,6 +90,8 @@ export class GameView {
   private pickups: { id: string; mesh: THREE.Object3D; taken: () => boolean; y: number }[] = [];
   private okons: OkonRig[] = [];
   private flames: THREE.Object3D[] = [];
+  private animProps: THREE.Object3D[] = [];
+  private windSway = 0;
   private lampSpots: THREE.Vector3[] = [];
   private lamps: THREE.PointLight[] = [];
   private suzuLamp: THREE.PointLight;
@@ -146,9 +202,10 @@ export class GameView {
     this.pickups = [];
     this.okons = [];
     this.flames = [];
+    this.animProps = [];
     this.lampSpots = [];
     this.water = [];
-    for (const v of this.enemies.values()) this.actors.remove(v.rig.root);
+    for (const v of this.enemies.values()) this.actors.remove(v.rig.root, v.tele);
     this.enemies.clear();
     this.sparks.clear();
     this.dust.clear();
@@ -212,6 +269,7 @@ export class GameView {
     for (const p of def.props) {
       const b = buildProp(p);
       this.level.add(b.obj);
+      if (b.obj.userData.anim) this.animProps.push(b.obj);
       this.flames.push(...b.flames);
       this.lampSpots.push(...b.lights);
     }
@@ -268,12 +326,13 @@ export class GameView {
   private enemyView(e: EnemyState): EnemyView {
     let v = this.enemies.get(e.id);
     if (!v) {
-      const rig = buildCreature(e.spawn.type);
+      const rig = buildCreature(e.spawn.type, e.id);
       const mats = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
       for (const m of rig.flash) mats.set(m, m.material);
-      v = { rig, mats, lastFlash: false };
+      const t = buildTelegraph(e);
+      v = { rig, mats, lastFlash: false, tele: t.g, teleFill: t.fill };
       this.enemies.set(e.id, v);
-      this.actors.add(rig.root);
+      this.actors.add(rig.root, t.g);
     }
     return v;
   }
@@ -306,7 +365,7 @@ export class GameView {
     }
     for (const [id, v] of this.enemies)
       if (!seen.has(id)) {
-        this.actors.remove(v.rig.root);
+        this.actors.remove(v.rig.root, v.tele);
         this.enemies.delete(id);
       }
 
@@ -352,6 +411,40 @@ export class GameView {
         const a = t * 0.8 + (i * Math.PI * 2) / 3;
         f.position.set(Math.cos(a) * 0.55, 1.35 + Math.sin(t * 2 + i) * 0.12, Math.sin(a) * 0.55);
       });
+    }
+    // 竹のしなり・風車・人
+    const wind = Math.hypot(sim.wind.x, sim.wind.z);
+    this.windSway += ((wind > 0 ? 1 : 0) - this.windSway) * Math.min(1, dt * 1.5);
+    for (const o of this.animProps) {
+      const kind = o.userData.anim as string;
+      if (kind === 'sway') {
+        const base = Math.sin(t * 0.9 + o.position.x * 0.7 + o.position.z * 0.3) * 0.025;
+        const ws = this.windSway * (0.12 + Math.sin(t * 3.1 + o.position.z) * 0.035);
+        // 風下（+x）へしなる：z 軸まわりに負の回転
+        o.rotation.z = -(base + ws) * Math.sign(sim.level.wind?.x ?? 1);
+        o.rotation.x = base * 0.6;
+      } else if (kind === 'windmill') {
+        const bl = o.getObjectByName('blades');
+        if (bl) bl.rotation.z -= dt * (0.15 + this.windSway * 4.5);
+      } else if (kind === 'npc') {
+        o.children[0].position.y = Math.abs(Math.sin(t * 2.2)) * 0.03;
+      }
+    }
+    // 風の筋
+    if (wind > 0 && Math.random() < dt * 40) {
+      const len = 0.5 + Math.random() * 0.8;
+      for (let i = 0; i < 4; i++)
+        this.dust.spawn({
+          x: b.x - sim.wind.x * 4 + (Math.random() - 0.5) * 16 + (sim.wind.x / wind) * i * len * 0.25,
+          y: b.y + 0.2 + Math.random() * 3,
+          z: b.z - sim.wind.z * 4 + (Math.random() - 0.5) * 16 + (sim.wind.z / wind) * i * len * 0.25,
+          vx: sim.wind.x * 5,
+          vz: sim.wind.z * 5,
+          life: 0.7,
+          size: 0.05,
+          grav: 0,
+          color: '#e4ebe8',
+        });
     }
     // 火の揺らめき
     for (const f of this.flames) {
@@ -556,6 +649,17 @@ export class GameView {
       }
     }
     if (eyeMat) eyeMat.color.set(eye);
+    // 地面の予兆：溜めの間だけ。中身が溜まり具合で満ちる
+    const showTele = e.mode === 'windup' || (e.mode === 'attack' && e.t < e.def.active);
+    v.tele.visible = showTele;
+    if (showTele) {
+      v.tele.position.set(b.x, b.y + 0.04, b.z);
+      v.tele.rotation.y = e.def.aoe ? 0 : e.yaw;
+      const k = e.mode === 'attack' ? 1 : Math.min(1, e.t / e.def.windup);
+      if (e.def.aoe) v.teleFill.scale.set(k, k, 1);
+      else v.teleFill.scale.set(1, -k, 1);
+      (v.teleFill.material as THREE.MeshBasicMaterial).opacity = e.mode === 'attack' ? 0.55 : 0.18 + k * 0.2;
+    }
     // 被弾の白
     const flash = e.flash > 0;
     if (flash !== v.lastFlash) {

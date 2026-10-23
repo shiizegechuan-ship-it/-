@@ -45,6 +45,44 @@ const painters: Record<string, Painter> = {
         px(x, y, v < 0.3 ? C.nezumi : v < 0.75 ? '#77737f' : v < 0.95 ? C.hai : C.ginnezu);
       }
   },
+  moss(px, n) {
+    // 苔と落ち葉の地面
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const v = n(x >> 1, y >> 1);
+        const w = n(x, y);
+        let c = v < 0.35 ? C.tokiwa : v < 0.75 ? '#34553f' : C.matsuba;
+        if (w < 0.06) c = C.kuchiba;
+        else if (w > 0.96) c = C.koke;
+        px(x, y, c);
+      }
+  },
+  bamboowall(px, n) {
+    // 竹の茂み：縦の幹と節、隙間は暗い
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const stalk = Math.floor(x / 5);
+        const k = x % 5;
+        const off = Math.floor(n(stalk, 3) * 16);
+        let c = k === 4 ? C.kachi : k === 0 ? C.matsuba : k === 3 ? C.tokiwa : C.wakatake;
+        if ((y + off) % 16 === 0 && k < 4) c = C.koke;
+        if (n(stalk, 7) < 0.25 && k < 4) c = k === 0 ? C.tokiwa : C.matsuba;
+        px(x, y, c);
+      }
+  },
+  bridge(px, n) {
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const plank = Math.floor(y / 4);
+        let c = n(plank, 2) < 0.5 ? C.kuchiba : C.hiwada;
+        if (y % 4 === 0) c = C.kogecha;
+        if (n(x, y) < 0.05) c = C.kuri;
+        px(x, y, c);
+      }
+  },
+  bridgepost(px) {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) px(x, y, y % 10 < 2 ? C.suna : x % 4 === 0 ? C.kogecha : C.kuri);
+  },
   roof(px) {
     // 瓦（縦の筋と段）
     for (let y = 0; y < S; y++)

@@ -23,8 +23,56 @@ const flashable = (root: THREE.Object3D): THREE.Mesh[] => {
   return out;
 };
 
-/** 面の妖：能面のような白い面と、ぼろ布の体。足は無く、少し浮いている */
-function menyo(): CreatureRig {
+/** 祭りの面。variant 0 狐・1 おかめ・2 ひょっとこ・3 鬼 */
+function maskVox(variant: number): Vox {
+  const m = new Vox();
+  switch (variant) {
+    case 0: // 狐面：白に朱の隈取、尖った耳
+      m.ellipsoid(0, 0, 0, 4.2, 5.0, 1.6, C.gofun);
+      m.box(-4, 5, 0, -3, 8, 1, C.gofun);
+      m.box(3, 5, 0, 4, 8, 1, C.gofun);
+      m.box(-4, 6, 1, -4, 7, 1, C.shu);
+      m.box(4, 6, 1, 4, 7, 1, C.shu);
+      m.box(-1, -4, 1, 1, -2, 3, C.gofun); // 鼻先
+      m.set(0, -2, 3, C.sumi);
+      m.box(-3, 2, 1, -1, 2, 2, C.shu);
+      m.box(1, 2, 1, 3, 2, 2, C.shu);
+      m.box(-3, 4, 1, -2, 4, 2, C.kin);
+      m.box(2, 4, 1, 3, 4, 2, C.kin);
+      break;
+    case 1: // おかめ：丸い白、赤い頬、小さな口、高い眉
+      m.ellipsoid(0, 0, 0, 4.6, 5.0, 1.7, C.gofun);
+      m.box(-3, 4, 1, -2, 4, 2, C.sumi);
+      m.box(2, 4, 1, 3, 4, 2, C.sumi);
+      m.box(-3, -1, 1, -2, 0, 2, C.sakura);
+      m.box(2, -1, 1, 3, 0, 2, C.sakura);
+      m.set(0, -3, 2, C.beni);
+      m.box(-4, 5, -1, 4, 6, 0, C.sumi); // 髪の生え際
+      break;
+    case 2: // ひょっとこ：土色の顔、尖らせた口、片目が小さい
+      m.ellipsoid(0, 0, 0, 4.0, 5.0, 1.6, C.suna);
+      m.box(-1, -3, 1, 1, -2, 4, C.suna);
+      m.set(0, -2, 4, C.kuri);
+      m.box(-3, 2, 1, -1, 2, 2, C.sumi);
+      m.set(2, 2, 2, C.sumi);
+      m.box(-4, 4, 1, 4, 4, 1, C.kuri);
+      m.box(-4, 5, -1, 4, 6, 0, C.ai); // 手ぬぐい
+      break;
+    default: // 鬼：朱の顔、角、金の目
+      m.ellipsoid(0, 0, 0, 4.4, 5.0, 1.7, C.shu);
+      m.box(-4, 5, 0, -3, 8, 0, C.ukon);
+      m.box(3, 5, 0, 4, 8, 0, C.ukon);
+      m.box(-3, 2, 1, -1, 3, 2, C.kin);
+      m.box(1, 2, 1, 3, 3, 2, C.kin);
+      m.box(-3, -3, 1, 3, -3, 2, C.gofun); // 牙の並び
+      m.box(-2, -2, 1, 2, -2, 2, C.enji);
+      break;
+  }
+  return m;
+}
+
+/** 面の妖：祭りの面と、ぼろ布の体。足は無く、少し浮いている */
+function menyo(variant = 0): CreatureRig {
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
@@ -41,26 +89,17 @@ function menyo(): CreatureRig {
   cloth.box(-5, 11, -2, 5, 13, 2, C.sumi);
   const clothMesh = voxMesh(cloth, V16, [0, 2, 0]);
   body.add(clothMesh);
-  // 面
-  const mask = new Vox();
-  mask.ellipsoid(0, 0, 0, 4.2, 5.2, 1.6, C.gofun);
-  mask.box(-3, 3, 1, -1, 3, 2, C.sumi); // 眉
-  mask.box(1, 3, 1, 3, 3, 2, C.sumi);
-  mask.box(-2, -3, 1, 2, -3, 2, C.shu); // 口
-  mask.set(0, -2, 2, C.beni);
-  mask.box(-4, 4, 0, -3, 5, 1, C.shu); // 頬の紋
-  mask.box(3, 4, 0, 4, 5, 1, C.shu);
-  mask.set(-3, -1, 1, C.sakura);
-  mask.set(3, -1, 1, C.sakura);
+  // 面（祭りの面 4 種：狐・おかめ・ひょっとこ・鬼）
+  const mask = maskVox(variant);
   const maskMesh = voxMesh(mask, V16, [0, 0, 0]);
   const head = part('head', [0, 21 * V16, 1 * V16], maskMesh);
   body.add(head);
   // 目（穴）：ふだんは暗く、予兆で赤く光る
   const ev = new Vox();
-  ev.box(-3, 1, 2, -2, 1, 2, '#ffffff');
-  ev.box(2, 1, 2, 3, 1, 2, '#ffffff');
-  const eyes = voxMesh(ev, V16, [0, 0, 0], 'glow');
-  (eyes.material as THREE.MeshBasicMaterial) = (eyes.material as THREE.MeshBasicMaterial).clone();
+  ev.box(-3, 3, 2, -2, 3, 2, '#ffffff');
+  ev.box(2, 3, 2, 3, 3, 2, '#ffffff');
+  const eyes = voxMesh(ev, V16, [0, 0, 0.6], 'glow');
+  eyes.material = (eyes.material as THREE.MeshBasicMaterial).clone();
   head.add(eyes);
   // 布の腕
   const arm = (s: number) => {
@@ -135,19 +174,69 @@ function kamimen(): CreatureRig {
   return { root, body, eyes, flash: flashable(root) };
 }
 
-/** 鎧面：鉄の面頬をつけた重い鎧（扇が効かない）。章 2 で使う */
+/** 鎧面：鉄の面頬と兜、黒漆の札（さね）の鎧。扇が効かない。風で流される */
 function yoroimen(): CreatureRig {
-  const r = menyo();
-  r.root.traverse((o) => {
-    if (o instanceof THREE.Mesh && o.castShadow) o.scale.set(1.15, 1.15, 1.15);
-  });
-  return r;
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(body);
+  const v = new Vox();
+  // 草摺（腰の板）と胴
+  for (let y = 0; y <= 6; y++) v.cylinder(0, 0, y, y, 4.5 + (6 - y) * 0.25, (x, yy, z) => ((yy % 2 === 0) ? C.sumi : (x + z) % 3 === 0 ? C.beni : '#2a2234'));
+  v.box(-5, 7, -3, 5, 15, 3, (x, y) => (y % 2 === 0 ? C.sumi : x % 3 === 0 ? C.kin : '#2a2234'));
+  // 大袖（肩）
+  v.box(-8, 10, -3, -6, 15, 3, (_x, y) => (y % 2 ? C.beni : C.sumi));
+  v.box(6, 10, -3, 8, 15, 3, (_x, y) => (y % 2 ? C.beni : C.sumi));
+  body.add(voxMesh(v, V16, [-0.5, 0, -0.5]));
+  // 兜と面頬
+  const h = new Vox();
+  h.box(-4, 0, -3, 4, 5, 3, '#4a4752'); // 面頬（鉄）
+  h.box(-3, 1, 3, 3, 1, 3, C.sumi); // 口の隙間
+  h.box(-2, 0, 3, 2, 0, 3, C.gofun); // 歯
+  h.box(-1, 2, 3, 1, 3, 4, '#4a4752'); // 鼻
+  h.box(-5, 5, -4, 5, 7, 4, C.sumi); // 鉢
+  h.box(-6, 5, -4, -5, 6, 3, C.sumi); // 吹返し
+  h.box(5, 5, -4, 6, 6, 3, C.sumi);
+  // 鍬形（金の角）
+  for (let i = 0; i <= 5; i++) {
+    h.set(-2 - Math.round(i * 0.6), 8 + i, 3, C.ukon);
+    h.set(2 + Math.round(i * 0.6), 8 + i, 3, C.ukon);
+  }
+  h.box(-1, 7, 3, 1, 8, 4, C.kin);
+  const head = part('head', [0, 16 * V16, 0], voxMesh(h, V16, [-0.5, 0, -0.5]));
+  body.add(head);
+  const ev = new Vox();
+  ev.box(-3, 4, 3, -2, 4, 3, '#ffffff');
+  ev.box(2, 4, 3, 3, 4, 3, '#ffffff');
+  const eyes = voxMesh(ev, V16, [-0.5, 0, -0.4], 'glow');
+  eyes.material = (eyes.material as THREE.MeshBasicMaterial).clone();
+  head.add(eyes);
+  const arm = (s: number) => {
+    const a = new Vox();
+    a.box(0, -7, -1, 2 * s, 0, 1, C.sumi);
+    a.box(0, -9, -1, 2 * s, -8, 1, '#4a4752');
+    // 薙刀の柄（右手）
+    if (s < 0) a.box(-1, -9, -8, -1, -9, 10, C.kuri);
+    if (s < 0) a.box(-1, -9, 11, -1, -9, 14, C.ginnezu);
+    return part(s > 0 ? 'armL' : 'armR', [s * 6 * V16, 14 * V16, 0], voxMesh(a, V16, [s > 0 ? 0 : -1, 0, -0.5]));
+  };
+  const armL = arm(1);
+  const armR = arm(-1);
+  body.add(armL, armR);
+  root.scale.setScalar(1.05);
+  return { root, body, eyes, armL, armR, flash: flashable(root) };
 }
 
-export function buildCreature(type: EnemyType): CreatureRig {
+/** 同じ id なら同じ見た目（面の種類） */
+const variantOf = (id: string, n: number): number => {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h % n;
+};
+
+export function buildCreature(type: EnemyType, id = ''): CreatureRig {
   switch (type) {
     case 'menyo':
-      return menyo();
+      return menyo(variantOf(id, 4));
     case 'ishibozu':
       return ishibozu();
     case 'kamimen':
