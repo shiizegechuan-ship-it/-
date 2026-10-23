@@ -49,7 +49,8 @@ export class RouteBot {
       const dx = foe.body.x - b.x;
       const dz = foe.body.z - b.z;
       const d = Math.hypot(dx, dz);
-      if (foe.def.fanImmune || !sim.has('fan')) {
+      const immune = foe.def.fanImmune || (foe.def.needsShadowLaw && sim.has('lantern'));
+      if (immune || !sim.has('fan')) {
         // 扇が効かない：かわして先へ
       } else {
         if (d > 1.3) this.steer(inp, dx, dz);
@@ -78,6 +79,7 @@ export class RouteBot {
         return inp;
       }
       if (node.act === 'shop') this.shop(node);
+      if (node.act === 'read') inp.interactPressed = true;
       this.log.push(`node ${this.idx} @${sim.frame}`);
       this.idx++;
       this.waitT = 0;
@@ -122,7 +124,7 @@ export class RouteBot {
     let best = null;
     let bd = range;
     for (const e of this.sim.enemies) {
-      if (e.mode === 'dead' || e.mode === 'float') continue;
+      if (e.mode === 'dead' || e.mode === 'float' || e.mode === 'flee') continue;
       const d = Math.hypot(e.body.x - b.x, e.body.z - b.z);
       if (d < bd && Math.abs(e.body.y - b.y) < 1.5) { bd = d; best = e; }
     }

@@ -52,6 +52,16 @@ function build(kind: string, variant: number): PropBuild {
       return kazaguruma();
     case 'yasuke':
       return yasuke();
+    case 'machiya':
+      return machiya(variant);
+    case 'inn':
+      return inn();
+    case 'bigChochin':
+      return bigChochin();
+    case 'willow':
+      return willow();
+    case 'well':
+      return well();
     default:
       return { obj: new THREE.Group(), lights: [], flames: [] };
   }
@@ -481,6 +491,122 @@ function yasuke(): PropBuild {
   const obj = new THREE.Group();
   obj.add(voxMesh(v, V16, [-0.5, 0, -0.5]));
   obj.userData.anim = 'npc';
+  return { obj, lights: [], flames: [] };
+}
+
+/** 町家の正面（原点は通りに面した壁の足元の中心、+z が通り側。幅 4m） */
+function machiya(variant: number): PropBuild {
+  const v = new Vox();
+  const W = 16; // 半幅 2m（1/8）
+  const wood = variant === 1 ? C.kuri : C.kogecha;
+  // 1 階：格子と暖簾の入口
+  v.box(-W, 0, -2, W, 22, 0, (x, y) => {
+    if (y < 2) return C.nezumi;
+    if (Math.abs(x) < 5 && y < 18) return y > 13 ? (Math.floor(x / 2) % 2 ? C.ai : C.gofun) : null; // 入口と暖簾
+    return x % 2 === 0 ? wood : y % 6 === 0 ? wood : '#2a1c18';
+  });
+  // 入口の奥（暗い土間）
+  v.box(-4, 2, -5, 4, 13, -5, C.yoru);
+  // 庇
+  for (let i = 0; i < 4; i++) v.box(-W - 1, 22 + i, 0 + i, W + 1, 22 + i, 4 - i, (x) => (x % 3 === 0 ? C.nezumi : '#3e3b49'));
+  // 2 階：漆喰と虫籠窓
+  v.box(-W, 26, -2, W, 40, -1, (x, y) => {
+    const win = y >= 30 && y <= 36 && Math.abs(x) <= 10;
+    if (win) return x % 3 === 0 ? C.kogecha : (variant === 2 ? '#ffcf7a' : C.yoru);
+    return C.gofun;
+  });
+  // 屋根
+  for (let i = 0; i < 5; i++) v.box(-W - 2, 40 + i, -2 - i, W + 2, 40 + i, 3 - i, (x) => (x % 3 === 0 ? C.nezumi : '#3e3b49'));
+  const obj = new THREE.Group();
+  obj.add(voxMesh(v, V8, [-0.5, 0, 0]));
+  // 軒の提灯
+  const g = new Vox();
+  g.box(-2, 0, -2, 2, 4, 2, variant === 0 ? '#ff6a4a' : '#fff0c8');
+  const ch = flame(g, V8, [-8, 17, 4]);
+  obj.add(ch);
+  const k = new Vox();
+  k.box(-2, 5, -2, 2, 5, 2, C.sumi);
+  k.box(-2, -1, -2, 2, -1, 2, C.sumi);
+  obj.add(voxMesh(k, V8, [-8, 17, 4]));
+  return { obj, lights: [new THREE.Vector3(-0.75, 2.4, 0.75)], flames: [] };
+}
+
+/** 灯屋：二階建ての大きな宿。軒に巨大な提灯の看板、帳場の行灯 */
+function inn(): PropBuild {
+  const v = new Vox();
+  const W = 64; // 半幅 8m（1/8）
+  v.box(-W, 0, -4, W, 26, 0, (x, y) => {
+    if (y < 2) return C.nezumi;
+    if (Math.abs(x - 20) < 8 && y < 20) return null; // 帳場の間口
+    return x % 3 === 0 ? C.kogecha : y % 8 === 0 ? C.kuri : '#2a1c18';
+  });
+  v.box(12, 2, -8, 28, 20, -8, C.kuri);
+  v.box(13, 2, -7, 27, 3, -1, C.hiwada); // 上がり框
+  for (let i = 0; i < 5; i++) v.box(-W - 2, 26 + i, i, W + 2, 26 + i, 6 - i, (x) => (x % 3 === 0 ? C.nezumi : '#3e3b49'));
+  v.box(-W, 31, -4, W, 50, -3, (x, y) => (y >= 36 && y <= 44 && x % 12 !== 0 ? (x % 3 === 0 ? C.kogecha : '#ffcf7a') : C.gofun));
+  for (let i = 0; i < 7; i++) v.box(-W - 3, 50 + i, -4 - i, W + 3, 50 + i, 4 - i, (x) => (x % 3 === 0 ? C.nezumi : '#3e3b49'));
+  // 看板
+  v.box(-14, 33, 1, 14, 37, 1, C.kuri);
+  for (let x = -12; x <= 12; x += 3) v.box(x, 34, 2, x + 1, 36, 2, C.ukon);
+  const obj = new THREE.Group();
+  obj.add(voxMesh(v, V8, [-0.5, 0, 0]));
+  // 帳場の行灯と帳面
+  const g = new Vox();
+  g.box(-2, 0, -2, 2, 5, 2, '#ffd69a');
+  obj.add(flame(g, V8, [14, 3, -6]));
+  return { obj, lights: [new THREE.Vector3(1.75, 1.0, -0.6), new THREE.Vector3(-4, 3.2, 0.8)], flames: [] };
+}
+
+/** 大提灯（影を落とす目印。原点は提灯の中心） */
+function bigChochin(): PropBuild {
+  const v = new Vox();
+  const g = new Vox();
+  for (let y = -10; y <= 10; y++) {
+    const r = Math.sqrt(Math.max(0, 1 - (y / 11) ** 2)) * 8;
+    for (let x = -9; x <= 9; x++)
+      for (let z = -9; z <= 9; z++) {
+        const d = Math.hypot(x, z);
+        if (d <= r && d > r - 1.2) {
+          if (Math.abs(y) >= 9 || y % 4 === 0) v.set(x, y, z, C.sumi);
+          else g.set(x, y, z, (x + y) % 9 === 0 ? '#ff6a4a' : '#ff9a5a');
+        }
+      }
+  }
+  v.box(-3, 11, -3, 3, 12, 3, C.sumi);
+  v.box(-1, 13, -1, 1, 40, 1, C.sumi); // 吊り紐
+  const obj = new THREE.Group();
+  obj.add(voxMesh(v, V8, [-0.5, -0.5, -0.5]));
+  obj.add(flame(g, V8, [-0.5, -0.5, -0.5]));
+  return { obj, lights: [new THREE.Vector3(0, 0, 0)], flames: [] };
+}
+
+function willow(): PropBuild {
+  const v = new Vox();
+  v.cylinder(0, 0, 0, 30, (y) => 1.6 - y * 0.02, C.kogecha);
+  for (let a = 0; a < 26; a++) {
+    const ang = (a / 26) * Math.PI * 2;
+    const r = 6 + (a % 3) * 2;
+    const x0 = Math.round(Math.cos(ang) * r);
+    const z0 = Math.round(Math.sin(ang) * r);
+    const len = 14 + (a % 5) * 3;
+    for (let i = 0; i < len; i++) v.set(x0 + Math.round(Math.cos(ang) * i * 0.15), 34 - i, z0 + Math.round(Math.sin(ang) * i * 0.15), i % 4 === 0 ? C.matsuba : C.wakatake);
+  }
+  v.ellipsoid(0, 34, 0, 9, 4, 9, (x, y, z) => (hash3(x, y, z) < 0.3 ? null : C.matsuba));
+  const obj = new THREE.Group();
+  obj.add(voxMesh(v, V8, [-0.5, 0, -0.5], 'toon', 0.08));
+  obj.userData.anim = 'sway';
+  return { obj, lights: [], flames: [] };
+}
+
+function well(): PropBuild {
+  const v = new Vox();
+  v.cylinder(0, 0, 0, 6, 6, (x, y, z) => (Math.hypot(x, z) < 4.5 ? (y < 5 ? C.yoru : null) : y % 3 === 0 ? C.nezumi : C.hai));
+  for (const x of [-6, 6]) v.box(x, 6, 0, x, 22, 0, C.kuri);
+  v.box(-7, 22, -1, 7, 23, 1, C.kuri);
+  v.box(-1, 14, 0, 1, 21, 0, C.suna); // 綱
+  v.box(-2, 12, -1, 2, 14, 1, C.kuchiba); // 釣瓶
+  const obj = new THREE.Group();
+  obj.add(voxMesh(v, V16, [-0.5, 0, -0.5]));
   return { obj, lights: [], flames: [] };
 }
 

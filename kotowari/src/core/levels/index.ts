@@ -1,9 +1,10 @@
 import { ch1 } from './ch1';
 import { ch2 } from './ch2';
+import { ch3 } from './ch3';
 import { prologue } from './prologue';
 import type { ChapterId, LevelDef } from './types';
 
-const builders: Partial<Record<ChapterId, () => LevelDef>> = { prologue, ch1, ch2 };
+const builders: Partial<Record<ChapterId, () => LevelDef>> = { prologue, ch1, ch2, ch3 };
 const cache = new Map<ChapterId, LevelDef>();
 
 export const CHAPTER_ORDER: ChapterId[] = ['prologue', 'ch1', 'ch2', 'ch3', 'ch4', 'finale'];

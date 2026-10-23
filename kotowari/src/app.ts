@@ -22,9 +22,9 @@ export const VERSION = '0.2.0';
 
 type State = 'title' | 'play' | 'dialog' | 'shop' | 'menu' | 'card' | 'slice' | 'cine' | 'end';
 
-const SONG_FOR: Record<string, string> = { prologue: 'festival', ch1: 'cedar', ch2: 'bamboo' };
+const SONG_FOR: Record<string, string> = { prologue: 'festival', ch1: 'cedar', ch2: 'bamboo', ch3: 'town' };
 /** 章で初めて質屋を開いたときのおこんの話 */
-const FIRST_SHOP: Partial<Record<ChapterId, string>> = { ch1: 'okon_first_shop', ch2: 'okon_ch2_first' };
+const FIRST_SHOP: Partial<Record<ChapterId, string>> = { ch1: 'okon_first_shop', ch2: 'okon_ch2_first', ch3: 'okon_ch3_first' };
 
 export class App {
   readonly pipe: PixelPipeline;
@@ -262,6 +262,7 @@ export class App {
     this.scriptFx(script);
     this.ui.openDialog(script, () => {
       this.audio.duck(false);
+      this.fx.cinema = false;
       this.cam.focus = null;
       this.state = 'play';
       this.acc = 0;
@@ -291,6 +292,18 @@ export class App {
         if (g) this.cam.dollyZoom(new THREE.Vector3((g.minX + g.maxX) / 2, g.minY + 1.5, (g.minZ + g.maxZ) / 2), 24, 2.0);
         break;
       }
+      case 'dollyShadow': {
+        const sh = this.sim.world.shadows;
+        const b = this.sim.player.body;
+        const near = [...sh].sort((p, q) => Math.hypot(p.minX - b.x, p.minZ - b.z) - Math.hypot(q.minX - b.x, q.minZ - b.z))[0];
+        if (near) this.cam.dollyZoom(new THREE.Vector3((near.minX + near.maxX) / 2, near.maxY, (near.minZ + near.maxZ) / 2), 26, 2.0);
+        break;
+      }
+      case 'cinemaDiary':
+        // 日記を読む間は、景色を止めて灯の火だけを揺らす（シネマグラフ）
+        this.pipe.snapshot();
+        this.fx.cinema = true;
+        break;
       case 'sortLedger':
         this.fx.pixelSort(1.6, 1);
         this.sfx('pawn');
@@ -368,7 +381,9 @@ export class App {
         ? 'c1_firstpawn'
         : kind === 'pawn' && id === 'fan' && !this.sim.flag('seen_firstwind') && !!this.sim.level.wind
           ? 'c2_firstwind'
-          : null;
+          : kind === 'pawn' && id === 'lantern' && !this.sim.flag('seen_firstshadow') && this.sim.world.shadows.length > 0
+            ? 'c3_firstshadow'
+            : null;
     const firstFloat = !!firstScript;
     if (kind === 'pawn' && id === 'jump') {
       this.sfx('float');
@@ -379,7 +394,7 @@ export class App {
     const reopen = () => this.openShop(this.shopShrine, ['jump', 'fan', 'lantern', 'dash'].indexOf(id));
     this.cine(firstFloat ? 0.6 : 1.4, () => {
       if (firstScript) {
-        this.sim.setFlag(firstScript === 'c1_firstpawn' ? 'seen_firstpawn' : 'seen_firstwind');
+        this.sim.setFlag(firstScript === 'c1_firstpawn' ? 'seen_firstpawn' : firstScript === 'c2_firstwind' ? 'seen_firstwind' : 'seen_firstshadow');
         this.say(firstScript, reopen);
       } else reopen();
     });

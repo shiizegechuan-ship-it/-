@@ -43,4 +43,13 @@ describe('道しるべボットで章を通す', () => {
     expect(r.sim.flag('law:fan')).toBe(true);
     expect(r.sim.flag('trig:c2_yasuke')).toBe(true);
   });
+
+  it('三の章：灯で幽かな橋を渡り、日記を読み、灯を質に入れて影の橋を渡り、請け出して最後の堀へ', () => {
+    const r = playChapter('ch3', { ledger: { zeni: 60, debt: 0, pawned: [] } });
+    if (!r.exit) console.log(r.bot.log.join('\n'), r.sim.player.body, r.sim.ledger, r.deaths, r.sim.enemies.map((e) => e.id + ':' + e.mode));
+    expect(r.exit).toBe('ch4');
+    expect(r.sim.flag('read:c3_diary')).toBe(true);
+    expect(r.sim.flag('law:lantern')).toBe(true);
+    expect(r.sim.flag('redeemed:lantern')).toBe(true);
+  });
 });

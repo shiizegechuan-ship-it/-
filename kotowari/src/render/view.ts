@@ -261,7 +261,13 @@ export class GameView {
       const full = new THREE.Mesh(boxesGeometry([s]), this.mat('shadow'));
       const decal = new THREE.Mesh(new THREE.PlaneGeometry(s.maxX - s.minX, s.maxZ - s.minZ), new THREE.MeshBasicMaterial({ color: C.yoru, transparent: true, opacity: 0.75, depthWrite: false }));
       decal.rotation.x = -Math.PI / 2;
-      decal.position.set((s.minX + s.maxX) / 2, s.maxY + 0.01, (s.minZ + s.maxZ) / 2);
+      // 影の理が無いときは、真下の地面（水面）に落ちた影として描く
+      const cx = (s.minX + s.maxX) / 2;
+      const cz = (s.minZ + s.maxZ) / 2;
+      let floor = -Infinity;
+      for (const t of sim.world.statics)
+        if (t.minX <= cx && t.maxX >= cx && t.minZ <= cz && t.maxZ >= cz && t.maxY <= s.minY + 0.01) floor = Math.max(floor, t.maxY);
+      decal.position.set(cx, (Number.isFinite(floor) ? floor : s.maxY) + 0.02, cz);
       this.level.add(full, decal);
       this.shadows.push({ solid: s, full, decal });
     }
@@ -431,20 +437,19 @@ export class GameView {
       }
     }
     // 風の筋
-    if (wind > 0 && Math.random() < dt * 40) {
-      const len = 0.5 + Math.random() * 0.8;
-      for (let i = 0; i < 4; i++)
-        this.dust.spawn({
-          x: b.x - sim.wind.x * 4 + (Math.random() - 0.5) * 16 + (sim.wind.x / wind) * i * len * 0.25,
-          y: b.y + 0.2 + Math.random() * 3,
-          z: b.z - sim.wind.z * 4 + (Math.random() - 0.5) * 16 + (sim.wind.z / wind) * i * len * 0.25,
-          vx: sim.wind.x * 5,
-          vz: sim.wind.z * 5,
-          life: 0.7,
-          size: 0.05,
-          grav: 0,
-          color: '#e4ebe8',
-        });
+    if (wind > 0 && Math.random() < dt * 30) {
+      this.dust.spawn({
+        x: b.x - sim.wind.x * 3 + (Math.random() - 0.5) * 16,
+        y: b.y + 0.2 + Math.random() * 3,
+        z: b.z - sim.wind.z * 3 + (Math.random() - 0.5) * 16,
+        vx: sim.wind.x * 6,
+        vz: sim.wind.z * 6,
+        life: 0.6,
+        size: 0.035,
+        stretch: 0.9 + Math.random() * 0.9,
+        grav: 0,
+        color: '#e4ebe8',
+      });
     }
     // 火の揺らめき
     for (const f of this.flames) {

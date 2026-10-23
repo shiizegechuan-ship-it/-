@@ -52,7 +52,7 @@ const painters: Record<string, Painter> = {
         const v = n(x >> 1, y >> 1);
         const w = n(x, y);
         let c = v < 0.35 ? C.tokiwa : v < 0.75 ? '#34553f' : C.matsuba;
-        if (w < 0.06) c = C.kuchiba;
+        if (w < 0.025) c = C.kuchiba;
         else if (w > 0.96) c = C.koke;
         px(x, y, c);
       }
@@ -82,6 +82,20 @@ const painters: Record<string, Painter> = {
   },
   bridgepost(px) {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) px(x, y, y % 10 < 2 ? C.suna : x % 4 === 0 ? C.kogecha : C.kuri);
+  },
+  cobble(px, n) {
+    // 宿場の石畳：小さめの丸い石
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const cx = Math.floor(x / 6);
+        const cy = Math.floor((y + (cx % 2) * 3) / 6);
+        const lx = x % 6;
+        const ly = (y + (cx % 2) * 3) % 6;
+        let c = n(cx * 7 + cy, 4) < 0.5 ? '#6c6874' : '#7d7986';
+        if (lx === 0 || ly === 0) c = '#3e3b49';
+        else if (lx === 1 && ly === 1) c = C.hai;
+        px(x, y, c);
+      }
   },
   roof(px) {
     // 瓦（縦の筋と段）

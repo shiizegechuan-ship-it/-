@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { EnemyType } from '../../core/levels/types';
 import { GLOW, PALETTE as C } from '../palette';
-import { Vox } from '../voxel';
+import { Vox, hash3 } from '../voxel';
 import { V16, part, voxMesh } from './common';
 
 export interface CreatureRig {
@@ -233,8 +233,44 @@ const variantOf = (id: string, n: number): number => {
   return h % n;
 };
 
+/** 影法師：人の形をした影。縁がほつれ、白い目だけが光る */
+function kageboshi(): CreatureRig {
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(body);
+  const v = new Vox();
+  for (let y = 0; y <= 15; y++) {
+    const r = y < 9 ? 2.4 + (9 - y) * 0.18 : 3;
+    v.cylinder(0, 0, y, y, r, (x, yy, z) => (yy < 3 && hash3(x, yy, z) < 0.35 ? null : hash3(x, yy, z) < 0.12 ? C.murasaki : C.yoru));
+  }
+  v.ellipsoid(0, 19, 0, 3.2, 3.6, 3.0, (x, y, z) => (hash3(x, y, z) < 0.08 ? C.murasaki : C.yoru));
+  // 角のような髪のほつれ
+  v.set(-2, 23, 0, C.yoru);
+  v.set(2, 23, -1, C.yoru);
+  v.set(0, 24, 0, C.yoru);
+  body.add(voxMesh(v, V16, [-0.5, 0, -0.5], 'toon', 0.02));
+  const ev = new Vox();
+  ev.box(-2, 19, 3, -1, 20, 3, '#ffffff');
+  ev.box(1, 19, 3, 2, 20, 3, '#ffffff');
+  const eyes = voxMesh(ev, V16, [-0.5, 0, -0.5], 'glow');
+  eyes.material = (eyes.material as THREE.MeshBasicMaterial).clone();
+  body.add(eyes);
+  const arm = (s: number) => {
+    const a = new Vox();
+    for (let y = -11; y <= 0; y++) a.box(0, y, -1, s, y, 0, hash3(s, y, 3) < 0.3 ? C.murasaki : C.yoru);
+    a.box(s, -12, -1, 2 * s, -12, 1, C.yoru); // 長い指
+    return part(s > 0 ? 'armL' : 'armR', [s * 3.2 * V16, 15 * V16, 0], voxMesh(a, V16, [s > 0 ? 0 : -1, 0, -0.5]));
+  };
+  const armL = arm(1);
+  const armR = arm(-1);
+  body.add(armL, armR);
+  return { root, body, eyes, armL, armR, flash: flashable(root) };
+}
+
 export function buildCreature(type: EnemyType, id = ''): CreatureRig {
   switch (type) {
+    case 'kageboshi':
+      return kageboshi();
     case 'menyo':
       return menyo(variantOf(id, 4));
     case 'ishibozu':

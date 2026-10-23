@@ -16,6 +16,8 @@ interface P {
   drag: number;
   color: THREE.Color;
   spin: number;
+  /** 速度の向きに伸ばす長さ（0 で立方体） */
+  stretch: number;
 }
 
 /** 小さな粒（火花・花びら・塵・銭のきらめき）。InstancedMesh 1 つで描く */
@@ -39,13 +41,13 @@ export class Particles {
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
     for (let i = 0; i < max; i++) {
-      this.ps.push({ alive: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: 0.06, grav: 0, drag: 0, color: new THREE.Color(), spin: 0 });
+      this.ps.push({ alive: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: 0.06, grav: 0, drag: 0, color: new THREE.Color(), spin: 0, stretch: 0 });
       this.mesh.setColorAt(i, new THREE.Color(1, 1, 1));
     }
     this.mesh.count = 0;
   }
 
-  spawn(o: { x: number; y: number; z: number; vx?: number; vy?: number; vz?: number; life?: number; size?: number; grav?: number; drag?: number; color: string | THREE.Color; spin?: number }): void {
+  spawn(o: { x: number; y: number; z: number; vx?: number; vy?: number; vz?: number; life?: number; size?: number; grav?: number; drag?: number; color: string | THREE.Color; spin?: number; stretch?: number }): void {
     const p = this.ps.find((q) => !q.alive);
     if (!p) return;
     p.alive = true;
@@ -60,6 +62,7 @@ export class Particles {
     p.grav = o.grav ?? 0;
     p.drag = o.drag ?? 0;
     p.spin = o.spin ?? 0;
+    p.stretch = o.stretch ?? 0;
     p.color.set(o.color);
   }
 
@@ -104,9 +107,15 @@ export class Particles {
       p.z += p.vz * dt;
       const k = Math.min(1, p.life / (p.max * 0.4));
       const sz = p.size * k;
-      this.e.set(p.life * p.spin, p.life * p.spin * 0.7, 0);
-      this.q.setFromEuler(this.e);
-      this.s.set(sz, sz, sz);
+      if (p.stretch > 0) {
+        this.e.set(0, Math.atan2(-p.vz, p.vx), 0);
+        this.q.setFromEuler(this.e);
+        this.s.set(p.stretch * k, sz, sz);
+      } else {
+        this.e.set(p.life * p.spin, p.life * p.spin * 0.7, 0);
+        this.q.setFromEuler(this.e);
+        this.s.set(sz, sz, sz);
+      }
       this.v.set(p.x, p.y, p.z);
       this.m.compose(this.v, this.q, this.s);
       this.mesh.setMatrixAt(n, this.m);

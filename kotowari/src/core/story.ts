@@ -15,7 +15,7 @@ export interface Line {
   text: string;
 }
 
-export type ScriptFx = 'dollyOkon' | 'dollyFloat' | 'dollyGate' | 'sortLedger' | 'bell' | 'none';
+export type ScriptFx = 'dollyOkon' | 'dollyFloat' | 'dollyGate' | 'dollyShadow' | 'cinemaDiary' | 'sortLedger' | 'bell' | 'none';
 
 export interface Script {
   lines: Line[];
@@ -204,5 +204,64 @@ export const SCRIPTS: Record<string, Script> = {
   },
   c2_end: {
     lines: [s('suzu', '宿場の灯が見える。……灯籠が、全部ついてる。'), s('suzu', '誰もいないはずの町なのに。')],
+  },
+
+  // ───────── 三の章
+  c3_intro: {
+    lines: [
+      s('suzu', '朧宿。灯籠も提灯も、一つ残らずついてる。'),
+      s('suzu', 'なのに、人の気配がまるでない。灯だけが、誰かを待ってるみたい。'),
+    ],
+  },
+  c3_shade: {
+    lines: [s('suzu', '影が……動いた！'), s('suzu', '灯を向けると、逃げていく。扇は、すり抜けるだけ。')],
+  },
+  c3_canal: {
+    lines: [s('suzu', '堀の橋も無い。……でも、大提灯の影が、水の上まで伸びてる。'), s('suzu', '灯をかざせば、足元に何か見えるかも。')],
+  },
+  c3_sign: {
+    lines: [s('note', '立て札。「灯屋　この先。泊まり一夜三十文。灯は消さぬこと」')],
+  },
+  c3_well: {
+    lines: [s('note', '井戸の水面に、鈴の顔が映っている。背後の空に、月がない。'), s('suzu', '……月まで、どこへ行ったの。')],
+  },
+  okon_ch3_first: {
+    lines: [
+      s('okon', '灯でございますか。灯があるから、影ができる。'),
+      s('okon', '灯をお預かりすれば、影は影のまま、形を持ちます。踏めますし、触れもします。'),
+      s('suzu', '影法師も？'),
+      s('okon', 'ええ。触れるということは、払えるということでございますよ。'),
+    ],
+  },
+  c3_firstshadow: {
+    fx: 'dollyShadow',
+    weighty: true,
+    lines: [s('suzu', '灯が消えた。……影が、固まってく。黒い石畳みたいに。'), s('suzu', '提灯の影の上を、歩ける。')],
+  },
+  c3_inn: {
+    lines: [s('suzu', '「灯屋」。弥助が言ってた宿だ。'), s('suzu', '帳場に、ばあちゃんの字の帳面がある。')],
+  },
+  c3_diary: {
+    fx: 'cinemaDiary',
+    weighty: true,
+    lines: [
+      s('note', '千鶴の日記。'),
+      s('note', '「九月十日。山の碑を読み直した。『理替えの暁、舞手を山に納めよ』。今年の舞手は鈴。納めるとは、山へ捧げること——命を」'),
+      s('note', '「九月十五日。里の皆に話した。誰ひとり、鈴を渡すとは言わなかった。面をかぶって、山道を塞ぐと」'),
+      s('note', '「九月二十日。狐の質屋と話をつけた。朝を質に入れる。朝が来なければ、暁も来ない」'),
+      s('note', '頁の端に、小さく書き足してある。「……納める、とは、何を？」'),
+      s('suzu', 'ばあちゃん……私のために、朝を。'),
+      s('suzu', 'でもそれじゃ、里の皆はずっと夜のまま。面をかぶったまま。ばあちゃんも。'),
+      s('suzu', '確かめなきゃ。山の碑の続き——苔に埋もれた、足元を。'),
+    ],
+  },
+  c3_moat: {
+    lines: [s('suzu', '空堀。底が見えないくらい深い。'), s('suzu', 'まっすぐ伸びてるのは、灯屋の大提灯の影だけ。')],
+  },
+  c3_last: {
+    lines: [s('suzu', '最後の堀。こっちには提灯がない。影も落ちてない。'), s('suzu', '……灯が、要る。')],
+  },
+  c3_end: {
+    lines: [s('suzu', '滝の音。山頂は、この上だ。')],
   },
 };
