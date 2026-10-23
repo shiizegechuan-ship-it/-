@@ -20,6 +20,7 @@ export class FollowCamera {
   private slice: { t: number; dur: number; center: THREE.Vector3; yaw0: number; radius: number } | null = null;
   // 演出で注目させる位置（会話など）
   focus: THREE.Vector3 | null = null;
+  private liftSmooth = 0;
 
   constructor(aspect: number) {
     this.cam = new THREE.PerspectiveCamera(CAMERA.fov, aspect, 0.1, 200);
@@ -103,7 +104,14 @@ export class FollowCamera {
     const sp = Math.sin(this.pitch);
     // 壁にめり込まない
     dist = this.clip(sim, lookAt, -fwdX * cp, sp, -fwdZ * cp, dist);
-    const pos = new THREE.Vector3(lookAt.x - fwdX * cp * dist, lookAt.y + sp * dist + (CAMERA.height - CAMERA.lookHeight) * 0.35, lookAt.z - fwdZ * cp * dist);
+    // 壁が近すぎて寄るしかないときは、体に入り込まないよう上へ逃がす（見下ろしになる）
+    const lift = dist < 2.2 ? (2.2 - dist) * 1.3 : 0;
+    this.liftSmooth += (lift - this.liftSmooth) * Math.min(1, dt * 8);
+    const pos = new THREE.Vector3(
+      lookAt.x - fwdX * cp * dist,
+      lookAt.y + sp * dist + (CAMERA.height - CAMERA.lookHeight) * 0.35 + this.liftSmooth,
+      lookAt.z - fwdZ * cp * dist,
+    );
     let fov = CAMERA.fov;
     if (this.dolly) {
       const d = this.dolly;
@@ -149,7 +157,7 @@ export class FollowCamera {
       const y = from.y + dy * d + 0.4;
       const z = from.z + dz * d;
       const hits = phys.query(x - r, y - r, z - r, x + r, y + r, z + r);
-      if (hits.some((s) => !s.dynamic && s.tag !== 'ghost')) return Math.max(0.8, d - 0.3);
+      if (hits.some((s) => !s.dynamic && s.tag !== 'ghost')) return Math.max(1.0, d - 0.3);
     }
     return dist;
   }

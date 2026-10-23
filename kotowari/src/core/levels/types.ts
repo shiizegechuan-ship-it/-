@@ -80,13 +80,21 @@ export interface PropDef {
 
 export interface HazardDef {
   id: string;
+  /** blade：道の上で回る水車の羽根（x 軸まわり。真下に来た羽根が道を帯状に払う）。rock：上から落ちる石（影で予兆） */
   kind: 'blade' | 'rock';
   x: number;
   y: number;
   z: number;
+  /** blade：腕の長さ。rock：当たる半径 */
   radius: number;
-  period: number; // 1 周の秒（緩の理で倍）
+  /** 1 周（rock は 1 回の落下）の秒。緩の理で倍になる */
+  period: number;
+  /** 0..1 のずれ */
   phase?: number;
+  /** blade の回る向き（1 / -1） */
+  dir?: number;
+  /** blade の幅（x 方向） */
+  width?: number;
 }
 
 export interface LevelDef {

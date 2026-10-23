@@ -1,8 +1,9 @@
 import type { AbilityId } from '../data/abilities';
-import { PLAYER } from '../data/tuning';
+import { PLAYER, WORLD } from '../data/tuning';
+import { wrapAngle } from '../math';
+import { Sim } from '../sim';
 import { emptyInput, type InputFrame } from '../input';
 import type { RouteNode } from '../levels/types';
-import type { Sim } from '../sim';
 
 /**
  * 章の道しるべ（route）をたどる自動プレイ。テストと性能計測に使う。
@@ -67,6 +68,8 @@ export class RouteBot {
     const dz = node.z - b.z;
     const dist = Math.hypot(dx, dz);
     const r = node.r ?? 0.9;
+    // 仕掛けの時機を見る（危ない帯の手前で待つ）
+    if (this.skill > 0 && this.hazardAhead()) return inp;
 
     if (node.act === 'lantern' && sim.has('lantern') && !p.lanternOn && !this.toggled) {
       inp.lanternPressed = true;
@@ -102,6 +105,44 @@ export class RouteBot {
       this.stuckT = 0.6;
     }
     return inp;
+  }
+
+  /** これから通る仕掛けが、通り抜ける間に危なくなるなら true（手前で待つ） */
+  private hazardAhead(): boolean {
+    const sim = this.sim;
+    const b = sim.player.body;
+    const rate = sim.ledger.pawned.includes('dash') ? WORLD.slowLawTimeScale : 1;
+    for (const h of sim.level.hazards) {
+      if (Math.abs(b.y - h.y) > 2) continue;
+      if (h.kind === 'blade') {
+        if (Math.abs(b.x - h.x) > (h.width ?? 4) / 2) continue;
+        const reach = h.radius * Math.sin(Sim.BLADE_ARC) + 0.75;
+        const before = h.z - reach - b.z; // 帯の手前までの距離
+        if (before < 0 || before > 1.2) continue; // 帯の中・遠い所では判断しない
+        // 今走り出したら、各時刻の自分の z と羽根の先の z が重なるか
+        const cross = (2 * reach + before + 0.4) / PLAYER.runSpeed;
+        for (let t = 0; t <= cross; t += 0.03) {
+          const pz = b.z + PLAYER.runSpeed * Math.max(0, t - 0.08);
+          const clock = sim.hazardClock + t * rate;
+          for (let k = 0; k < 2; k++) {
+            const d = wrapAngle((clock / h.period + (h.phase ?? 0)) * Math.PI * 2 * (h.dir ?? 1) + k * Math.PI);
+            if (Math.abs(d) > Sim.BLADE_ARC + 0.05) continue;
+            const tipZ = h.z + Math.sin(d) * h.radius;
+            if (Math.abs(pz - tipZ) < 0.35 + b.hw + 0.35) return true;
+          }
+        }
+      } else {
+        const dzr = h.z - b.z;
+        if (dzr < h.radius || dzr > h.radius + 1.0 || Math.abs(b.x - h.x) > h.radius + 0.6) continue;
+        const cross = (2 * h.radius + 1.6) / PLAYER.runSpeed;
+        for (let t = 0; t <= cross; t += 0.04) {
+          const u = (sim.hazardClock + t * rate) / h.period + (h.phase ?? 0);
+          const f = u - Math.floor(u);
+          if (f >= Sim.ROCK_FALL - 0.03 && f < Sim.ROCK_FALL + 0.1) return true;
+        }
+      }
+    }
+    return false;
   }
 
   private shop(node: RouteNode): void {

@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import { ATTACK } from '../core/data/tuning';
-import type { EnemyState, Sim } from '../core/sim';
+import { Sim, type EnemyState } from '../core/sim';
+import type { HazardDef } from '../core/levels/types';
 import type { Solid } from '../core/physics';
 import { buildCreature, buildOkon, type CreatureRig, type OkonRig } from './models/creatures';
-import { buildProp } from './models/props';
+import { buildProp, buildRock, buildWheel } from './models/props';
 import { buildSuzu, type SuzuRig } from './models/suzu';
 import { GLOW, PALETTE as C } from './palette';
 import { Particles } from './particles';
+import { SplatCloud } from './splat';
 import { boxesGeometry } from './terrain';
 import { terrainTexture } from './textures';
 import { THEMES, type Theme } from './themes';
@@ -14,6 +16,7 @@ import { Vox, glowMaterial, markerMaterial, toonGradient } from './voxel';
 import { V16, voxMesh } from './models/common';
 
 const SUZU_SCALE = 0.83;
+const OCCLUDER_KINDS = new Set(['torii', 'cedar', 'bigLantern', 'bamboo', 'willow', 'kazaguruma', 'bell', 'stall']);
 const MAX_LAMPS = 6;
 
 interface EnemyView {
@@ -89,8 +92,12 @@ export class GameView {
   private shadows: { solid: Solid; full: THREE.Mesh; decal: THREE.Mesh }[] = [];
   private pickups: { id: string; mesh: THREE.Object3D; taken: () => boolean; y: number }[] = [];
   private okons: OkonRig[] = [];
+  private hazards: { def: HazardDef; obj: THREE.Object3D; shadow?: THREE.Mesh; rock?: THREE.Object3D }[] = [];
+  private waterfalls: THREE.Texture[] = [];
   private flames: THREE.Object3D[] = [];
   private animProps: THREE.Object3D[] = [];
+  /** カメラと鈴の間に入ったら隠す大きな飾り（鳥居・杉など） */
+  private occluders: { obj: THREE.Object3D; box: THREE.Box3 }[] = [];
   private windSway = 0;
   private lampSpots: THREE.Vector3[] = [];
   private lamps: THREE.PointLight[] = [];
@@ -200,9 +207,13 @@ export class GameView {
     this.ghosts = [];
     this.shadows = [];
     this.pickups = [];
+    this.splatOkon(false, sim, 0);
     this.okons = [];
+    this.hazards = [];
+    this.waterfalls = [];
     this.flames = [];
     this.animProps = [];
+    this.occluders = [];
     this.lampSpots = [];
     this.water = [];
     for (const v of this.enemies.values()) this.actors.remove(v.rig.root, v.tele);
@@ -276,9 +287,30 @@ export class GameView {
       const b = buildProp(p);
       this.level.add(b.obj);
       if (b.obj.userData.anim) this.animProps.push(b.obj);
+      if (OCCLUDER_KINDS.has(p.kind)) {
+        b.obj.updateMatrixWorld(true);
+        this.occluders.push({ obj: b.obj, box: new THREE.Box3().setFromObject(b.obj).expandByScalar(0.3) });
+      }
       this.flames.push(...b.flames);
       this.lampSpots.push(...b.lights);
     }
+    // 仕掛け
+    for (const h of def.hazards) {
+      if (h.kind === 'blade') {
+        const w = buildWheel(h.radius, h.width ?? 4);
+        w.position.set(h.x, h.y + h.radius + 0.05, h.z);
+        this.level.add(w);
+        this.hazards.push({ def: h, obj: w });
+      } else {
+        const sh = new THREE.Mesh(new THREE.CircleGeometry(h.radius, 20), new THREE.MeshBasicMaterial({ color: C.yoru, transparent: true, opacity: 0.6, depthWrite: false }));
+        sh.rotation.x = -Math.PI / 2;
+        sh.position.set(h.x, h.y + 0.04, h.z);
+        const rock = buildRock(h.radius);
+        this.level.add(sh, rock);
+        this.hazards.push({ def: h, obj: rock, shadow: sh, rock });
+      }
+    }
+    for (const o of this.level.children) if (o.userData.waterfall instanceof THREE.Texture) this.waterfalls.push(o.userData.waterfall);
     // 質屋（おこん）
     for (const s of def.shrines) {
       if (!s.shop) continue;
@@ -344,10 +376,20 @@ export class GameView {
   }
 
   /** 描画の 1 コマ。dt は実時間 */
-  /** カメラの位置（補助光をカメラと鈴の間に置く） */
+  private ray = new THREE.Ray();
+  private hitP = new THREE.Vector3();
+  /** カメラの位置（補助光をカメラと鈴の間に置き、間に入った大きな飾りを隠す） */
   setCameraPos(p: THREE.Vector3, sim: Sim): void {
     const b = sim.player.body;
     this.fill.position.set(p.x * 0.6 + b.x * 0.4, p.y * 0.6 + (b.y + 1.2) * 0.4, p.z * 0.6 + b.z * 0.4);
+    const head = new THREE.Vector3(b.x, b.y + 1.0, b.z);
+    const dist = p.distanceTo(head);
+    this.ray.set(p, head.clone().sub(p).normalize());
+    for (const o of this.occluders) {
+      const inside = o.box.containsPoint(p);
+      const hit = this.ray.intersectBox(o.box, this.hitP);
+      o.obj.visible = !(inside || (hit && p.distanceTo(this.hitP) < dist - 0.4));
+    }
   }
 
   update(sim: Sim, dt: number, frozen: boolean): void {
@@ -418,6 +460,29 @@ export class GameView {
         f.position.set(Math.cos(a) * 0.55, 1.35 + Math.sin(t * 2 + i) * 0.12, Math.sin(a) * 0.55);
       });
     }
+    // 仕掛け（Sim と同じ角度・進みで描く）
+    for (const hz of this.hazards) {
+      const h = hz.def;
+      if (h.kind === 'blade') hz.obj.rotation.x = -sim.bladeAngle(h);
+      else {
+        const u = sim.rockPhase(h);
+        const fall = Sim.ROCK_FALL;
+        const k = u < fall ? u / fall : 1;
+        hz.shadow!.scale.setScalar(0.25 + 0.75 * k);
+        (hz.shadow!.material as THREE.MeshBasicMaterial).opacity = u < fall ? 0.25 + 0.5 * k : Math.max(0, 0.75 - (u - fall) * 6);
+        const drop = u < fall ? Math.max(0, 1 - (u - (fall - 0.18)) / 0.18) : 0;
+        hz.rock!.visible = u > fall - 0.18 && u < fall + 0.12;
+        hz.rock!.position.set(h.x, h.y + 0.5 + drop * 9, h.z);
+        hz.rock!.rotation.set(u * 9, u * 5, 0);
+        if (u >= fall && u < fall + dt / h.period * 1.5 + 0.004) {
+          this.sparks.burst(14, h.x, h.y + 0.2, h.z, 4, '#8e8a96', { life: 0.5, grav: 9, size: 0.1 });
+          this.onRockLand?.(h.x, h.z);
+        }
+      }
+    }
+    // 滝（緩の理で遅くなる）
+    const slow = sim.ledger.pawned.includes('dash') ? 0.12 : 1;
+    for (const wf of this.waterfalls) wf.offset.y = (wf.offset.y + dt * 1.6 * slow) % 1;
     // 竹のしなり・風車・人
     const wind = Math.hypot(sim.wind.x, sim.wind.z);
     this.windSway += ((wind > 0 ? 1 : 0) - this.windSway) * Math.min(1, dt * 1.5);
@@ -501,6 +566,12 @@ export class GameView {
     if (!frozen) {
       this.sparks.update(dt);
       this.dust.update(dt);
+    }
+    if (this.splat) {
+      this.splat.t += dt;
+      // ほどけて、狐の形をかろうじて保つ（揺れ戻しながら崩れていく）
+      this.splat.cloud.glitch = Math.min(1, 0.15 + this.splat.t * 0.12) * (0.75 + Math.sin(this.splat.t * 2.3) * 0.25);
+      this.splat.cloud.update(dt);
     }
     if (this.debugBoxes) for (const c of this.debugGroup.children) {
       const s = c.userData.solid as Solid;
@@ -679,6 +750,40 @@ export class GameView {
       this.sparks.spawn({ x: x + Math.cos(a) * 0.4, y: y + 0.1, z: z + Math.sin(a) * 0.4, vx: Math.cos(a) * r * 3.2, vz: Math.sin(a) * r * 3.2, vy: 0.5, life: 0.32, size: 0.12, color: '#cdb88d', grav: 2, drag: 3 });
     }
   }
+
+  private splat: { cloud: SplatCloud; rig: OkonRig; t: number } | null = null;
+
+  /** おこんの正体：近くのおこんを点の雲に置き換えて崩す（on=false で戻す） */
+  splatOkon(on: boolean, sim: Sim, screenH: number): void {
+    if (!on) {
+      if (this.splat) {
+        this.scene.remove(this.splat.cloud.points);
+        this.splat.cloud.dispose();
+        this.splat.rig.root.visible = true;
+        this.splat = null;
+      }
+      return;
+    }
+    const b = sim.player.body;
+    let best: OkonRig | null = null;
+    let bd = Infinity;
+    for (const ok of this.okons) {
+      const d = ok.root.position.distanceTo(new THREE.Vector3(b.x, b.y, b.z));
+      if (d < bd) {
+        bd = d;
+        best = ok;
+      }
+    }
+    if (!best) return;
+    const cloud = new SplatCloud(best.root, 1);
+    cloud.setScreenHeight(screenH);
+    best.root.visible = false;
+    this.scene.add(cloud.points);
+    this.splat = { cloud, rig: best, t: 0 };
+  }
+
+  /** 落石が着地したとき（音・揺れ） */
+  onRockLand: ((x: number, z: number) => void) | null = null;
 
   /** 1 発の当たりの飾り */
   hitFx(x: number, y: number, z: number, heavy: boolean, immune: boolean): void {

@@ -51,7 +51,7 @@ export class PixelPipeline {
         uTime: { value: 0 },
         uNear: { value: 0.1 },
         uFar: { value: 200 },
-        uDither: { value: 0.045 },
+        uDither: { value: 0.034 },
         uOutline: { value: 1 },
         uMosh: { value: 0 },
         uSort: { value: 0 },

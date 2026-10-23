@@ -15,7 +15,7 @@ export interface Line {
   text: string;
 }
 
-export type ScriptFx = 'dollyOkon' | 'dollyFloat' | 'dollyGate' | 'dollyShadow' | 'cinemaDiary' | 'sortLedger' | 'bell' | 'none';
+export type ScriptFx = 'dollyOkon' | 'dollyFloat' | 'dollyGate' | 'dollyShadow' | 'dollyFalls' | 'splatOkon' | 'cinemaDiary' | 'sortLedger' | 'bell' | 'none';
 
 export interface Script {
   lines: Line[];
@@ -263,5 +263,57 @@ export const SCRIPTS: Record<string, Script> = {
   },
   c3_end: {
     lines: [s('suzu', '滝の音。山頂は、この上だ。')],
+  },
+
+  // ───────── 四の章
+  c4_intro: {
+    lines: [
+      s('suzu', '止まり滝。昔、ひと晩だけ流れが止まったって言い伝えがある。'),
+      s('suzu', '水車が、恐ろしい速さで回ってる。'),
+    ],
+  },
+  c4_stele: {
+    lines: [s('note', '石碑。「この滝、時の早き者を嫌う。急ぐなかれ」'), s('suzu', '急ぐなかれ……か。')],
+  },
+  c4_wheels: {
+    lines: [s('suzu', '水車の羽根が、道を払ってる。真下に来たときが危ない。'), s('suzu', '駆け抜けるか……それとも。')],
+  },
+  okon_ch4_first: {
+    lines: [
+      s('okon', '駆でございますか。速さとは、時を縮めること。'),
+      s('okon', 'お預かりすれば、縮めた分だけ世の時が緩みます。お嬢さんのほかは、何もかも半分の速さに。'),
+      s('suzu', '私だけ、速いまま？'),
+      s('okon', 'ええ。世の時より、半歩先に。……ただし、駆け抜けて身をかわすことは、もうできませんよ。'),
+    ],
+  },
+  c4_firstslow: {
+    fx: 'dollyFalls',
+    weighty: true,
+    lines: [s('suzu', '滝が……止まりかけてる。水の粒が、ひとつずつ落ちていく。'), s('suzu', '水車も、のろのろ。これなら歩いて抜けられる。')],
+  },
+  c4_contract: {
+    fx: 'splatOkon',
+    weighty: true,
+    lines: [
+      s('okon', 'ここまで来られたなら、もう隠し立ては致しません。……いえ、できなくなりました。'),
+      s('okon', '朝の質札の請人。それは、お嬢さんでございます。'),
+      s('suzu', '私……？'),
+      s('okon', '千鶴様は、こう申されました。「いつか鈴が、自分で選べるように」と。朝を請け出せるのは、お嬢さんだけ。'),
+      s('suzu', 'どうして、最初に言ってくれなかったの。'),
+      s('okon', '請人様に真を明かさぬこと。それが千鶴様との約束でした。ですが、請人様が自らここまで登って来られたなら、帳面は開くもの。'),
+      s('note', 'おこんの姿が、ほどけていく。無数の光の粒になって、狐の形をかろうじて保っている。'),
+      s('okon', '私は、お山の神さまの使い。質をお預かりするのは、神さまと人の約束を量るため。'),
+      s('okon', '朝の値は百八十。……お嬢さんの舞の、すべての値と同じでございます。'),
+      s('suzu', '舞の、すべて……。'),
+    ],
+  },
+  c4_rocks: {
+    lines: [s('suzu', '上から石が！'), s('suzu', '落ちる前に、地面に影が広がる。影を見て避けなきゃ。')],
+  },
+  c4_mizuko: {
+    lines: [s('suzu', '小さな提灯……水子提灯。'), s('suzu', '遠くから、一気に飛びかかってくる。')],
+  },
+  c4_end: {
+    lines: [s('suzu', 'この上が山頂。神楽殿の太鼓の音が、かすかに聞こえる。'), s('suzu', 'ばあちゃんは、あそこにいる。')],
   },
 };

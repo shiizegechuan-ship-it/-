@@ -4,7 +4,7 @@ import { ATTACK, DASH, DT, LANTERN, PLAYER, WORLD } from './data/tuning';
 import { canPawn, canRedeem, earn, isPawned, newLedger, pawn, redeem, type Ledger, type TradeResult } from './economy';
 import type { SimEvent } from './events';
 import type { InputFrame } from './input';
-import type { ChapterId, EnemySpawn, LevelDef, PickupDef, ShrineDef } from './levels/types';
+import type { ChapterId, EnemySpawn, HazardDef, LevelDef, PickupDef, ShrineDef } from './levels/types';
 import { approach, wrapAngle } from './math';
 import { newBody, type Body } from './physics';
 import { Rng } from './rng';
@@ -96,6 +96,8 @@ export class Sim {
   exiting = false;
   /** Sim の外（描画）から読む：今のコマで風が吹いている */
   wind = { x: 0, z: 0 };
+  /** 仕掛けの時計（緩の理で半分の速さで進む） */
+  hazardClock = 0;
   private collectedSet = new Set<string>();
 
   constructor(
@@ -314,6 +316,8 @@ export class Sim {
     this.world.applyLaws(this.ledger.pawned, this.progress.flags, this.lanternInfo(), dt, this.bodies());
     this.updatePlayer(input, dt);
     const edt = this.ledger.pawned.includes('dash') ? dt * WORLD.slowLawTimeScale : dt;
+    this.hazardClock += edt;
+    this.updateHazards();
     for (const e of this.enemies) this.updateEnemy(e, edt);
     this.enemies = this.enemies.filter((e) => !(e.mode === 'dead' && e.deadT > 1.2));
     this.updatePickups();
@@ -825,6 +829,48 @@ export class Sim {
     if (p.invulnT > 0) return;
     e.attackHit = true;
     this.damagePlayer(def.damage, e.body.x, e.body.z);
+  }
+
+  // ───────────────────────── 仕掛け
+  /** blade の腕の角度（rad） */
+  bladeAngle(h: HazardDef): number {
+    return (this.hazardClock / h.period + (h.phase ?? 0)) * Math.PI * 2 * (h.dir ?? 1);
+  }
+  /** rock の 1 回の落下の進み（0..1、1 で着地） */
+  rockPhase(h: HazardDef): number {
+    const u = this.hazardClock / h.period + (h.phase ?? 0);
+    return u - Math.floor(u);
+  }
+  /** 石が落ちる高さ（描画用） */
+  static readonly ROCK_FALL = 0.72; // この進みで着地。その前が影の予兆
+  /** 水車の羽根が道に触れる角度（真下から ±） */
+  static readonly BLADE_ARC = 0.44;
+
+  private updateHazards(): void {
+    const p = this.player;
+    const b = p.body;
+    if (p.mode === 'dead') return;
+    for (const h of this.level.hazards) {
+      if (b.y > h.y + 1.6 || b.y + b.h < h.y - 0.2) continue;
+      let hit = false;
+      if (h.kind === 'blade') {
+        // 2 枚の羽根。真下 ±25° に来た羽根の先が、道を z 方向に払っていく
+        if (Math.abs(b.x - h.x) > (h.width ?? 4) / 2 + b.hw) continue;
+        for (let k = 0; k < 2; k++) {
+          const d = wrapAngle(this.bladeAngle(h) + k * Math.PI);
+          if (Math.abs(d) > Sim.BLADE_ARC) continue;
+          const tipZ = h.z + Math.sin(d) * h.radius;
+          if (Math.abs(b.z - tipZ) < 0.35 + b.hw) hit = true;
+        }
+      } else {
+        const u = this.rockPhase(h);
+        const landed = u >= Sim.ROCK_FALL && u < Sim.ROCK_FALL + 0.06;
+        hit = landed && Math.hypot(b.x - h.x, b.z - h.z) < h.radius + b.hw;
+      }
+      if (!hit) continue;
+      if (p.mode === 'dash' && p.modeT <= DASH.iframes) continue;
+      if (this.damagePlayer(1, h.x, h.z)) this.emit({ t: 'hazardHit', id: h.id, kind: h.kind });
+    }
   }
 
   // ───────────────────────── 拾い物・きっかけ

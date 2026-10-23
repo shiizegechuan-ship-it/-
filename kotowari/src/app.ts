@@ -22,9 +22,9 @@ export const VERSION = '0.2.0';
 
 type State = 'title' | 'play' | 'dialog' | 'shop' | 'menu' | 'card' | 'slice' | 'cine' | 'end';
 
-const SONG_FOR: Record<string, string> = { prologue: 'festival', ch1: 'cedar', ch2: 'bamboo', ch3: 'town' };
+const SONG_FOR: Record<string, string> = { prologue: 'festival', ch1: 'cedar', ch2: 'bamboo', ch3: 'town', ch4: 'falls', finale: 'summit' };
 /** 章で初めて質屋を開いたときのおこんの話 */
-const FIRST_SHOP: Partial<Record<ChapterId, string>> = { ch1: 'okon_first_shop', ch2: 'okon_ch2_first', ch3: 'okon_ch3_first' };
+const FIRST_SHOP: Partial<Record<ChapterId, string>> = { ch1: 'okon_first_shop', ch2: 'okon_ch2_first', ch3: 'okon_ch3_first', ch4: 'okon_ch4_first' };
 
 export class App {
   readonly pipe: PixelPipeline;
@@ -66,6 +66,14 @@ export class App {
     this.applySettings();
     this.view.setLevel(this.sim);
     this.cam.reset(this.sim);
+    this.view.onRockLand = (x, z) => {
+      const b = this.sim.player.body;
+      const d = Math.hypot(b.x - x, b.z - z);
+      if (d < 14) {
+        this.sfx('slam');
+        this.cam.shake(0.12 * Math.max(0, 1 - d / 14), 0.15);
+      }
+    };
     window.addEventListener('resize', () => this.onResize());
     const unlock = () => this.audio.unlock();
     window.addEventListener('pointerdown', unlock);
@@ -263,6 +271,7 @@ export class App {
     this.ui.openDialog(script, () => {
       this.audio.duck(false);
       this.fx.cinema = false;
+      if (script.fx === 'splatOkon') this.view.splatOkon(false, this.sim, 0);
       this.cam.focus = null;
       this.state = 'play';
       this.acc = 0;
@@ -299,6 +308,15 @@ export class App {
         if (near) this.cam.dollyZoom(new THREE.Vector3((near.minX + near.maxX) / 2, near.maxY, (near.minZ + near.maxZ) / 2), 26, 2.0);
         break;
       }
+      case 'dollyFalls': {
+        const wf = this.sim.level.props.find((p) => p.kind === 'waterfall');
+        if (wf) this.cam.dollyZoom(new THREE.Vector3(wf.x, wf.y + 6, wf.z), 22, 2.2);
+        break;
+      }
+      case 'splatOkon':
+        this.view.splatOkon(true, this.sim, this.pipe.height);
+        this.sfx('perfect');
+        break;
       case 'cinemaDiary':
         // 日記を読む間は、景色を止めて灯の火だけを揺らす（シネマグラフ）
         this.pipe.snapshot();
@@ -383,7 +401,9 @@ export class App {
           ? 'c2_firstwind'
           : kind === 'pawn' && id === 'lantern' && !this.sim.flag('seen_firstshadow') && this.sim.world.shadows.length > 0
             ? 'c3_firstshadow'
-            : null;
+            : kind === 'pawn' && id === 'dash' && !this.sim.flag('seen_firstslow') && this.sim.level.hazards.length > 0
+              ? 'c4_firstslow'
+              : null;
     const firstFloat = !!firstScript;
     if (kind === 'pawn' && id === 'jump') {
       this.sfx('float');
@@ -394,7 +414,9 @@ export class App {
     const reopen = () => this.openShop(this.shopShrine, ['jump', 'fan', 'lantern', 'dash'].indexOf(id));
     this.cine(firstFloat ? 0.6 : 1.4, () => {
       if (firstScript) {
-        this.sim.setFlag(firstScript === 'c1_firstpawn' ? 'seen_firstpawn' : firstScript === 'c2_firstwind' ? 'seen_firstwind' : 'seen_firstshadow');
+        this.sim.setFlag(
+          { c1_firstpawn: 'seen_firstpawn', c2_firstwind: 'seen_firstwind', c3_firstshadow: 'seen_firstshadow', c4_firstslow: 'seen_firstslow' }[firstScript] ?? 'seen_' + firstScript,
+        );
         this.say(firstScript, reopen);
       } else reopen();
     });
@@ -695,6 +717,10 @@ export class App {
           this.goChapter(e.to);
           return;
         case 'windBlown':
+          break;
+        case 'hazardHit':
+          this.sfx(e.kind === 'rock' ? 'slam' : 'hurt');
+          this.cam.shake(0.25, 0.25);
           break;
       }
     }

@@ -130,13 +130,13 @@ const painters: Record<string, Painter> = {
       }
   },
   rock(px, n) {
+    // 岩肌：大きな塊（4px）と、ところどころの割れ目
     for (let y = 0; y < S; y++)
       for (let x = 0; x < S; x++) {
-        const v = n(x >> 1, y >> 1);
-        const w = n(x + 7, y + 3);
-        let c = v < 0.3 ? C.kachi : v < 0.7 ? C.nezumi : '#4a4752';
-        if (w < 0.08) c = C.tokiwa;
-        if (w > 0.95) c = C.hai;
+        const v = n(x >> 2, y >> 2);
+        let c = v < 0.35 ? '#3e3b49' : v < 0.8 ? '#4a4752' : C.nezumi;
+        if ((x & 3) === 0 && n(x >> 2, (y >> 2) + 9) < 0.3) c = C.kachi;
+        if (n(x >> 1, (y >> 1) + 5) < 0.04) c = C.tokiwa;
         px(x, y, c);
       }
   },

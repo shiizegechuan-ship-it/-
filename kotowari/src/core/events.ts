@@ -28,4 +28,5 @@ export type SimEvent =
   | { t: 'exit'; to: ChapterId | 'ending' }
   | { t: 'floatRise' }
   | { t: 'gateOpen'; id: string }
-  | { t: 'windBlown'; enemy: string };
+  | { t: 'windBlown'; enemy: string }
+  | { t: 'hazardHit'; id: string; kind: 'blade' | 'rock' };

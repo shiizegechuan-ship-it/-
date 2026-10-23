@@ -52,4 +52,29 @@ describe('道しるべボットで章を通す', () => {
     expect(r.sim.flag('law:lantern')).toBe(true);
     expect(r.sim.flag('redeemed:lantern')).toBe(true);
   });
+
+  it('四の章：駆を質に入れて緩の理で水車と落石を抜け、請人の真相を聞き、山頂の石段へ', () => {
+    const r = playChapter('ch4', { ledger: { zeni: 40, debt: 0, pawned: [] } });
+    if (!r.exit) console.log(r.bot.log.join('\n'), r.sim.player.body, r.sim.ledger, r.deaths);
+    expect(r.exit).toBe('finale');
+    expect(r.sim.flag('trig:c4_contract')).toBe(true);
+    expect(r.deaths.length).toBe(0);
+  });
+
+  it('四の章（駆を手放さない）：時機を見て水車と落石を抜ける', () => {
+    const sim = new Sim(getLevel, { ...newProgress('ch4'), ledger: { zeni: 40, debt: 0, pawned: [] } }, 3);
+    const bot = new RouteBot(sim, 1, () => ({}));
+    let exit: string | null = null;
+    let hits = 0;
+    for (let f = 0; f < 400 * 60 && !exit; f++) {
+      sim.step(bot.next());
+      for (const e of sim.drain()) {
+        if (e.t === 'exit') exit = e.to;
+        if (e.t === 'hazardHit') hits++;
+      }
+    }
+    expect(exit).toBe('finale');
+    expect(sim.has('dash')).toBe(true);
+    expect(hits).toBeLessThanOrEqual(2);
+  });
 });

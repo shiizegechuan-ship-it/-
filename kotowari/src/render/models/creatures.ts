@@ -267,8 +267,45 @@ function kageboshi(): CreatureRig {
   return { root, body, eyes, armL, armR, flash: flashable(root) };
 }
 
+/** 水子提灯：小さな紙の提灯に、子どもの顔。ぴょこぴょこ跳ねて、一気に飛びかかる */
+function mizuko(): CreatureRig {
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(body);
+  const v = new Vox();
+  const g = new Vox();
+  for (let y = 2; y <= 13; y++) {
+    const r = Math.sqrt(Math.max(0, 1 - ((y - 7.5) / 6.5) ** 2)) * 5;
+    v.cylinder(0, 0, y, y, r, (x, yy, z) => {
+      if (yy === 2 || yy === 13 || yy % 3 === 0) return C.sumi;
+      // 顔の面（前）は発光にせず、目と口を描く
+      if (z >= Math.floor(r) - 1 && Math.abs(x) <= 3 && yy >= 6 && yy <= 10) {
+        if ((x === -2 || x === 2) && yy === 9) return C.sumi;
+        if (x >= -1 && x <= 1 && yy === 7) return C.shu;
+        return C.gofun;
+      }
+      return null;
+    });
+    g.cylinder(0, 0, y, y, Math.max(0, r - 0.6), '#ffd27a');
+  }
+  v.box(-1, 14, -1, 1, 15, 1, C.sumi);
+  v.box(-3, 0, -1, -2, 1, 1, C.sumi); // 足
+  v.box(2, 0, -1, 3, 1, 1, C.sumi);
+  body.add(voxMesh(v, V16, [-0.5, 0, -0.5]));
+  body.add(voxMesh(g, V16, [-0.5, 0, -0.5], 'live'));
+  const ev = new Vox();
+  ev.box(-2, 9, 5, -2, 9, 5, '#ffffff');
+  ev.box(2, 9, 5, 2, 9, 5, '#ffffff');
+  const eyes = voxMesh(ev, V16, [-0.5, 0, -0.5], 'glow');
+  eyes.material = (eyes.material as THREE.MeshBasicMaterial).clone();
+  body.add(eyes);
+  return { root, body, eyes, flash: flashable(root) };
+}
+
 export function buildCreature(type: EnemyType, id = ''): CreatureRig {
   switch (type) {
+    case 'mizuko':
+      return mizuko();
     case 'kageboshi':
       return kageboshi();
     case 'menyo':

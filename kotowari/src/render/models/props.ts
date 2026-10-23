@@ -62,6 +62,8 @@ function build(kind: string, variant: number): PropBuild {
       return willow();
     case 'well':
       return well();
+    case 'waterfall':
+      return waterfall();
     default:
       return { obj: new THREE.Group(), lights: [], flames: [] };
   }
@@ -74,6 +76,8 @@ export function buildProp(p: PropDef): PropBuild {
     const proto = build(p.kind, p.variant ?? 0);
     f = () => {
       const obj = proto.obj.clone(true);
+      // clone は userData を JSON で写すので、模様などの参照は元のものを渡す
+      Object.assign(obj.userData, proto.obj.userData);
       const flames: THREE.Object3D[] = [];
       obj.traverse((o) => {
         if (o.userData.flame) flames.push(o);
@@ -607,6 +611,70 @@ function well(): PropBuild {
   v.box(-2, 12, -1, 2, 14, 1, C.kuchiba); // 釣瓶
   const obj = new THREE.Group();
   obj.add(voxMesh(v, V16, [-0.5, 0, -0.5]));
+  return { obj, lights: [], flames: [] };
+}
+
+/** 水車（x 軸まわりに回す。2 枚の大きな羽根＋飾りの輪）。原点は軸の中心 */
+export function buildWheel(radius: number, width: number): THREE.Group {
+  const g = new THREE.Group();
+  const v = new Vox();
+  const R = Math.round(radius * 8);
+  const half = Math.round(Math.min(width, 4.4) * 4);
+  // 輪（両側）
+  for (let a = 0; a < 64; a++) {
+    const ang = (a / 64) * Math.PI * 2;
+    const y = Math.round(Math.cos(ang) * (R - 3));
+    const z = Math.round(Math.sin(ang) * (R - 3));
+    v.set(-half, y, z, C.kogecha);
+    v.set(half, y, z, C.kogecha);
+  }
+  // 軸
+  v.box(-half - 2, -1, -1, half + 2, 1, 1, C.kuri);
+  // 2 枚の羽根（下向きと上向き）
+  for (const sgn of [-1, 1]) {
+    v.box(-half, sgn > 0 ? 2 : -R, -1, half, sgn > 0 ? R : -2, 1, (x, y) => (Math.abs(y) > R - 3 ? C.ginnezu : x % 4 === 0 ? C.kogecha : C.hiwada));
+    // 刃先の鉄
+    v.box(-half, sgn > 0 ? R - 1 : -R, -2, half, sgn > 0 ? R : -R + 1, 2, C.ginnezu);
+  }
+  g.add(voxMesh(v, V8, [-0.5, -0.5, -0.5]));
+  return g;
+}
+
+/** 落石 */
+export function buildRock(radius: number): THREE.Object3D {
+  const v = new Vox();
+  const r = Math.max(3, Math.round(radius * 6));
+  v.ellipsoid(0, 0, 0, r, r * 0.8, r * 0.9, (x, y, z) => (hash3(x, y, z) < 0.2 ? C.koke : hash3(x + 1, y, z) < 0.5 ? C.nezumi : C.hai));
+  const m = voxMesh(v, V8, [0, 0, 0]);
+  m.visible = false;
+  return m;
+}
+
+/** 止まり滝（流れる水の幕）。userData.waterfall に流す模様 */
+function waterfall(): PropBuild {
+  const c = document.createElement('canvas');
+  c.width = 16;
+  c.height = 64;
+  const g = c.getContext('2d')!;
+  for (let y = 0; y < 64; y++)
+    for (let x = 0; x < 16; x++) {
+      const h = hash3(x, y >> 2, 11);
+      g.fillStyle = h < 0.2 ? C.geppaku : h < 0.55 ? C.byakugun : h < 0.85 ? C.asagi : C.hanada;
+      g.fillRect(x, y, 1, 1);
+    }
+  const tex = new THREE.CanvasTexture(c);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(6, 3);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshBasicMaterial({ map: tex, fog: true });
+  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(14, 18), mat);
+  sheet.position.set(0, 9, 0);
+  sheet.rotation.y = Math.PI;
+  const obj = new THREE.Group();
+  obj.add(sheet);
+  obj.userData.waterfall = tex;
   return { obj, lights: [], flames: [] };
 }
 

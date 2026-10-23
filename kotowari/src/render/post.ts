@@ -65,7 +65,7 @@ vec3 quantize(vec3 c, vec2 px) {
   float best = 1e9; vec3 outc = PAL[0];
   for (int i = 0; i < NPAL; i++) {
     vec3 d = q - yuv(PAL[i]);
-    float e = d.x * d.x + (d.y * d.y + d.z * d.z) * 2.2;
+    float e = d.x * d.x + (d.y * d.y + d.z * d.z) * 1.7;
     if (e < best) { best = e; outc = PAL[i]; }
   }
   return outc;
