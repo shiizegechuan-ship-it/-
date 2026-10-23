@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "check": "npm run typecheck && npm run lint && npm run test && npm run build",
-    "e2e": "node tools/e2e/smoke.mjs"
+    "e2e": "node tools/e2e/play.mjs && node tools/e2e/shots.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

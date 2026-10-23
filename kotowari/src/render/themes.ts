@@ -1,0 +1,54 @@
+export interface Theme {
+  skyTop: string;
+  skyBottom: string;
+  fog: string;
+  fogNear: number;
+  fogFar: number;
+  moon: string;
+  moonIntensity: number;
+  hemiSky: string;
+  hemiGround: string;
+  hemiIntensity: number;
+  lamp: string;
+  lampIntensity: number;
+  stars: number;
+  moonDir: [number, number, number];
+  dust: string; // 漂う粒の色
+}
+
+export const THEMES: Record<string, Theme> = {
+  festival: {
+    skyTop: '#0d0c18',
+    skyBottom: '#33467a',
+    fog: '#1c2138',
+    fogNear: 22,
+    fogFar: 70,
+    moon: '#cfe3e8',
+    moonIntensity: 0.95,
+    hemiSky: '#4a64a6',
+    hemiGround: '#15111c',
+    hemiIntensity: 0.55,
+    lamp: '#ffab5c',
+    lampIntensity: 14,
+    stars: 1,
+    moonDir: [-0.45, 0.8, 0.35],
+    dust: '#eab6c0',
+  },
+  cedar: {
+    skyTop: '#0d0c18',
+    skyBottom: '#26473d',
+    fog: '#1d2c3a',
+    fogNear: 14,
+    fogFar: 55,
+    moon: '#bfe0dc',
+    moonIntensity: 0.9,
+    hemiSky: '#5f8fbf',
+    hemiGround: '#15111c',
+    hemiIntensity: 0.5,
+    lamp: '#ffb36b',
+    lampIntensity: 12,
+    stars: 0.6,
+    moonDir: [0.4, 0.75, -0.5],
+    dust: '#a9d4d3',
+  },
+};

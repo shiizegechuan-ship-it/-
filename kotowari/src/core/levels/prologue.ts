@@ -21,10 +21,13 @@ export function prologue(): LevelDef {
   B.push(box(-12, -1, 25, 12, 0, 46, 'gravel'));
   // 溝（底は水）
   B.push(box(-12, -4, 18, 12, -3, 25, 'water', 'hazard'));
-  // 周りの塀
+  // 周りの塀（瓦の笠つき）
   B.push(box(-13, 0, -8, -12, 3, 46, 'plaster', 'wall'));
   B.push(box(12, 0, -8, 13, 3, 46, 'plaster', 'wall'));
   B.push(box(-13, 0, -9, 13, 3, -8, 'plaster', 'wall'));
+  B.push(box(-13.3, 3, -9.3, -11.7, 3.35, 46, 'roof', 'wall'));
+  B.push(box(11.7, 3, -9.3, 13.3, 3.35, 46, 'roof', 'wall'));
+  B.push(box(-11.7, 3, -9.3, 11.7, 3.35, -7.7, 'roof', 'wall'));
   // 跳の稽古：低い竹垣
   B.push(box(-12, 0, 14, 12, 0.85, 14.3, 'fence', 'fence'));
   // 灯の稽古：幽かな橋
@@ -70,6 +73,7 @@ export function prologue(): LevelDef {
   l.pickups.push({ id: 'pro_z3', x: -7, y: 0.6, z: 29, value: 3 });
 
   l.spawn = { x: 0, y: 1, z: 1.5, yaw: 0 };
+  l.establish = { from: [9, 3.4, 15], to: [0, 2.6, 1] };
 
   l.triggers.push({ id: 'pro_intro', box: box(-5, 0, -3, 5, 3, 5), script: 'pro_intro' });
   l.triggers.push({ id: 'pro_ditch', box: box(-12, -1, 16, 12, 3, 18), script: 'pro_ditch' });
@@ -86,7 +90,6 @@ export function prologue(): LevelDef {
     text: 'K・Shift：駆け抜ける（無敵）　光った妖の一撃の直前なら「見切り」',
     unlessFlag: 'down:pro_m1',
   });
-  l.hints.push({ box: box(-4, -1, 37, 4, 3, 43), text: 'E：おこんと話す（質屋）', needFlag: 'trig:pro_okon' });
 
   l.goals.push({ unlessFlag: 'trig:pro_ditch', text: '神楽殿を下りて、ばあちゃんを探す' });
   l.goals.push({ unlessFlag: 'trig:pro_bell', text: '溝の向こう、鐘の方へ' });

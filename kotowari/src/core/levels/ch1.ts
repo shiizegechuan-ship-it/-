@@ -23,7 +23,7 @@ export function ch1(): LevelDef {
   // 踊り場 1
   B.push(box(-6, -1, 12, 6, 4, 20, 'stone'));
   torii(B, P, -4.2, 4, 18.2, 0, 0.8, 0);
-  l.shrines.push({ id: 'c1_b', x: -4.2, y: 4, z: 18.2, yaw: 0, name: '谷の鳥居', shop: true });
+  l.shrines.push({ id: 'c1_b', x: -4.2, y: 4, z: 18.2, yaw: 0, name: '谷の鳥居', shop: true, stall: { x: -4.75, z: 14.4, yaw: Math.PI / 2 } });
   // 谷（10m）。底に円紋の石
   const stones: [number, number, number][] = [
     [20.05, 22.5, 4.0],
@@ -42,7 +42,7 @@ export function ch1(): LevelDef {
   // 柵（跳でしか越えられない）
   B.push(box(-7, 4.5, 42, 7, 5.6, 42.35, 'fence', 'fence'));
   torii(B, P, 5, 4.5, 39.6, -Math.PI / 2, 0.8, 0);
-  l.shrines.push({ id: 'c1_c', x: 5, y: 4.5, z: 39.6, yaw: -Math.PI / 2, name: '柵の鳥居', shop: true });
+  l.shrines.push({ id: 'c1_c', x: 5, y: 4.5, z: 39.6, yaw: -Math.PI / 2, name: '柵の鳥居', shop: true, stall: { x: 5.55, z: 36.3, yaw: -Math.PI / 2 } });
   // 柵の先：石段 2（2m）→ 上の広場
   B.push(box(-7, -1, 42.35, 7, 4.5, 44, 'stone'));
   stairsZ(B, 0, 5, 44, 4.5, 8, 0.25, 1.0, 'stair');
@@ -132,6 +132,7 @@ export function ch1(): LevelDef {
   l.pickups.push({ id: 'c1_z9', x: 6, y: 7.1, z: 54, value: 5 });
 
   l.spawn = { x: 0, y: 0, z: -0.5, yaw: 0 };
+  l.establish = { from: [6.5, 3.2, -6.5], to: [0, 4.5, 14] };
 
   l.triggers.push({ id: 'c1_intro', box: box(-6, -1, -6, 6, 3, 4), script: 'c1_intro' });
   l.triggers.push({ id: 'c1_gap', box: box(-6, 3.5, 18.8, 6, 7, 20), script: 'c1_gap' });

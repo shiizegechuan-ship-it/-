@@ -26,6 +26,10 @@ export interface ShrineDef {
   yaw: number;
   name: string;
   shop: boolean; // おこんがいる
+  /** 質屋の台を鳥居のどちら側に置くか（1：鳥居の右手、-1：左手） */
+  stallSide?: 1 | -1;
+  /** 台の位置と向き（指定すると stallSide より優先。向きは台の正面） */
+  stall?: { x: number; z: number; yaw: number };
 }
 
 export interface PickupDef {
@@ -106,6 +110,8 @@ export interface LevelDef {
   hazards: HazardDef[];
   exit: { box: BoxSpec; to: ChapterId | 'ending' } | null;
   props: PropDef[];
+  /** 章題の画面で見せる景色（カメラの位置と注目点） */
+  establish?: { from: [number, number, number]; to: [number, number, number] };
   /** ボットと到達可能性テスト用の道しるべ（順に通る点と、そこで要る行動） */
   route: RouteNode[];
   /** 操作の案内（その範囲に入ると出る） */

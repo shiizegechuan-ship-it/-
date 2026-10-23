@@ -263,7 +263,9 @@ export class Sim {
     let bd = WORLD.interactRadius;
     for (const s of this.level.shrines) {
       if (!s.shop) continue;
-      const d = Math.hypot(s.x - b.x, s.z - b.z);
+      // 鳥居の中心か、質屋の台（おこん）の前
+      let d = Math.hypot(s.x - b.x, s.z - b.z);
+      if (s.stall) d = Math.min(d, Math.hypot(s.stall.x - b.x, s.stall.z - b.z) - 0.6);
       if (d < bd + 0.6 && Math.abs(s.y - b.y) < 2) {
         bd = d;
         best = { kind: 'shrine', def: s };

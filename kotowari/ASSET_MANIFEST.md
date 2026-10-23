@@ -2,7 +2,7 @@
 
 | 名前 | 用途 | 作成方法 | ライセンス | 改変 | 場所 |
 |---|---|---|---|---|---|
-| DotGothic16 | 画面の文字 | Fontworks 作（既存作品 `game/assets/fonts` から複製） | SIL OFL 1.1（許諾書を同梱） | なし | `public/fonts/` |
+| DotGothic16 | 画面の文字 | Fontworks 作（既存作品 `game/assets/fonts` から複製） | SIL OFL 1.1（許諾書を同梱） | なし | `src/assets/fonts/`（許諾書は `public/fonts/`） |
 | ボクセル模型（全キャラクター・地形） | 画 | `src/render/models/` のコードで生成（Claude Code が記述） | 本作に帰属 | ― | ソース |
 | 音（BGM・効果音） | 音 | `src/audio/` の WebAudio 合成（Claude Code が記述） | 本作に帰属 | ― | ソース |
 
