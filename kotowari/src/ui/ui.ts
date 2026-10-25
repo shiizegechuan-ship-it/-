@@ -1,6 +1,6 @@
 import { ABILITIES, ABILITY_ORDER, type AbilityId } from '../core/data/abilities';
-import { BOSS, DASH, PLAYER } from '../core/data/tuning';
-import { redeemPrice } from '../core/economy';
+import { BOSS, DASH } from '../core/data/tuning';
+import { canBuyCharm, charmPrice, interestChapters, redeemPrice } from '../core/economy';
 import type { Sim } from '../core/sim';
 import { SPEAKER_NAME, type Script } from '../core/story';
 import type { Settings } from '../settings';
@@ -69,10 +69,10 @@ export class UI {
 
   updateHud(sim: Sim, dt: number): void {
     const p = sim.player;
-    if (p.hp !== this.lastHp) {
-      this.hpEl.replaceChildren(...Array.from({ length: PLAYER.maxHp }, (_, i) => el('span', 'magatama' + (i < p.hp ? '' : ' empty'))));
-      this.hpEl.title = `勾玉 ${p.hp} / ${PLAYER.maxHp}`;
-      this.lastHp = p.hp;
+    if (p.hp * 100 + sim.maxHp !== this.lastHp) {
+      this.hpEl.replaceChildren(...Array.from({ length: sim.maxHp }, (_, i) => el('span', 'magatama' + (i < p.hp ? '' : ' empty'))));
+      this.hpEl.title = `勾玉 ${p.hp} / ${sim.maxHp}`;
+      this.lastHp = p.hp * 100 + sim.maxHp;
     }
     const l = sim.ledger;
     const zk = `${l.zeni}|${l.debt}`;
@@ -227,7 +227,7 @@ export class UI {
   }
 
   // ───────────── 質屋
-  openShop(sim: Sim, shrineName: string, act: (kind: 'pawn' | 'redeem', id: AbilityId) => void, close: () => void, keepSel = 0): void {
+  openShop(sim: Sim, shrineName: string, act: (kind: 'pawn' | 'redeem' | 'charm', id: AbilityId) => void, close: () => void, keepSel = 0): void {
     this.clearOverlay();
     const p = el('div', 'panel shop');
     p.append(el('h2', '', '質屋　おこん'), el('div', 'sub', `${shrineName}　——　質に入れた型は、請け出すまで世の理として働きます`));
@@ -249,7 +249,10 @@ export class UI {
       const check = pawned ? sim.canRedeem(id) : sim.canPawn(id);
       if (pawned) {
         const credit = check.ok && check.credit > 0;
-        btn.textContent = credit ? `つけで請け出す　${redeemPrice(id)} 銭` : `請け出す　${redeemPrice(id)} 銭`;
+        const price = redeemPrice(id, sim.ledger);
+        btn.textContent = credit ? `つけで請け出す　${price} 銭` : `請け出す　${price} 銭`;
+        const ic = interestChapters(sim.ledger, id);
+        if (ic > 0) title.append(el('small', 'interest', `利 ${ic} 章分`));
       } else btn.textContent = `質に入れる　+${a.price} 銭`;
       btn.disabled = !check.ok;
       btn.tabIndex = -1;
@@ -261,16 +264,35 @@ export class UI {
       row.append(glyph, title, actEl, law, detail);
       rows.push(row);
     }
+    // 勾玉（最大 HP +1）
+    const cp = charmPrice(sim.ledger);
+    const charmRow = el('div', 'row charm');
+    const cglyph = el('div', 'glyph', '勾');
+    const ctitle = el('div', 'rtitle', '勾玉');
+    ctitle.append(el('small', '', `持てる勾玉が 1 つ増える（${sim.ledger.charms ?? 0} / 2）`));
+    const cact = el('div', 'act');
+    const cbtn = el('button', 'btn', cp === null ? '売り切れ' : `買う　${cp} 銭`);
+    const ccheck = canBuyCharm(sim.ledger);
+    cbtn.disabled = !ccheck.ok;
+    cbtn.tabIndex = -1;
+    cact.append(cbtn);
+    if (!ccheck.ok && cp !== null) cact.append(el('span', 'reason', ccheck.reason));
+    charmRow.append(cglyph, ctitle, cact);
     const leave = el('button', 'btn', '店を出る');
     leave.tabIndex = -1;
     const foot = el('div', 'foot');
-    foot.append(el('span', '', '請け出しは質入れ値の 1.25 倍。銭が足りず、ほかの型を売っても届かないときだけ「つけ」が使えます。'), leave);
-    p.append(...rows, foot);
+    foot.append(el('span', '', '請け出しは質入れ値の 1.25 倍。質に入れたまま章をまたぐと、1 章ごとに利子（質入れ値の 1 割）が付く。銭が足りず、ほかの型を売っても届かないときだけ「つけ」。'), leave);
+    p.append(...rows, charmRow, foot);
     this.overlay.append(p);
-    const items = [...rows, leave];
+    const items = [...rows, charmRow, leave];
     this.nav = new NavList(items, (i) => {
-      if (i === rows.length) {
+      if (i === rows.length + 1) {
         close();
+        return;
+      }
+      if (i === rows.length) {
+        if (!canBuyCharm(sim.ledger).ok) return;
+        this.confirm(`勾玉を ${charmPrice(sim.ledger)} 銭で買いますか？\n持てる勾玉が 1 つ増えます。`, () => act('charm', 'jump'), () => this.openShop(sim, shrineName, act, close, i));
         return;
       }
       const id = rows[i].dataset.id as AbilityId;
@@ -279,7 +301,7 @@ export class UI {
       if (!check.ok) return;
       const a = ABILITIES[id];
       const q = pawned
-        ? `「${a.name}」を ${redeemPrice(id)} 銭で請け出しますか？\n${a.law.name}は止まります。`
+        ? `「${a.name}」を ${redeemPrice(id, sim.ledger)} 銭で請け出しますか？\n${a.law.name}は止まります。`
         : `「${a.name}」を質に入れて ${a.price} 銭を受け取りますか？\n${a.verb}ことができなくなり、${a.law.name}が働きます。`;
       this.confirm(q, () => act(pawned ? 'redeem' : 'pawn', id), () => this.openShop(sim, shrineName, act, close, i));
     });

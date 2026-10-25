@@ -65,6 +65,11 @@ export const LANTERN = {
 export const ECON = {
   /** 請け出し（買い戻し）は質入れ値のこの倍率（切り上げ） */
   redeemMul: 1.25,
+  /** 質に入れたまま章をまたぐと、1 章ごとに質入れ値のこの割合の利子が付く */
+  interestPerChapter: 0.1,
+  interestMaxChapters: 5,
+  /** おこんが売る勾玉（最大 HP +1）の値段。順に */
+  charmPrices: [45, 70],
 };
 
 export const CAMERA = {

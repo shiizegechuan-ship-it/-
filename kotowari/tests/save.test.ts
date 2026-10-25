@@ -32,7 +32,7 @@ describe('セーブ', () => {
     const s = new Mem();
     const p = newProgress('ch1');
     p.shrine = 'c1_b';
-    p.ledger = { zeni: 12, debt: 3, pawned: ['jump'] };
+    p.ledger = { zeni: 12, debt: 3, pawned: ['jump'], clock: 1, since: { jump: 1 }, charms: 1 };
     p.flags['trig:c1_gap'] = true;
     p.collected.push('p:c1_z1');
     expect(writeSave(s, p, 125.7, ['dawn'])).toBe(true);

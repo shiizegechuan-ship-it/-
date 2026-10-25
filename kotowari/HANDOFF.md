@@ -1,12 +1,12 @@
 # HANDOFF — ことわり質屋（引き継ぎ）
 
-最終更新：2026-10-23（セッション 1）
+最終更新：2026-10-23（セッション 1・終章まで）
 
 ## 今の状態
 - ブランチ：`feature/kotowari-3d`（`main` から分岐。push 済み。PR は未作成＝DECISIONS_NEEDED D1）
-- 最後に成功した検査：`npm run check`（型・lint・テスト 34 件・ビルド）、`node tools/e2e/play.mjs`（18/18）、`node tools/e2e/shots.mjs`
-- 遊べる範囲：タイトル → 序章（神楽殿）→ 一の章（千段石段）→「つづく」。質屋で 4 つの型の質入れ・請け出し・つけが動く。
-- 現在の不具合：無し（既知の見た目の課題は下の「次にやること」）
+- 最後に成功した検査：`npm run check`（型・lint・テスト 44 件・ビルド）、`node tools/e2e/play.mjs`（18/18）、ブラウザ自動プレイ（序章→一の章）、Node の通しテスト（序章→終章の碑、種 3）
+- 遊べる範囲：タイトル → 序章 → 一〜四の章 → 終章（夜守）→ 最後の選択 → 結末 2 種（明けの舞／常夜）→ クレジット → タイトル。
+- 現在の不具合：無し。課題は IMPLEMENTATION_PLAN の「追加の課題」（経済の釣り合い・章の長さ・下手なボット・実 GPU 性能）
 
 ## 判断済みの仕様（理由は GAME_DESIGN.md）
 - 能力を質に入れると、その能力が世界の「理」になる（跳→浮石／払→風／灯→影／駆→緩）。請け出しは 1.25 倍。
@@ -26,12 +26,17 @@
 | 1 コマの更新 | `src/core/sim.ts` |
 | 画面の流れ・イベント→音と演出 | `src/app.ts` |
 | 後処理（輪郭・量子化・効果） | `src/render/post.ts`、時間管理 `src/render/fx.ts` |
-| 検査の入口（ブラウザ） | `window.__k`（`step(n)`・`sim()`・`state()`・`startAt(章)`・`skipCard()`）。`__k.app.manual = true` で手動コマ送り |
+| 検査の入口（ブラウザ） | `window.__k`（`step(n)`・`sim()`・`state()`・`startAt(章)`・`skipCard()`・`auto(skill, ending)`・`endings()`）。`__k.app.manual = true` で手動コマ送り。`window.__audio`（音の書き出し） |
+| 夜守（ボス） | 行動 `Sim.updateBoss`、数値 `tuning.ts` の `BOSS`、描画 `GameView.updateBossView` |
+| 結末の演出 | `App.endingDawn`／`endingNight`（段取り `Beat`）、スカイ・ポータル `render/bend.ts`、モーフィング `render/morph.ts`、3DGS `render/splat.ts` |
+| 自動プレイ | `src/core/bot/routeBot.ts`（道しるべ・戦い方・仕掛けの時機・風上へ歩く）。各章の `route` |
+| 検査スクリプト | `tools/e2e/`：`play.mjs`（キー入力の流れ）・`shots.mjs`・`chapter.mjs 章 x,y,z,yaw…`・`combat.mjs`・`audio.mjs`・`autoplay.mjs`（`START=章 ENDING=dawn/night`） |
 
 ## 次にやること（IMPLEMENTATION_PLAN の順）
-1. Phase 1 の残り：妖の戦闘の手触りの確認（ヒットストップ・予兆の見え方）をスクリーンショットで確認、性能の計測（中央値・最悪コマ）。
-2. Phase 2：妖の模型の作り込み（面の妖のシルエット）、一の章の景色（杉並木・大石灯籠の見せ方）、BGM・効果音の確認（書き出してピーク検査）。
-3. 二の章（竹林・風）へ。
+1. ブラウザでの結末までの自動プレイ（`START=finale ENDING=dawn node tools/e2e/autoplay.mjs`・`ENDING=night`）の結果と、結末の効果のスクリーンショット確認。
+2. 追加の課題 A-1〜A-4（経済・章の長さ・下手なボット・性能）。
+3. Phase 5・6 の残り（UI のはみ出し検査を画面サイズ別に、長時間の耐久）。
+4. Phase 7（仕上げ）。
 
 ## 次の具体的なコマンド
 ```

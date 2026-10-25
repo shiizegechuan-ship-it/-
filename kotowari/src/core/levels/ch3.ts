@@ -121,8 +121,8 @@ export function ch3(): LevelDef {
 
   l.route = [
     { x: 0, y: 0, z: 4, act: 'lantern' },
-    { x: 0, y: 0, z: 9, act: 'lantern' },
-    { x: 0, y: 0, z: 19 },
+    { x: 0, y: 0, z: 9, act: 'lantern', alt: { whenPawned: 'lantern', x: 3, z: 9 } },
+    { x: 0, y: 0, z: 19, alt: { whenPawned: 'lantern', x: 3, z: 19 } },
     { x: -2.8, y: 0, z: 28.4, act: 'read', r: 0.4 },
     { x: 2.6, y: 0, z: 24.2, act: 'shop', pawn: ['lantern'] },
     { x: 0, y: 0, z: 33.4, act: 'wait', wait: 0.5 },

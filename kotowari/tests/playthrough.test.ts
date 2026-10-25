@@ -43,4 +43,11 @@ describe('通しプレイ（Node）', () => {
       expect(r.ok).toBe(true);
     });
   }
+
+  it('下手なボット（避けが遅い・攻撃が遅い）でも、種 3 つで終章の碑まで到達する', () => {
+    for (const seed of [1, 2, 3]) {
+      const r = playthrough(seed, 0);
+      expect(r.ok, `種 ${seed} ${r.log.join(' / ')}`).toBe(true);
+    }
+  });
 });

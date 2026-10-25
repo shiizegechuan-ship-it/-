@@ -82,6 +82,7 @@ button { font: inherit; color: inherit; }
 .row .glyph { grid-row: 1 / 4; font-size: 1.9em; text-align: center; border: 2px solid var(--line); }
 .row.pawned .glyph { color: #8e8a96; border-style: dashed; }
 .row .rtitle { font-size: 1em; }
+.row .rtitle small.interest { color: #ffb0a0; }
 .row .rtitle small { color: var(--muted); margin-left: 0.5em; font-size: 0.75em; }
 .row .law { grid-column: 2 / 4; font-size: 0.75em; justify-self: start; }
 .row .detail { grid-column: 2 / 4; font-size: 0.72em; color: var(--muted); }

@@ -39,7 +39,8 @@ export class RouteBot {
     const inp = emptyInput(0);
     const route = sim.level.route;
     if (this.done) return inp;
-    const node = route[this.idx];
+    const raw = route[this.idx];
+    const node = raw.alt && !sim.has(raw.alt.whenPawned as AbilityId) ? { ...raw, x: raw.alt.x, z: raw.alt.z } : raw;
     const p = sim.player;
     const b = p.body;
     if (p.mode === 'dead') return inp;

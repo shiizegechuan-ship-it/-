@@ -143,4 +143,6 @@ export interface RouteNode {
   wait?: number;
   /** 到着とみなす半径 */
   r?: number;
+  /** この型が質に入っているときは、こちらの点を通る（別の道） */
+  alt?: { whenPawned: string; x: number; z: number };
 }

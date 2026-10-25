@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ABILITIES, ABILITY_ORDER, DAWN_PRICE } from '../src/core/data/abilities';
-import { canRedeem, creditAvailable, earn, newLedger, pawn, redeem, redeemPrice } from '../src/core/economy';
+import { buyCharm, canRedeem, creditAvailable, earn, newLedger, pawn, redeem, redeemPrice } from '../src/core/economy';
 
 describe('質入れ・請け出し（経済）', () => {
   it('請け出し値は質入れ値より高い（1.25 倍・切り上げ）', () => {
@@ -82,5 +82,34 @@ describe('質入れ・請け出し（経済）', () => {
 
   it('朝の請け出し値は 4 つの型の質入れ値の合計（伏線「値は嘘をつかない」）', () => {
     expect(DAWN_PRICE).toBe(ABILITY_ORDER.reduce((s, id) => s + ABILITIES[id].price, 0));
+  });
+
+  it('利子：質に入れたまま章をまたぐと、1 章ごとに質入れ値の 1 割が付く（上限 5 章）', () => {
+    const l = newLedger();
+    l.clock = 1;
+    pawn(l, 'fan'); // 40
+    expect(redeemPrice('fan', l)).toBe(50);
+    l.clock = 2;
+    expect(redeemPrice('fan', l)).toBe(54);
+    l.clock = 9;
+    expect(redeemPrice('fan', l)).toBe(50 + 20);
+    l.zeni = 100;
+    expect(redeem(l, 'fan').ok).toBe(true);
+    expect(l.zeni).toBe(30);
+    // 請け出し直して同じ章でまた質に入れれば、利子は無し
+    pawn(l, 'fan');
+    expect(redeemPrice('fan', l)).toBe(50);
+  });
+
+  it('勾玉：順に 45・70 銭、2 つまで。銭が足りなければ買えない', () => {
+    const l = newLedger();
+    l.zeni = 44;
+    expect(buyCharm(l).ok).toBe(false);
+    l.zeni = 200;
+    expect(buyCharm(l).ok).toBe(true);
+    expect(buyCharm(l).ok).toBe(true);
+    expect(l.zeni).toBe(200 - 45 - 70);
+    expect(buyCharm(l).ok).toBe(false);
+    expect(l.charms).toBe(2);
   });
 });

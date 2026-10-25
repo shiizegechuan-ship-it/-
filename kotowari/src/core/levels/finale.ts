@@ -16,7 +16,7 @@ export function finale(): LevelDef {
   const P = l.props;
 
   // 登り口と、おこんの鳥居
-  B.push(box(-4, -1, -8, 4, 0, 6, 'stone'));
+  B.push(box(-4, -1, -8, 4, 0, 6.6, 'stone')); // 木戸の下まで床をつなぐ
   B.push(box(-6, 0, -8, -4, 6, 6, 'rock', 'wall'));
   B.push(box(4, 0, -8, 6, 6, 6, 'rock', 'wall'));
   B.push(box(-4, 0, -9, 4, 6, -8, 'rock', 'wall'));
@@ -81,7 +81,8 @@ export function finale(): LevelDef {
   l.goals.push({ text: '朝を、どうするか' });
 
   l.route = [
-    { x: -1.6, y: 0, z: -2.0, act: 'shop', redeem: ['fan', 'dash', 'lantern', 'jump'] },
+    { x: -1.6, y: 0, z: -2.0, act: 'shop', redeem: ['fan'] },
+    { x: -1.5, y: 0, z: -1.8, act: 'shop', redeem: ['dash'] },
     { x: 0, y: 0, z: 4 },
     { x: 0, y: 0, z: 12, act: 'fight' },
     { x: 0, y: 0, z: 18, act: 'fight' },

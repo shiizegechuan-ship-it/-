@@ -46,7 +46,16 @@ export function migrate(raw: unknown): SaveData | null {
     progress: {
       chapter,
       shrine: typeof pr.shrine === 'string' ? pr.shrine : null,
-      ledger: { zeni: num(ledgerRaw.zeni), debt: num(ledgerRaw.debt), pawned: [...new Set(pawned)] },
+      ledger: {
+        zeni: num(ledgerRaw.zeni),
+        debt: num(ledgerRaw.debt),
+        pawned: [...new Set(pawned)],
+        clock: num(ledgerRaw.clock),
+        since: Object.fromEntries(
+          Object.entries((ledgerRaw.since ?? {}) as Record<string, unknown>).filter(([k, v]) => ABILITY_ORDER.includes(k as AbilityId) && typeof v === 'number' && v >= 0),
+        ) as Partial<Record<AbilityId, number>>,
+        charms: Math.min(2, num(ledgerRaw.charms)),
+      },
       flags,
       collected: [...new Set(collected as string[])],
     },

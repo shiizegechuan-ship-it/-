@@ -1,7 +1,7 @@
 import { ABILITIES, type AbilityId } from './data/abilities';
 import { ENEMIES, type EnemyDef } from './data/enemies';
 import { ATTACK, BOSS, DASH, DT, LANTERN, PLAYER, WORLD } from './data/tuning';
-import { canPawn, canRedeem, earn, isPawned, newLedger, pawn, redeem, type Ledger, type TradeResult } from './economy';
+import { buyCharm, canPawn, canRedeem, earn, isPawned, newLedger, pawn, redeem, type Ledger, type TradeResult } from './economy';
 import type { SimEvent } from './events';
 import type { InputFrame } from './input';
 import type { ChapterId, EnemySpawn, HazardDef, LevelDef, PickupDef, ShrineDef } from './levels/types';
@@ -95,6 +95,8 @@ export const newProgress = (chapter: ChapterId = 'prologue'): Progress => ({
   collected: [],
 });
 
+const CHAPTERS: ChapterId[] = ['prologue', 'ch1', 'ch2', 'ch3', 'ch4', 'finale'];
+
 export type Interactable = { kind: 'shrine'; def: ShrineDef } | { kind: 'read'; id: string; script: string; label: string };
 
 export type LevelLookup = (id: ChapterId) => LevelDef;
@@ -135,6 +137,15 @@ export class Sim {
   get ledger(): Ledger {
     return this.progress.ledger;
   }
+  /** 勾玉で増える最大 HP */
+  get maxHp(): number {
+    return PLAYER.maxHp + (this.progress.ledger.charms ?? 0);
+  }
+  doBuyCharm(): TradeResult {
+    const r = buyCharm(this.ledger);
+    if (r.ok) this.player.hp = Math.min(this.maxHp, this.player.hp + 1);
+    return r;
+  }
   has(id: AbilityId): boolean {
     return !isPawned(this.progress.ledger, id);
   }
@@ -165,6 +176,7 @@ export class Sim {
   loadChapter(id: ChapterId, shrineId: string | null = null): void {
     const def = this.levels(id);
     this.progress.chapter = id;
+    this.ledger.clock = CHAPTERS.indexOf(id);
     this.world = new LevelWorld(def);
     const shrine = shrineId ? def.shrines.find((s) => s.id === shrineId) : undefined;
     this.progress.shrine = shrine ? shrine.id : null;
@@ -190,7 +202,7 @@ export class Sim {
     this.player = {
       body: newBody(sp.x, sp.y, sp.z, PLAYER.halfW, PLAYER.height),
       yaw: sp.yaw,
-      hp: PLAYER.maxHp,
+      hp: this.maxHp,
       mode: 'normal',
       modeT: 0,
       coyoteT: 0,
@@ -526,9 +538,9 @@ export class Sim {
       if (Math.hypot(s.x - b.x, s.z - b.z) < 1.9 && Math.abs(s.y - b.y) < 2) {
         if (this.progress.shrine !== s.id) {
           this.progress.shrine = s.id;
-          p.hp = PLAYER.maxHp;
+          p.hp = this.maxHp;
           this.emit({ t: 'checkpoint', shrine: s.id });
-        } else if (p.hp < PLAYER.maxHp && this.frame % 30 === 0) p.hp++;
+        } else if (p.hp < this.maxHp && this.frame % 30 === 0) p.hp++;
       }
     }
 

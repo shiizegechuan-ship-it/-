@@ -17,7 +17,7 @@ export function ch2(): LevelDef {
   const P = l.props;
 
   // A：入口
-  B.push(box(-6, -1, -4, 6, 0, 22, 'moss'));
+  B.push(box(-6, -1, -4, 6, 0, 22.6, 'moss')); // 門の下まで床をつなぐ（跳べなくても溝にはまらない）
   torii(B, P, 0, 0, -2, 0, 1, 0);
   l.shrines.push({ id: 'c2_a', x: 0, y: 0, z: -2, yaw: 0, name: '竹林の鳥居', shop: true });
   // 竹の壁（両側）

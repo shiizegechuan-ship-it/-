@@ -398,7 +398,17 @@ export class App {
     this.flushQueue();
   }
 
-  private trade(kind: 'pawn' | 'redeem', id: AbilityId): void {
+  private trade(kind: 'pawn' | 'redeem' | 'charm', id: AbilityId): void {
+    if (kind === 'charm') {
+      const r = this.sim.doBuyCharm();
+      this.sfx(r.ok ? 'redeem' : 'deny');
+      if (r.ok) {
+        this.save();
+        this.ui.toast('勾玉を買った　持てる勾玉が増えた', false, 1.8);
+      }
+      this.openShop(this.shopShrine, 4);
+      return;
+    }
     const r = kind === 'pawn' ? this.sim.doPawn(id) : this.sim.doRedeem(id);
     if (!r.ok) {
       this.sfx('deny');
