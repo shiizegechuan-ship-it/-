@@ -32,4 +32,8 @@ export type SimEvent =
   | { t: 'hazardHit'; id: string; kind: 'blade' | 'rock' }
   | { t: 'bossPhase'; phase: number }
   | { t: 'bossDown' }
-  | { t: 'bossStart' };
+  | { t: 'bossStart' }
+  | { t: 'gameover'; cause: 'hp' | 'timeout' }
+  | { t: 'timerStart'; id: string }
+  | { t: 'timerClear'; id: string }
+  | { t: 'timeUp'; id: string };

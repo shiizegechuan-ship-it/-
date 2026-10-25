@@ -7,6 +7,20 @@ import type { Settings } from '../settings';
 import { NavList, el } from './dom';
 import './style.css';
 
+/** タッチで遊んでいるときは、キーの名前をボタンの名前に言い換える */
+export function touchText(t: string): string {
+  if (typeof document === 'undefined' || !document.body.classList.contains('is-touch')) return t;
+  return t
+    .replace('WASD：歩く　Q / R・マウス：見回す', '左を触って動かす：歩く　右をなぞる：見回す')
+    .replace('J・左クリック：', '払ボタン：')
+    .replace('Space：', '跳ボタン：')
+    .replace('L・F：', '灯ボタン：')
+    .replace('K・Shift：', '駆ボタン：')
+    .replace('E：', '「話す」：')
+    .replace('（L）', '（灯ボタン）')
+    .replace('（E）', '（「話す」）');
+}
+
 export type NavKey = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'cancel';
 
 /** 画面の文字と枠。ゲームの状態は持たず、Sim と App から呼ばれて描くだけ */
@@ -21,6 +35,10 @@ export class UI {
   private hintEl = el('div', 'hint');
   private promptEl = el('div', 'prompt');
   private toastEl = el('div', 'toast');
+  private timerEl = el('div', 'timer');
+  private timerLabel = el('div', 'label');
+  private timerSec = el('span', 'sec');
+  private timerStick = el('div', 'stick');
   private bossEl = el('div', 'bossbar');
   private bossFill = el('div', 'fill');
   private toastT = 0;
@@ -53,13 +71,18 @@ export class UI {
     tr.append(slotWrap, this.lawsEl);
     this.bossEl.append(el('span', 'name', '夜守　千鶴'), el('div', 'track'));
     this.bossEl.querySelector('.track')!.append(this.bossFill);
-    this.hud.append(tl, tr, this.goalEl, this.hintEl, this.promptEl, this.toastEl, this.bossEl);
+    const incense = el('div', 'incense');
+    incense.append(this.timerStick, el('div', 'ember'));
+    this.timerEl.append(this.timerLabel, incense, this.timerSec);
+    this.hud.append(tl, tr, this.goalEl, this.hintEl, this.promptEl, this.toastEl, this.bossEl, this.timerEl);
     root.append(this.hud, this.overlay);
     this.showHud(false);
   }
 
   setFontScale(viewH: number, textSize: number): void {
-    const base = Math.max(14, Math.round((viewH / 540) * 16));
+    // 縦長の画面では幅も見る（小さすぎず、はみ出さず）
+    const ref = Math.min(viewH, window.innerWidth * 0.62);
+    const base = Math.max(13, Math.round((ref / 540) * 16));
     document.documentElement.style.setProperty('--fs', Math.round(base * textSize) + 'px');
   }
 
@@ -104,7 +127,7 @@ export class UI {
         (!h.needFlag || sim.flag(h.needFlag)) &&
         (!h.unlessFlag || !sim.flag(h.unlessFlag)),
     );
-    this.hintEl.textContent = hint?.text ?? '';
+    this.hintEl.textContent = hint ? touchText(hint.text) : '';
     this.hintEl.classList.toggle('hidden', !hint);
     const it = sim.interactable();
     if (it) {
@@ -115,6 +138,16 @@ export class UI {
     const showBoss = !!boss && sim.flag('boss_fighting');
     this.bossEl.classList.toggle('hidden', !showBoss);
     if (showBoss && boss) this.bossFill.style.width = `${Math.max(0, (boss.hp / BOSS.hp) * 100)}%`;
+    // 刻限（線香が燃え縮む）
+    const tm = sim.timer;
+    this.timerEl.classList.toggle('hidden', !tm);
+    if (tm) {
+      const frac = tm.left / tm.def.duration;
+      this.timerLabel.textContent = tm.def.label;
+      this.timerSec.textContent = `残り ${Math.ceil(tm.left)} 秒`;
+      this.timerStick.style.width = `${Math.max(0, frac * 100)}%`;
+      this.timerEl.classList.toggle('urgent', frac < 0.3);
+    }
     this.toastT -= dt;
     this.toastEl.classList.toggle('hidden', this.toastT <= 0);
   }
@@ -445,6 +478,7 @@ export class UI {
       ['E・Enter', '調べる・話す・会話を送る'],
       ['Esc・P', 'ポーズ'],
       ['ゲームパッド', '左スティック：歩く／右：見回す／A：跳／X：払／B・RB：駆／LB：灯／Y：話す／START：ポーズ'],
+      ['スマホ', '画面の左側を触れて動かす：歩く／右側をなぞる：見回す／右下のボタン：跳・払・駆・灯／「話す」：調べる・話す／上の ≡：ポーズ（横向きがおすすめ）'],
       ['質屋', '鳥居のおこんに型（能力）を質に入れると銭を得て、その力は「理」として世界に働く。請け出しは 1.25 倍'],
       ['鳥居', '触れると記録し、勾玉が戻る。倒れるとここから。銭は失わない'],
     ];
@@ -482,6 +516,23 @@ export class UI {
     this.overlay.append(p);
     this.nav = new NavList([bk], () => back());
     this.onCancel = back;
+  }
+
+  /** ゲームオーバー（夜に呑まれた） */
+  gameOver(text: string, retry: () => void, title: () => void): void {
+    this.clearOverlay();
+    const g = el('div', 'gameover');
+    const t = el('div', 't', text);
+    const sub = el('div', 's', '面の下で、誰かが笑った気がした。');
+    const menu = el('div', 'menu');
+    const b1 = el('button', 'btn', '鳥居からやり直す');
+    const b2 = el('button', 'btn', 'タイトルへ（鳥居の記録は残ります）');
+    b1.tabIndex = b2.tabIndex = -1;
+    menu.append(b1, b2);
+    g.append(t, sub, menu);
+    this.overlay.append(g);
+    this.nav = new NavList([b1, b2], (i) => (i === 0 ? retry() : title()));
+    this.onCancel = null;
   }
 
   chapterCard(title: string, sub: string): HTMLElement {

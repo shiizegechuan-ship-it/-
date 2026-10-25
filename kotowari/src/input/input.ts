@@ -38,7 +38,7 @@ export class Input {
   private dragging = false;
   pointerLocked = false;
   /** 直近に使った入力元（表示の切り替え用） */
-  lastDevice: 'keyboard' | 'pad' = 'keyboard';
+  lastDevice: 'keyboard' | 'pad' | 'touch' = 'keyboard';
   private padPrev = new Map<number, boolean>();
   padMoveX = 0;
   padMoveY = 0;
@@ -96,10 +96,13 @@ export class Input {
   private recomputeHeld(): void {
     this.held.clear();
     for (const acts of this.keyHeld.values()) for (const a of acts) this.held.add(a);
+    for (const a of this.touchHeld) this.held.add(a);
   }
 
   releaseAll(): void {
     this.keyHeld.clear();
+    this.touchHeld.clear();
+    this.touchMoveX = this.touchMoveY = 0;
     this.held.clear();
     this.dragging = false;
     this.mouseDX = this.mouseDY = 0;
@@ -172,9 +175,32 @@ export class Input {
   clearPressed(): void {
     this.pressed.clear();
   }
+  // ───────────── タッチ（仮想スティックとボタン）
+  touchMoveX = 0;
+  touchMoveY = 0;
+  private touchHeld = new Set<Action>();
+  touchPress(a: Action): void {
+    this.lastDevice = 'touch';
+    this.touchHeld.add(a);
+    this.held.add(a);
+    this.pressed.add(a);
+  }
+  touchRelease(a: Action): void {
+    this.touchHeld.delete(a);
+    this.recomputeHeld();
+  }
+  touchLook(dx: number, dy: number): void {
+    this.mouseDX += dx;
+    this.mouseDY += dy;
+  }
+
   moveVector(): { x: number; y: number } {
     let x = (this.held.has('right') ? 1 : 0) - (this.held.has('left') ? 1 : 0);
     let y = (this.held.has('up') ? 1 : 0) - (this.held.has('down') ? 1 : 0);
+    if (Math.abs(this.touchMoveX) + Math.abs(this.touchMoveY) > 0.05) {
+      x = this.touchMoveX;
+      y = this.touchMoveY;
+    }
     if (Math.abs(this.padMoveX) + Math.abs(this.padMoveY) > 0) {
       x = this.padMoveX;
       y = this.padMoveY;

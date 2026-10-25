@@ -34,6 +34,8 @@ uniform float uFade;       // 暗転 0..1
 uniform vec3 uFadeColor;
 uniform float uVignette;
 uniform float uSeed;
+uniform float uPulse;     // 鼓動の脈（打つたびに 1 → 0）
+uniform float uTension;   // 張りつめ（刻限が迫るほど 1 に近い）
 
 const int NPAL = ${PALETTE_LIST.length};
 const vec3 PAL[NPAL] = vec3[NPAL](
@@ -84,17 +86,19 @@ vec3 toSrgb(vec3 c) {
 vec4 sceneAt(vec2 uv) { vec4 c = texture2D(tColor, uv); return vec4(toSrgb(c.rgb), c.a); }
 
 void main() {
-  vec2 px = floor(vUv * uRes);
+  // 脈打つたびに、わずかに膨らむ
+  vec2 UV = 0.5 + (vUv - 0.5) * (1.0 - uPulse * 0.018);
+  vec2 px = floor(UV * uRes);
   vec2 texel = 1.0 / uRes;
-  vec4 src = sceneAt(vUv);
+  vec4 src = sceneAt(UV);
   vec3 col = src.rgb;
   bool glow = src.a < 0.75 && src.a > 0.35;
   bool live = src.a <= 0.35; // シネマグラフで動く部分（灯の火など）
 
   // 輪郭：周りに明らかに手前の画素があれば、自分は輪郭（外側に 1px）
-  float dc = linDepth(texture2D(tDepth, vUv).r);
-  float dn = min(min(linDepth(texture2D(tDepth, vUv + vec2(texel.x, 0.0)).r), linDepth(texture2D(tDepth, vUv - vec2(texel.x, 0.0)).r)),
-                 min(linDepth(texture2D(tDepth, vUv + vec2(0.0, texel.y)).r), linDepth(texture2D(tDepth, vUv - vec2(0.0, texel.y)).r)));
+  float dc = linDepth(texture2D(tDepth, UV).r);
+  float dn = min(min(linDepth(texture2D(tDepth, UV + vec2(texel.x, 0.0)).r), linDepth(texture2D(tDepth, UV - vec2(texel.x, 0.0)).r)),
+                 min(linDepth(texture2D(tDepth, UV + vec2(0.0, texel.y)).r), linDepth(texture2D(tDepth, UV - vec2(0.0, texel.y)).r)));
   float edge = step(0.35 + dc * 0.06, dc - dn);
   if (!glow) col = mix(col, col * 0.28 + vec3(0.03, 0.02, 0.05), edge * uOutline);
 
@@ -106,7 +110,7 @@ void main() {
       float L[N]; vec3 C[N];
       float seg = 0.0;
       for (int j = 0; j < N; j++) {
-        vec3 cj = sceneAt(vUv + vec2(0.0, float(j - N / 2) * texel.y * 2.0)).rgb;
+        vec3 cj = sceneAt(UV + vec2(0.0, float(j - N / 2) * texel.y * 2.0)).rgb;
         C[j] = cj; L[j] = lum(cj);
       }
       // 自分の段（N/2）の位置にくる「順位」の画素を探す
@@ -127,23 +131,23 @@ void main() {
   if (!glow) col = quantize(col, px);
 
   // シネマグラフ：保存した画の上に、動く部分だけ生で重ねる
-  if (uCinema > 0.5 && !live) col = texture2D(tSnap, vUv).rgb;
+  if (uCinema > 0.5 && !live) col = texture2D(tSnap, UV).rgb;
 
   // データモッシュ：ブロックごとに前のコマを、明るさの勾配に沿ってずらして読む
   if (uMosh > 0.0) {
     vec2 blk = floor(px / 8.0);
     float h = hash(blk + floor(uTime * 6.0));
-    float gx = lum(sceneAt(vUv + vec2(texel.x * 2.0, 0.0)).rgb) - lum(sceneAt(vUv - vec2(texel.x * 2.0, 0.0)).rgb);
-    float gy = lum(sceneAt(vUv + vec2(0.0, texel.y * 2.0)).rgb) - lum(sceneAt(vUv - vec2(0.0, texel.y * 2.0)).rgb);
+    float gx = lum(sceneAt(UV + vec2(texel.x * 2.0, 0.0)).rgb) - lum(sceneAt(UV - vec2(texel.x * 2.0, 0.0)).rgb);
+    float gy = lum(sceneAt(UV + vec2(0.0, texel.y * 2.0)).rgb) - lum(sceneAt(UV - vec2(0.0, texel.y * 2.0)).rgb);
     vec2 mv = vec2(gx, gy) * 18.0 * texel + (vec2(hash(blk + 3.1), hash(blk + 7.7)) - 0.5) * texel * 6.0 * uMosh;
-    vec3 prev = texture2D(tPrev, vUv - mv).rgb;
+    vec3 prev = texture2D(tPrev, UV - mv).rgb;
     float keep = step(1.0 - uMosh * 0.92, h); // 更新されないブロック
     col = mix(col, prev, keep);
   }
 
   // ルーマ・キー遷移：保存した画の暗い所から先に抜ける
   if (uLumaKey >= 0.0) {
-    vec3 snap = texture2D(tSnap, vUv).rgb;
+    vec3 snap = texture2D(tSnap, UV).rgb;
     float l = lum(snap);
     float k = smoothstep(uLumaKey - 0.04, uLumaKey + 0.04, l);
     col = mix(col, snap, k);
@@ -164,8 +168,15 @@ void main() {
   }
 
   // 周辺減光（ほのかに）
-  vec2 q = vUv - 0.5;
+  vec2 q = UV - 0.5;
   col *= 1.0 - dot(q, q) * uVignette;
+  // 鼓動：縁が赤黒く沈み、張りつめるほど色が抜ける
+  if (uTension > 0.0 || uPulse > 0.0) {
+    float r = length(q) * 1.4;
+    float edge = smoothstep(0.35, 0.95, r);
+    col = mix(col, vec3(lum(col)), uTension * 0.45);
+    col = mix(col, vec3(0.32, 0.02, 0.06), edge * (uTension * 0.5 + uPulse * 0.6));
+  }
   col = mix(col, uFadeColor, uFade);
   gl_FragColor = vec4(col, 1.0);
 }

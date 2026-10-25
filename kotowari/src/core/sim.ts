@@ -4,7 +4,7 @@ import { ATTACK, BOSS, DASH, DT, LANTERN, PLAYER, WORLD } from './data/tuning';
 import { buyCharm, canPawn, canRedeem, earn, isPawned, newLedger, pawn, redeem, type Ledger, type TradeResult } from './economy';
 import type { SimEvent } from './events';
 import type { InputFrame } from './input';
-import type { ChapterId, EnemySpawn, HazardDef, LevelDef, PickupDef, ShrineDef } from './levels/types';
+import type { ChapterId, EnemySpawn, HazardDef, LevelDef, PickupDef, ShrineDef, TimerDef } from './levels/types';
 import { approach, wrapAngle } from './math';
 import { newBody, type Body } from './physics';
 import { Rng } from './rng';
@@ -118,6 +118,14 @@ export class Sim {
   wind = { x: 0, z: 0 };
   /** 仕掛けの時計（緩の理で半分の速さで進む） */
   hazardClock = 0;
+  /** 倒れたら自動で鳥居から（テスト・ボット用）。アプリは false にしてゲームオーバーを見せる */
+  autoRespawn = true;
+  private gameOverSent = false;
+  /** 旗で現れた妖（この命のあいだ 1 度だけ） */
+  private spawnedThisLife = new Set<string>();
+  deathCause: 'hp' | 'timeout' = 'hp';
+  /** 時間制限のイベント（動いているもの 1 つ） */
+  timer: { def: TimerDef; left: number } | null = null;
   private collectedSet = new Set<string>();
 
   constructor(
@@ -228,9 +236,14 @@ export class Sim {
   }
 
   resetEnemies(): void {
+    this.spawnedThisLife.clear();
     this.enemies = [];
     this.projectiles = [];
-    for (const s of this.level.enemies) if (!s.needFlag || this.flag(s.needFlag)) this.addEnemy(s);
+    for (const s of this.level.enemies)
+      if (!s.needFlag || this.flag(s.needFlag)) {
+        this.spawnedThisLife.add(s.id);
+        this.addEnemy(s);
+      }
   }
 
   private addEnemy(s: EnemySpawn): void {
@@ -333,8 +346,8 @@ export class Sim {
     this.time += dt;
     // 旗で現れる妖
     for (const s of this.level.enemies)
-      if (s.needFlag && this.flag(s.needFlag) && !this.enemies.some((e) => e.id === s.id) && !this.flag('spawned:' + s.id)) {
-        this.setFlag('spawned:' + s.id);
+      if (s.needFlag && this.flag(s.needFlag) && !this.spawnedThisLife.has(s.id) && !this.enemies.some((e) => e.id === s.id) && !this.flag('down:' + s.id)) {
+        this.spawnedThisLife.add(s.id);
         this.addEnemy(s);
       }
 
@@ -360,6 +373,52 @@ export class Sim {
     this.enemies = this.enemies.filter((e) => !(e.mode === 'dead' && e.deadT > 1.2));
     this.updatePickups();
     this.updateTriggers();
+    this.updateTimers(dt);
+  }
+
+  // ───────────────────────── 時間制限
+  private updateTimers(dt: number): void {
+    const p = this.player;
+    const b = p.body;
+    if (p.mode === 'dead') return;
+    if (!this.timer) {
+      for (const t of this.level.timers ?? []) {
+        if (this.flag('timer:' + t.id) || !this.flag(t.startFlag)) continue;
+        if (inBox(b.x, b.y + 0.5, b.z, t.startBox)) {
+          this.timer = { def: t, left: t.duration };
+          this.setFlag('timer_on:' + t.id);
+          this.emit({ t: 'timerStart', id: t.id });
+          break;
+        }
+      }
+      return;
+    }
+    const t = this.timer.def;
+    if (inBox(b.x, b.y + 0.5, b.z, t.goal)) {
+      this.setFlag('timer:' + t.id);
+      this.setFlag('timer_on:' + t.id, false);
+      this.timer = null;
+      this.emit({ t: 'timerClear', id: t.id });
+      return;
+    }
+    // 緩の理（駆を質に入れている）なら、刻限もゆっくり迫る
+    const rate = t.slowedBy && this.ledger.pawned.includes(t.slowedBy) ? WORLD.slowLawTimeScale : 1;
+    this.timer.left -= dt * rate;
+    if (this.timer.left <= 0) {
+      this.timer.left = 0;
+      this.setFlag('timer_on:' + t.id, false);
+      this.deathCause = 'timeout';
+      this.emit({ t: 'timeUp', id: t.id });
+      p.hp = 0;
+      p.mode = 'dead';
+      p.modeT = 0;
+      this.emit({ t: 'dead' });
+    }
+  }
+
+  /** 残り時間の割合（0..1）。動いていなければ null */
+  get timerFrac(): number | null {
+    return this.timer ? this.timer.left / this.timer.def.duration : null;
   }
 
   // ───────────────────────── 鈴
@@ -375,7 +434,12 @@ export class Sim {
     p.attackBufT = Math.max(0, p.attackBufT - dt);
 
     if (p.mode === 'dead') {
-      if (p.modeT > 1.6) this.respawn();
+      if (p.modeT > 1.6 && !this.gameOverSent) {
+        this.gameOverSent = true;
+        this.emit({ t: 'gameover', cause: this.deathCause });
+        // 自動検査ではそのまま鳥居から。アプリはゲームオーバーの画面から respawn を呼ぶ
+        if (this.autoRespawn) this.respawn();
+      }
       return;
     }
 
@@ -672,6 +736,7 @@ export class Sim {
     p.invulnT = PLAYER.invulnAfterHurt;
     if (p.hp <= 0) {
       p.hp = 0;
+      this.deathCause = 'hp';
       p.mode = 'dead';
       p.modeT = 0;
       this.emit({ t: 'dead' });
@@ -692,6 +757,9 @@ export class Sim {
   }
 
   respawn(): void {
+    this.gameOverSent = false;
+    this.deathCause = 'hp';
+    this.timer = null;
     this.spawnPlayer();
     if (!this.flag('boss_done')) this.setFlag('boss_fighting', false);
     this.resetEnemies();

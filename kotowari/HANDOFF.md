@@ -3,7 +3,8 @@
 最終更新：2026-10-23（セッション 1・終章まで）
 
 ## 今の状態
-- ブランチ：`feature/kotowari-3d`（`main` から分岐。push 済み。PR は未作成＝DECISIONS_NEEDED D1）
+- リポジトリ：`shiizegechuan-ship-it/-2`（ゲーム2）の `main`。旧リポジトリ `-` の `kotowari/` から履歴ごと移した（2026-10-25）。
+- push：このセッションからは `-2` への push が拒否される（Claude の GitHub アプリ未導入）。DECISIONS_NEEDED D3
 - 最後に成功した検査：`npm run check`（型・lint・テスト 44 件・ビルド）、`node tools/e2e/play.mjs`（18/18）、ブラウザ自動プレイ（序章→一の章）、Node の通しテスト（序章→終章の碑、種 3）
 - 遊べる範囲：タイトル → 序章 → 一〜四の章 → 終章（夜守）→ 最後の選択 → 結末 2 種（明けの舞／常夜）→ クレジット → タイトル。
 - 現在の不具合：無し。課題は IMPLEMENTATION_PLAN の「追加の課題」（経済の釣り合い・章の長さ・下手なボット・実 GPU 性能）
@@ -31,6 +32,12 @@
 | 結末の演出 | `App.endingDawn`／`endingNight`（段取り `Beat`）、スカイ・ポータル `render/bend.ts`、モーフィング `render/morph.ts`、3DGS `render/splat.ts` |
 | 自動プレイ | `src/core/bot/routeBot.ts`（道しるべ・戦い方・仕掛けの時機・風上へ歩く）。各章の `route` |
 | 検査スクリプト | `tools/e2e/`：`play.mjs`（キー入力の流れ）・`shots.mjs`・`chapter.mjs 章 x,y,z,yaw…`・`combat.mjs`・`audio.mjs`・`autoplay.mjs`（`START=章 ENDING=dawn/night`） |
+
+## 2026-10-25 に入れたもの（依頼者の追加要望）
+- 時間制限：三の章（影が満ちる・40 秒）、四の章（滝が戻る・30 秒、緩の理で半分の速さ）。鼓動の音と脈打つ画面（`App.updateTension`、後処理の `uPulse`・`uTension`）
+- ゲームオーバー：勾玉が尽きる／刻限切れ（`Sim.autoRespawn=false` のアプリだけ画面を出す。テストとボットは自動で鳥居から）
+- 微ホラー：灯が消える・囁き・白い面（`GameView.apparition`）・迫る水
+- スマホ：`src/input/touch.ts`。検査 `tools/e2e/mobile.mjs`（実機は未検証）
 
 ## 次にやること（IMPLEMENTATION_PLAN の順）
 1. ブラウザでの結末までの自動プレイ（`START=finale ENDING=dawn node tools/e2e/autoplay.mjs`・`ENDING=night`）の結果と、結末の効果のスクリーンショット確認。

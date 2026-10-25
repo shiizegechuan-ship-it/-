@@ -11,6 +11,7 @@ import { Sim, newProgress, type Progress } from './core/sim';
 import { RouteBot } from './core/bot/routeBot';
 import { SCRIPTS, type Script } from './core/story';
 import { Input, type Action } from './input/input';
+import { TouchControls, isTouchDevice } from './input/touch';
 import { FollowCamera } from './render/camera';
 import { ScreenFx } from './render/fx';
 import { PixelPipeline } from './render/pipeline';
@@ -20,7 +21,7 @@ import { UI, type NavKey } from './ui/ui';
 
 export const VERSION = '0.2.0';
 
-type State = 'title' | 'play' | 'dialog' | 'shop' | 'menu' | 'card' | 'slice' | 'cine' | 'end' | 'ending';
+type State = 'title' | 'play' | 'dialog' | 'shop' | 'menu' | 'card' | 'slice' | 'cine' | 'end' | 'ending' | 'gameover';
 
 interface Beat {
   dur: number;
@@ -41,6 +42,8 @@ export class App {
   readonly audio = new AudioEngine();
   readonly ui: UI;
   readonly input: Input;
+  readonly touch: TouchControls | null = null;
+  readonly isTouch = isTouchDevice();
   readonly store = safeStorage();
   settings: Settings;
   sim: Sim;
@@ -58,6 +61,11 @@ export class App {
   manual = false;
   private titleOrbit = 0;
   frames = 0;
+  /** 鼓動：次の拍までの時間と、いまの張りつめ（0..1） */
+  private beatT = 0;
+  tension = 0;
+  private whisperT = 4;
+  private apparitionT = 8;
   /** 結末の演出の段取り */
   private beats: Beat[] = [];
   private endOrbit = 0;
@@ -72,6 +80,13 @@ export class App {
     this.fx = new ScreenFx(this.pipe);
     this.ui = new UI(uiRoot);
     this.input = new Input(canvas);
+    if (this.isTouch) {
+      document.body.classList.add('is-touch');
+      this.view.setLowPower();
+      this.touch = new TouchControls(this.input, document.body, () => {
+        if (this.state === 'play') this.openPause();
+      });
+    }
     this.sim = new Sim(getLevel, newProgress('prologue'));
     this.applySettings();
     this.view.setLevel(this.sim);
@@ -89,7 +104,7 @@ export class App {
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
     canvas.addEventListener('click', () => {
-      if (this.state === 'play') this.input.requestLock();
+      if (this.state === 'play' && !this.isTouch) this.input.requestLock();
     });
     this.onResize();
     this.toTitle();
@@ -104,8 +119,12 @@ export class App {
     const base = this.settings.pixel === 'chunky' ? 1 : 1.25;
     const w = window.innerWidth;
     const h = window.innerHeight;
-    // 細かい：基準 480×270、粗い：384×216
-    const s = Math.max(1, Math.floor(Math.min(w / (384 * base), h / (216 * base))));
+    // 細かい：基準 480×270、粗い：384×216。スマホのような小さい画面は 320×180 を基準に（縦なら縦横を入れ替える）
+    const small = Math.min(w, h) < 540;
+    const bw = small ? 320 : 384 * base;
+    const bh = small ? 180 : 216 * base;
+    const portrait = h > w;
+    const s = Math.max(1, Math.floor(Math.min(w / (portrait ? bh : bw), h / (portrait ? bw : bh))));
     this.pipe.resizeWithScale(w, h, s);
     this.cam.cam.aspect = this.pipe.width / this.pipe.height;
     this.cam.cam.updateProjectionMatrix();
@@ -165,6 +184,7 @@ export class App {
   private startChapter(progress: Progress, note?: string): void {
     if (!hasLevel(progress.chapter)) return this.toBeContinued();
     this.sim = new Sim(getLevel, progress, (Date.now() & 0xffff) | 1);
+    this.sim.autoRespawn = false;
     this.view.setLevel(this.sim);
     this.cam.reset(this.sim);
     this.ui.showHud(true);
@@ -755,8 +775,77 @@ export class App {
       case 'end':
         nav();
         break;
+      case 'gameover':
+        if (this.stateT > 1.1 && !this.ui.busy) {
+          const tm = this.sim.level.timers?.find((t) => this.sim.flag('timer_on:' + t.id) || this.sim.deathCause === 'timeout');
+          const text = this.sim.deathCause === 'timeout' && tm ? tm.failText : '夜に、呑まれた。';
+          this.ui.gameOver(
+            text,
+            () => this.retryFromShrine(),
+            () => {
+              this.pipe.params.fade = 0;
+              this.toTitle();
+            },
+          );
+        }
+        if (this.ui.busy) nav();
+        break;
     }
+    this.updateTension(dt);
     this.renderFrame(dt, frozen);
+  }
+
+  private retryFromShrine(): void {
+    this.ui.clearOverlay();
+    this.sim.respawn();
+    this.sim.drain();
+    this.cam.reset(this.sim);
+    this.fx.fadeTo(0, 0.6);
+    this.fx.lumaKey(0.9);
+    this.audio.playSong(SONG_FOR[this.sim.progress.chapter] ?? 'cedar');
+    this.ui.showHud(true);
+    this.state = 'play';
+    this.acc = 0;
+  }
+
+  /** 刻限と勾玉の残りから張りつめを決め、鼓動を打つ。画面も脈打つ */
+  private updateTension(dt: number): void {
+    const p = this.pipe.params;
+    const live = this.state === 'play' || this.state === 'slice' || this.state === 'cine';
+    let target = 0;
+    const frac = this.sim.timerFrac;
+    if (live && frac !== null) target = Math.max(0, Math.min(1, (0.75 - frac) / 0.75));
+    if (live && this.sim.player.hp === 1 && this.sim.player.mode !== 'dead') target = Math.max(target, 0.3);
+    this.tension += (target - this.tension) * Math.min(1, dt * 2);
+    if (!live) this.tension = Math.max(0, this.tension - dt);
+    const k = this.settings.fx === 'reduced' ? 0.5 : 1;
+    p.tension = this.tension * 0.8 * k;
+    p.pulse = Math.max(0, p.pulse - dt * 4);
+    if (this.tension > 0.02 && live) {
+      this.beatT -= dt;
+      if (this.beatT <= 0) {
+        const bpm = 62 + 100 * this.tension;
+        this.beatT = 60 / bpm;
+        this.audio.sfx('heart', { gain: 0.2 + 0.9 * this.tension });
+        p.pulse = (0.45 + 0.55 * this.tension) * k;
+      }
+    }
+    this.audio.duck(live && this.tension > 0.45);
+    this.view.horror.dark = this.sim.timer?.def.id === 'c3_dark' && frac !== null ? 1 - frac : 0;
+    this.view.horror.flood = this.sim.timer?.def.id === 'c4_flood' && frac !== null ? 1 - frac : -1;
+    // 微ホラー：刻限の宿場では囁きと、遠くに一瞬立つ白い面
+    if (live && this.view.horror.dark > 0) {
+      this.whisperT -= dt;
+      if (this.whisperT <= 0) {
+        this.whisperT = 2.5 + Math.random() * 3.5;
+        this.audio.sfx('whisper', { gain: 0.5 + this.view.horror.dark });
+      }
+      this.apparitionT -= dt;
+      if (this.apparitionT <= 0) {
+        this.apparitionT = 5 + Math.random() * 5;
+        if (this.view.apparition(this.sim, this.cam.cam)) this.audio.sfx('shiver', { gain: 0.6 });
+      }
+    }
   }
 
   private renderFrame(dt: number, frozen = true): void {
@@ -764,6 +853,14 @@ export class App {
     this.view.setCameraPos(this.cam.cam.position, this.sim);
     this.view.update(this.sim, dt, frozen && this.state !== 'title');
     if (this.state === 'play' || this.state === 'cine') this.ui.updateHud(this.sim, dt);
+    if (this.touch) {
+      const show = this.state === 'play';
+      if (show !== this.touch.visible) this.touch.show(show);
+      if (show) {
+        const map: Partial<Record<Action, 'jump' | 'fan' | 'lantern' | 'dash'>> = { jump: 'jump', attack: 'fan', lantern: 'lantern', dash: 'dash' };
+        this.touch.update((a) => (map[a] ? this.sim.has(map[a]!) : true), !!this.sim.interactable());
+      }
+    }
     this.pipe.render(this.view.scene, this.cam.cam, performance.now() / 1000);
   }
 
@@ -791,6 +888,10 @@ export class App {
     if (this.state === 'dialog' && a.t % 4 === 0) this.ui.advanceDialog();
     if (this.state === 'card' && this.stateT > 0.3) this.endCard();
     if (this.state === 'shop' && a.t % 3 === 0) this.closeShop();
+    if (this.state === 'gameover' && this.stateT > 1.3) {
+      this.autoLog.push('gameover ' + this.sim.deathCause);
+      this.retryFromShrine();
+    }
     if (this.state === 'menu' && this.preEnding && a.t % 5 === 0) {
       this.autoLog.push('choice ' + a.ending);
       if (a.ending === 'dawn') this.endingDawn();
@@ -917,6 +1018,32 @@ export class App {
           this.goChapter(e.to);
           return;
         case 'windBlown':
+          break;
+        case 'gameover':
+          this.state = 'gameover';
+          this.stateT = 0;
+          this.ui.showHud(false);
+          this.input.exitLock();
+          this.sfx('gameover');
+          this.audio.stopSong();
+          this.pipe.params.fadeColor.set('#1a0006');
+          this.fx.fadeTo(0.7, 1.2);
+          this.fx.pixelSort(1.4, 0.8);
+          return;
+        case 'timerStart': {
+          const tm = this.sim.timer;
+          this.sfx('bell');
+          this.cam.shake(0.2, 0.5);
+          this.ui.toast(tm ? tm.def.label : '', true, 2.4);
+          this.fx.datamosh(0.5, 0.5);
+          break;
+        }
+        case 'timerClear':
+          this.sfx('checkpoint');
+          this.ui.toast('間に合った……', false, 2);
+          break;
+        case 'timeUp':
+          this.sfx('shiver');
           break;
         case 'bossStart':
           this.audio.playSong('summit');

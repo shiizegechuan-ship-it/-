@@ -10,6 +10,8 @@ export interface PostParams {
   flash: number;
   fade: number;
   fadeColor: THREE.Color;
+  pulse: number;
+  tension: number;
 }
 
 /** 3D を低解像度へ描いて整数倍で拡大する。倍率は画面に合わせて決める。 */
@@ -27,7 +29,7 @@ export class PixelPipeline {
   private quad: THREE.Mesh;
   private postScene = new THREE.Scene();
   private orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  readonly params: PostParams = { mosh: 0, sort: 0, lumaKey: -1, cinema: 0, acid: 0, flash: 0, fade: 0, fadeColor: new THREE.Color(0, 0, 0) };
+  readonly params: PostParams = { mosh: 0, sort: 0, lumaKey: -1, cinema: 0, acid: 0, flash: 0, fade: 0, fadeColor: new THREE.Color(0, 0, 0), pulse: 0, tension: 0 };
   private seed = 0;
   /** 1 コマにかかった描画の時間（ms）の記録 */
   readonly frameMs: number[] = [];
@@ -63,6 +65,8 @@ export class PixelPipeline {
         uFadeColor: { value: new THREE.Color() },
         uVignette: { value: 0.55 },
         uSeed: { value: 0 },
+        uPulse: { value: 0 },
+        uTension: { value: 0 },
       },
       depthTest: false,
       depthWrite: false,
@@ -142,6 +146,8 @@ export class PixelPipeline {
     u.uAcid.value = p.acid;
     u.uFlash.value = p.flash;
     u.uFade.value = p.fade;
+    u.uPulse.value = p.pulse;
+    u.uTension.value = p.tension;
     (u.uFadeColor.value as THREE.Color).copy(p.fadeColor);
     if (p.mosh > 0) u.uSeed.value = this.seed = (this.seed + 0.37) % 100;
     // 出力は B へ描いてから画面へ写し、A と入れ替える（次のコマの「前のコマ」）

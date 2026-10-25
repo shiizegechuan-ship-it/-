@@ -103,6 +103,7 @@ export class FollowCamera {
     const cp = Math.cos(this.pitch);
     const sp = Math.sin(this.pitch);
     // 壁にめり込まない
+    if (this.cam.aspect < 1) dist *= 1.25;
     dist = this.clip(sim, lookAt, -fwdX * cp, sp, -fwdZ * cp, dist);
     // 壁が近すぎて寄るしかないときは、体に入り込まないよう上へ逃がす（見下ろしになる）
     const lift = dist < 2.2 ? (2.2 - dist) * 1.3 : 0;
@@ -112,7 +113,9 @@ export class FollowCamera {
       lookAt.y + sp * dist + (CAMERA.height - CAMERA.lookHeight) * 0.35 + this.liftSmooth,
       lookAt.z - fwdZ * cp * dist,
     );
-    let fov = CAMERA.fov;
+    // 縦長の画面では横が狭くなるので、画角を広げて少し引く
+    const aspect = this.cam.aspect;
+    let fov = aspect < 1 ? Math.min(78, CAMERA.fov / Math.max(0.55, aspect) ** 0.6) : CAMERA.fov;
     if (this.dolly) {
       const d = this.dolly;
       d.t += dt;

@@ -216,6 +216,13 @@ export class GameView {
     this.scene.add(this.marker);
   }
 
+  /** スマホ向け：影の細かさを落とす（性能のため） */
+  setLowPower(): void {
+    this.moon.shadow.mapSize.set(512, 512);
+    this.moon.shadow.map?.dispose();
+    this.moon.shadow.map = null;
+  }
+
   private makeSky(): THREE.Mesh {
     const mat = new THREE.ShaderMaterial({
       uniforms: { top: { value: new THREE.Color() }, bottom: { value: new THREE.Color() }, stars: { value: 1 }, moonDir: { value: new THREE.Vector3(0, 1, 0) } },
@@ -357,6 +364,24 @@ export class GameView {
       this.flames.push(...b.flames);
       this.lampSpots.push(...b.lights);
     }
+    // 滝が戻る水（四の章の刻限）
+    this.floodMesh = null;
+    if (def.timers?.some((t) => t.id === 'c4_flood')) {
+      const wt = terrainTexture('water').clone();
+      wt.needsUpdate = true;
+      wt.repeat.set(5, 10);
+      this.water.push(wt);
+      const fm = new THREE.Mesh(
+        new THREE.BoxGeometry(10, 0.4, 20),
+        new THREE.MeshBasicMaterial({ map: wt, color: '#9fc4e8', transparent: true, opacity: 0.72, depthWrite: false }),
+      );
+      fm.renderOrder = 4;
+      fm.position.set(0, -2, 37);
+      fm.visible = false;
+      this.level.add(fm);
+      this.floodMesh = fm;
+    }
+    this.horror = { dark: 0, flood: -1 };
     // 仕掛け
     for (const h of def.hazards) {
       if (h.kind === 'blade') {
@@ -529,6 +554,33 @@ export class GameView {
         f.position.set(Math.cos(a) * 0.55, 1.35 + Math.sin(t * 2 + i) * 0.12, Math.sin(a) * 0.55);
       });
     }
+    // 微ホラー：灯が消えていく・幻・迫る水
+    if (this.appar) {
+      this.appar.t -= dt;
+      this.appar.mesh.visible = this.appar.t > 0 && Math.floor(this.appar.t * 30) % 5 !== 0;
+    }
+    if (this.horror.dark > 0) {
+      const d = this.horror.dark;
+      this.flames.forEach((f, i) => (f.visible = (i * 0.618) % 1 > d * 1.1));
+      if (this.scene.fog instanceof THREE.Fog) {
+        this.scene.fog.near = this.theme.fogNear * (1 - d * 0.7);
+        this.scene.fog.far = this.theme.fogFar * (1 - d * 0.6);
+      }
+      this.darkened = true;
+    } else if (this.darkened) {
+      // 刻限が終わったら灯と霧を戻す
+      for (const f of this.flames) f.visible = true;
+      if (this.scene.fog instanceof THREE.Fog) {
+        this.scene.fog.near = this.theme.fogNear;
+        this.scene.fog.far = this.theme.fogFar;
+      }
+      this.darkened = false;
+    }
+    if (this.floodMesh) {
+      const fl = this.horror.flood;
+      this.floodMesh.visible = fl >= 0;
+      if (fl >= 0) this.floodMesh.position.y = -1.6 + fl * fl * 4.4 + Math.sin(t * 3) * 0.05;
+    }
     // 仕掛け（Sim と同じ角度・進みで描く）
     for (const hz of this.hazards) {
       const h = hz.def;
@@ -599,7 +651,7 @@ export class GameView {
       const s = spots[i];
       if (s && s.d < 30 * 30) {
         l.position.copy(s.v);
-        l.intensity = this.theme.lampIntensity * (0.92 + Math.sin(t * 9 + i) * 0.08);
+        l.intensity = this.theme.lampIntensity * (0.92 + Math.sin(t * 9 + i) * 0.08) * (1 - this.horror.dark * 0.9);
       } else l.intensity = 0;
     });
     this.suzuLamp.intensity = lant.on ? 9 : 0;
@@ -997,6 +1049,40 @@ export class GameView {
       this.morph = { m, head };
       return;
     }
+  }
+
+  /** 微ホラー：dark（宿場の灯が消えていく 0..1）、flood（滝が戻る水位 0..1、使わない時は -1） */
+  horror = { dark: 0, flood: -1 };
+  private floodMesh: THREE.Mesh | null = null;
+  private darkened = false;
+  private appar: { mesh: THREE.Object3D; t: number } | null = null;
+
+  /** 遠くに一瞬だけ白い面が立つ。立てられたら true */
+  apparition(sim: Sim, cam: THREE.Camera): boolean {
+    if (this.appar && this.appar.t > 0) return false;
+    if (!this.appar) {
+      const rig = buildCreature('menyo', 'c1_m3');
+      rig.root.traverse((o) => {
+        if (o instanceof THREE.Mesh) o.material = glowMaterial(o.castShadow ? '#e4ebe8' : '#ff3b5c');
+      });
+      this.appar = { mesh: rig.root, t: 0 };
+      this.scene.add(rig.root);
+    }
+    const f = new THREE.Vector3();
+    cam.getWorldDirection(f);
+    f.y = 0;
+    f.normalize();
+    const side = new THREE.Vector3(-f.z, 0, f.x).multiplyScalar((Math.random() - 0.5) * 5);
+    const b = sim.player.body;
+    const pos = new THREE.Vector3(b.x, b.y, b.z).addScaledVector(f, 11 + Math.random() * 4).add(side);
+    // 地面がある所にだけ立てる
+    const ground = sim.world.phys.query(pos.x - 0.2, b.y - 2, pos.z - 0.2, pos.x + 0.2, b.y + 0.5, pos.z + 0.2);
+    if (!ground.length) return false;
+    this.appar.mesh.position.set(pos.x, Math.max(...ground.map((g) => g.maxY)), pos.z);
+    this.appar.mesh.rotation.y = Math.atan2(b.x - pos.x, b.z - pos.z);
+    this.appar.mesh.visible = true;
+    this.appar.t = 0.45;
+    return true;
   }
 
   /** 落石が着地したとき（音・揺れ） */

@@ -99,6 +99,21 @@ export function ch3(): LevelDef {
   l.pickups.push({ id: 'c3_z5', x: -3, y: 0.6, z: 45, value: 6 });
   l.pickups.push({ id: 'c3_z6', x: 3, y: 0.6, z: 64, value: 6 });
 
+  // 時間制限：日記を読むと灯屋の灯が消えはじめ、影が満ちる。空堀の向こうまで 40 秒
+  l.timers = [
+    {
+      id: 'c3_dark',
+      label: '影が満ちる前に、空堀を渡れ',
+      startFlag: 'read:c3_diary',
+      startBox: box(-4, -1, 18, 4, 4, 34),
+      goal: box(-4, -1, 44.5, 4, 4, 56),
+      duration: 40,
+      failText: '影に、呑まれた。',
+    },
+  ];
+  // 刻限の間だけ現れる影法師
+  l.enemies.push({ id: 'c3_kx1', type: 'kageboshi', x: -2.5, y: 0, z: 19.5, yaw: 0, needFlag: 'timer_on:c3_dark' });
+  l.enemies.push({ id: 'c3_kx2', type: 'kageboshi', x: 2.5, y: 0, z: 30.5, yaw: Math.PI, needFlag: 'timer_on:c3_dark' });
   l.spawn = { x: 0, y: 0, z: -1.5, yaw: 0 };
   l.establish = { from: [2.8, 2.6, -5.2], to: [-1, 2.4, 12] };
 

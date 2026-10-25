@@ -75,6 +75,19 @@ export function ch4(): LevelDef {
   l.pickups.push({ id: 'c4_z4', x: 0, y: 2.6, z: 41, value: 8 });
   l.pickups.push({ id: 'c4_z5', x: -3, y: 3.6, z: 56, value: 8 });
 
+  // 時間制限：おこんの話の後、止まりかけた滝が戻りはじめる。坂を登りきって滝見台へ 30 秒（緩の理なら刻限も半分の速さ）
+  l.timers = [
+    {
+      id: 'c4_flood',
+      label: '滝が戻る前に、滝見台へ',
+      startFlag: 'trig:c4_contract',
+      startBox: box(-5, -1, 30, 5, 4, 34),
+      goal: box(-5, 2.5, 46.5, 5, 7, 62),
+      duration: 30,
+      slowedBy: 'dash',
+      failText: '濁流に、呑まれた。',
+    },
+  ];
   l.spawn = { x: 0, y: 0, z: -1, yaw: 0 };
   l.establish = { from: [-3.5, 3.5, 2], to: [0, 2.6, 18] };
 

@@ -97,6 +97,20 @@ export interface HazardDef {
   width?: number;
 }
 
+/** 時間制限のイベント：startFlag が立った後に startBox に入ると始まり、goal に着けば成功、間に合わなければゲームオーバー */
+export interface TimerDef {
+  id: string;
+  label: string;
+  startFlag: string;
+  startBox: BoxSpec;
+  goal: BoxSpec;
+  duration: number;
+  /** この型を質に入れている（その理が働いている）と、刻限の進みが半分 */
+  slowedBy?: 'dash';
+  /** 間に合わなかったときの文 */
+  failText: string;
+}
+
 export interface LevelDef {
   id: ChapterId;
   title: string;
@@ -118,6 +132,7 @@ export interface LevelDef {
   hazards: HazardDef[];
   exit: { box: BoxSpec; to: ChapterId | 'ending' } | null;
   props: PropDef[];
+  timers?: TimerDef[];
   /** ボスと戦う場所（入ると戦いが始まる。きっかけの会話の後） */
   arena?: { box: BoxSpec; afterFlag: string };
   /** 章題の画面で見せる景色（カメラの位置と注目点） */

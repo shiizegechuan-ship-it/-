@@ -27,10 +27,16 @@ export type Sfx =
   | 'float'
   | 'enemyDown'
   | 'fall'
-  | 'text';
+  | 'text'
+  | 'heart'
+  | 'whisper'
+  | 'shiver'
+  | 'gameover';
 
 /** 効果音ごとの音量の補正（書き出して最大値をそろえた値。tools/e2e/audio.mjs） */
 const SFX_GAIN: Partial<Record<Sfx, number>> = {
+  heart: 1.6,
+  whisper: 2.5,
   swing: 3.2,
   swing3: 2.2,
   hit: 2.0,
@@ -222,7 +228,7 @@ export class AudioEngine {
   }
 
   // ───────────── 効果音
-  sfx(name: Sfx, opts: { pitch?: number } = {}): void {
+  sfx(name: Sfx, opts: { pitch?: number; gain?: number } = {}): void {
     this.log.push({ name, t: performance.now() });
     if (this.log.length > 400) this.log.shift();
     const ctx = this.ctx;
@@ -237,8 +243,8 @@ export class AudioEngine {
     this.active.set(name, act + 1);
     window.setTimeout(() => this.active.set(name, Math.max(0, (this.active.get(name) ?? 1) - 1)), 400);
     let o: AudioNode = this.seGain;
-    const gm = SFX_GAIN[name];
-    if (gm) {
+    const gm = (SFX_GAIN[name] ?? 1) * (opts.gain ?? 1);
+    if (gm !== 1) {
       const g = ctx.createGain();
       g.gain.value = gm;
       g.connect(this.seGain);
@@ -351,6 +357,29 @@ export class AudioEngine {
         break;
       case 'text':
         this.osc('triangle', 900 + Math.random() * 60, t, 0.025, o, 0.025, 0.001);
+        break;
+      case 'heart':
+        // 鼓動（どくん）：低い 2 つの打音
+        this.osc('sine', 62, t, 0.16, o, 0.55, 0.004, 40);
+        this.noise(t, 0.05, o, 0.18, 'lowpass', 180);
+        this.osc('sine', 54, t + 0.17, 0.2, o, 0.42, 0.004, 36);
+        break;
+      case 'whisper': {
+        // 囁き：帯域を動かすノイズ（言葉にならない声）
+        for (let i = 0; i < 3; i++) this.noise(t + i * 0.22, 0.35, o, 0.07, 'bandpass', 900 + Math.random() * 1400, 6, 500 + Math.random() * 600);
+        break;
+      }
+      case 'shiver':
+        // ぞくっ：高い不協和の鈴と、息を吸う音
+        this.bellTone(freqOf(1, 2), t, o, 0.08, 1.5);
+        this.bellTone(freqOf(1, 2) * 1.06, t, o, 0.06, 1.5);
+        this.noise(t, 0.6, o, 0.1, 'highpass', 3000, 1, 6000);
+        break;
+      case 'gameover':
+        this.osc('sawtooth', 55, t, 3.5, o, 0.18, 0.4, 41);
+        this.osc('sine', 58.3, t, 3.5, o, 0.2, 0.4, 43);
+        this.bellTone(freqOf(1, -1), t + 0.6, o, 0.25, 4);
+        this.noise(t, 2.5, o, 0.12, 'lowpass', 400, 1, 120);
         break;
     }
   }
