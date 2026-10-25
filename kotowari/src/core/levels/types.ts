@@ -15,7 +15,7 @@ export interface GateDef {
   id: string;
   box: BoxSpec;
   /** 開く条件：風の理が働いている／旗が立っている */
-  opensWhen: { law: 'fan' } | { flag: string } | { notFlag: string };
+  opensWhen: { law: 'jump' | 'fan' | 'lantern' | 'dash' } | { flag: string } | { notFlag: string };
 }
 
 export interface ShrineDef {

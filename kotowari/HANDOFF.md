@@ -39,6 +39,11 @@
 - 微ホラー：灯が消える・囁き・白い面（`GameView.apparition`）・迫る水
 - スマホ：`src/input/touch.ts`。検査 `tools/e2e/mobile.mjs`（実機は未検証）
 
+## 遊べる場所
+- この会話の画面（Artifact）：https://claude.ai/artifact/YAZqSxptZomDHNQdiPuLFq
+- 作り方：`npm run build && node tools/build-single.mjs <出力先> --fragment` で 1 ファイル版（書体は使う文字だけに絞って埋め込み、約 0.8MB）を作り、Artifact ツールで同じファイルの場所から公開し直す（URL は変わらない）。確認 `node tools/e2e/single.mjs out/kotowari.html`
+- 依頼者は英語が分からない。返事・資料・ゲームの文字はすべて日本語にする。
+
 ## 次にやること（IMPLEMENTATION_PLAN の順）
 1. ブラウザでの結末までの自動プレイ（`START=finale ENDING=dawn node tools/e2e/autoplay.mjs`・`ENDING=night`）の結果と、結末の効果のスクリーンショット確認。
 2. 追加の課題 A-1〜A-4（経済・章の長さ・下手なボット・性能）。

@@ -1,0 +1,21 @@
+// 1 ファイル版の確認：ファイルを直接開いて、タイトル→はじめから→遊べるか。エラーが無いか
+import path from 'node:path';
+import { OUT, chromium } from './lib.mjs';
+const file = path.resolve(process.argv[2] ?? path.join(OUT, 'kotowari.html'));
+const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
+const errs = [];
+page.on('pageerror', (e) => errs.push(e.message));
+page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
+await page.goto('file://' + file);
+await page.waitForFunction(() => window.__k, null, { timeout: 20000 });
+await page.evaluate(() => (window.__k.app.manual = true));
+await page.evaluate(() => window.__k.step(5));
+const font = await page.evaluate(() => document.fonts.check('16px DotGothic16'));
+await page.keyboard.press('Enter');
+for (let i = 0; i < 25; i++) await page.evaluate(() => window.__k.step(10));
+const st = await page.evaluate(() => window.__k.state());
+await page.screenshot({ path: path.join(OUT, 'single.png') });
+console.log(JSON.stringify({ state: st, font, errs }));
+await browser.close();
+process.exit(errs.length || !['dialog', 'play'].includes(st) ? 1 : 0);

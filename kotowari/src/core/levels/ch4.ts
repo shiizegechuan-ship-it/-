@@ -47,7 +47,16 @@ export function ch4(): LevelDef {
   B.push(box(-12, -2, 62, 12, -1.6, 74, 'water', 'hazard'));
   B.push(box(-1.5, -1, 62, 1.5, 3, 72, 'stone'));
   B.push(box(-7, 3, 46, -5, 12, 72, 'rock', 'wall'));
-  B.push(box(5, 3, 46, 7, 12, 72, 'rock', 'wall'));
+  B.push(box(5, 3, 46, 7, 12, 68.5, 'rock', 'wall'));
+  // 隠し場所：滝の裏の岩棚。水の幕は緩の理（駆を質に入れる）で止まり、通れる
+  B.push(box(1.5, -1, 69, 5, 3, 73.5, 'stone'));
+  B.push(box(5, -1, 69, 9, 3, 73.5, 'stone'));
+  B.push(box(9, 3, 68, 10, 12, 74, 'rock', 'wall'));
+  B.push(box(7, 3, 74, 10, 12, 76, 'rock', 'wall'));
+  B.push(box(5, 3, 68, 10, 12, 68.5, 'rock', 'wall'));
+  l.gates.push({ id: 'c4_curtain', box: box(5, 3, 69, 5.3, 7, 73.5, 'water'), opensWhen: { law: 'dash' } });
+  l.readables.push({ id: 'c4_letter', x: 8, y: 3, z: 71, script: 'c4_letter', label: '油紙の包みを開く' });
+  l.pickups.push({ id: 'c4_zs', x: 7.5, y: 3.6, z: 72.5, value: 10 });
   B.push(box(-7, 0, 74, 7, 16, 76, 'rock', 'wall'));
   stairsZ(B, 0, 3, 68, 3, 8, 0.25, 0.5, 'stair');
   l.exit = { box: box(-1.5, 4, 71.5, 1.5, 8, 72), to: 'finale' };
@@ -69,11 +78,11 @@ export function ch4(): LevelDef {
   l.enemies.push({ id: 'c4_z3', type: 'mizuko', x: 0, y: 3, z: 59.5, yaw: Math.PI });
 
   // 銭
-  l.pickups.push({ id: 'c4_z1', x: -3, y: 0.6, z: 6, value: 6 });
-  l.pickups.push({ id: 'c4_z2', x: 3, y: 0.6, z: 15, value: 8 });
-  l.pickups.push({ id: 'c4_z3', x: -3, y: 0.6, z: 21, value: 8 });
-  l.pickups.push({ id: 'c4_z4', x: 0, y: 2.6, z: 41, value: 8 });
-  l.pickups.push({ id: 'c4_z5', x: -3, y: 3.6, z: 56, value: 8 });
+  l.pickups.push({ id: 'c4_z1', x: -3, y: 0.6, z: 6, value: 4 });
+  l.pickups.push({ id: 'c4_z2', x: 3, y: 0.6, z: 15, value: 6 });
+  l.pickups.push({ id: 'c4_z3', x: -3, y: 0.6, z: 21, value: 6 });
+  l.pickups.push({ id: 'c4_z4', x: 0, y: 2.6, z: 41, value: 6 });
+  l.pickups.push({ id: 'c4_z5', x: -3, y: 3.6, z: 56, value: 6 });
 
   // 時間制限：おこんの話の後、止まりかけた滝が戻りはじめる。坂を登りきって滝見台へ 30 秒（緩の理なら刻限も半分の速さ）
   l.timers = [

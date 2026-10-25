@@ -50,6 +50,16 @@ export function ch2(): LevelDef {
   l.shrines.push({ id: 'c2_c', x: 4.6, y: 0, z: 49, yaw: -Math.PI / 2, name: '空き地の鳥居', shop: true, stall: { x: 5.8, z: 45.6, yaw: -Math.PI / 2 } });
   P.push({ kind: 'yasuke', x: -3.5, y: 0, z: 47.5, yaw: Math.PI / 2 + 0.4 });
   B.push(box(-3.8, 0, 47.2, -3.2, 1.2, 47.8, 'none', 'wall'));
+  // 隠し場所：岩棚（高さ 3m。跳では届かない。浮石の理なら、地面から石がせり上がって段になる）
+  B.push(box(-7, -1, 48, -4.5, 3, 52, 'rock'));
+  for (let i = 1; i <= 10; i++) {
+    const top = i * 0.3;
+    const z0 = 43 + (i - 1) * 0.5;
+    l.floats.push({ id: 'c2_s' + i, box: box(-5.6, -1.1, z0, -4.6, -0.1, z0 + 0.5, 'floatstone'), lift: top + 0.1, delay: i * 0.1 });
+  }
+  l.readables.push({ id: 'c2_cache', x: -6, y: 3, z: 50.5, script: 'c2_cache', label: '竹の筒をのぞく' });
+  l.pickups.push({ id: 'c2_zs', x: -5.2, y: 3.6, z: 51.2, value: 8 });
+  P.push({ kind: 'bamboo', x: -6.4, y: 3, z: 51.4, variant: 0 });
   // F：吊り橋（手すりは杭だけ）
   B.push(box(-1.2, -0.3, 52, 1.2, 0, 64, 'bridge'));
   for (let z = 52; z <= 64; z += 2) {
@@ -99,13 +109,13 @@ export function ch2(): LevelDef {
   l.enemies.push({ id: 'c2_y3', type: 'yoroimen', x: 0, y: 0, z: 72, yaw: Math.PI });
 
   // 銭
-  l.pickups.push({ id: 'c2_z1', x: -3.5, y: 0.6, z: 6, value: 4 });
-  l.pickups.push({ id: 'c2_z2', x: 3.5, y: 0.6, z: 9, value: 4 });
-  l.pickups.push({ id: 'c2_z3', x: 1.2, y: 0.6, z: 31.5, value: 6 });
-  l.pickups.push({ id: 'c2_z4', x: -1.5, y: 0.6, z: 38, value: 5 });
-  l.pickups.push({ id: 'c2_z5', x: 5, y: 0.6, z: 42, value: 6 });
-  l.pickups.push({ id: 'c2_z6', x: 0, y: 0.6, z: 58, value: 6 });
-  l.pickups.push({ id: 'c2_z7', x: -5, y: 0.6, z: 66, value: 5 });
+  l.pickups.push({ id: 'c2_z1', x: -3.5, y: 0.6, z: 6, value: 3 });
+  l.pickups.push({ id: 'c2_z2', x: 3.5, y: 0.6, z: 9, value: 3 });
+  l.pickups.push({ id: 'c2_z3', x: 1.2, y: 0.6, z: 31.5, value: 4 });
+  l.pickups.push({ id: 'c2_z4', x: -1.5, y: 0.6, z: 38, value: 4 });
+  l.pickups.push({ id: 'c2_z5', x: 5, y: 0.6, z: 42, value: 4 });
+  l.pickups.push({ id: 'c2_z6', x: 0, y: 0.6, z: 58, value: 4 });
+  l.pickups.push({ id: 'c2_z7', x: -5, y: 0.6, z: 66, value: 4 });
 
   l.spawn = { x: 0, y: 0, z: 0.5, yaw: 0 };
   l.establish = { from: [-4.5, 2.6, -3], to: [1, 3.2, 14] };

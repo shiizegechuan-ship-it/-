@@ -38,6 +38,12 @@ export function ch3(): LevelDef {
   l.shadows.push(box(2.2, -0.25, 9.9, 3.8, 0, 18.1));
   P.push({ kind: 'bigChochin', x: 3, y: 4.2, z: 19.2 });
   P.push({ kind: 'willow', x: -3.2, y: 0, z: 9.2 });
+  // 隠し場所：堀の西の小さな桟敷（灯をかざしたときだけ幽かな橋が架かる）
+  l.ghosts.push(box(-8.2, -0.2, 13.4, -1, 0, 14.6)); // 本道の幽かな橋の途中から西へ分かれる
+  B.push(box(-10, -1, 12, -8.2, 0, 16, 'wood'));
+  P.push({ kind: 'stall', x: -9.2, y: 0, z: 14, yaw: Math.PI / 2, variant: 2 });
+  l.readables.push({ id: 'c3_maskshop', x: -8.8, y: 0, z: 13, script: 'c3_maskshop', label: '面屋の帳場を見る' });
+  l.pickups.push({ id: 'c3_zs', x: -9, y: 0.6, z: 15.2, value: 8 });
   // C：灯屋の通り
   street(18, 34);
   B.push(box(4, 0, 18, 10, 6, 34, 'none', 'wall'));
@@ -92,12 +98,12 @@ export function ch3(): LevelDef {
   l.enemies.push({ id: 'c3_k5', type: 'kageboshi', x: -1, y: 0, z: 54, yaw: Math.PI });
 
   // 銭
-  l.pickups.push({ id: 'c3_z1', x: 3, y: 0.6, z: 1, value: 5 });
-  l.pickups.push({ id: 'c3_z2', x: -2.5, y: 0.6, z: 20, value: 6 });
-  l.pickups.push({ id: 'c3_z3', x: 2.5, y: 0.6, z: 32, value: 6 });
-  l.pickups.push({ id: 'c3_z4', x: 0, y: 0.6, z: 39, value: 8 });
-  l.pickups.push({ id: 'c3_z5', x: -3, y: 0.6, z: 45, value: 6 });
-  l.pickups.push({ id: 'c3_z6', x: 3, y: 0.6, z: 64, value: 6 });
+  l.pickups.push({ id: 'c3_z1', x: 3, y: 0.6, z: 1, value: 4 });
+  l.pickups.push({ id: 'c3_z2', x: -2.5, y: 0.6, z: 20, value: 4 });
+  l.pickups.push({ id: 'c3_z3', x: 2.5, y: 0.6, z: 32, value: 4 });
+  l.pickups.push({ id: 'c3_z4', x: 0, y: 0.6, z: 39, value: 6 });
+  l.pickups.push({ id: 'c3_z5', x: -3, y: 0.6, z: 45, value: 4 });
+  l.pickups.push({ id: 'c3_z6', x: 3, y: 0.6, z: 64, value: 4 });
 
   // 時間制限：日記を読むと灯屋の灯が消えはじめ、影が満ちる。空堀の向こうまで 40 秒
   l.timers = [

@@ -327,7 +327,7 @@ export class GameView {
       this.floats.push({ solid: f.solid, mesh });
     }
     for (const g of sim.world.gates) {
-      const mesh = new THREE.Mesh(boxesGeometry([g.solid], true), this.mat('gate'));
+      const mesh = new THREE.Mesh(boxesGeometry([g.solid], true), this.mat(g.solid.mat === 'water' ? 'water' : 'gate'));
       mesh.castShadow = mesh.receiveShadow = true;
       this.level.add(mesh);
       this.gates.push({ solid: g.solid, mesh, baseY: g.solid.minY, h: g.solid.maxY - g.solid.minY });

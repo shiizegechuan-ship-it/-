@@ -383,7 +383,7 @@ export class UI {
   title(items: { label: string; disabled?: boolean; act: () => void }[], version: string): void {
     this.clearOverlay();
     const t = el('div', 'title');
-    t.append(el('div', 'logo', 'ことわり質屋'), el('div', 'en', 'KOTOWARI ― THE PAWNSHOP OF LAWS'));
+    t.append(el('div', 'logo', 'ことわり質屋'), el('div', 'en', '舞を質に入れ、世の理を書き換える'));
     const m = el('div', 'menu');
     const btns = items.map((it) => {
       const b = el('button', 'btn', it.label);
